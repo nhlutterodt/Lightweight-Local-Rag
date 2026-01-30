@@ -1,0 +1,271 @@
+**********************
+PowerShell transcript start
+Start time: 20260129220136
+Username: DESKTOP-GPHAM7V\Owner
+RunAs User: DESKTOP-GPHAM7V\Owner
+Configuration Name: 
+Machine: DESKTOP-GPHAM7V (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -noexit -command try { . "c:\Users\Owner\AppData\Local\Programs\Antigravity\resources\app\out\vs\workbench\contrib\terminal\common\scripts\shellIntegration.ps1" } catch {}
+Process ID: 60704
+PSVersion: 7.5.4
+PSEdition: Core
+GitCommitId: 7.5.4
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Transcript started, output file is pester_log.txt
+Pester v5.7.1
+
+Starting discovery in 5 files.
+Discovery found 74 tests in 53ms.
+Running tests.
+
+Running tests from 'C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Tests\ErrorIntegration.Tests.ps1'
+WARNING: Get-PathManager function not found - PathUtils.ps1 may not have loaded
+WARNING: Get-SchemaRegistry function not found - Schemas.ps1 may not have loaded
+Describing ErrorCategories
+ Context Standard Categories
+   [+] should have FileSystem category
+ 2ms (1ms|1ms)
+   [+] should have Network category
+ 1ms (0ms|0ms)
+   [+] should have Parsing category
+ 1ms (0ms|0ms)
+   [+] should have Validation category
+ 1ms (0ms|0ms)
+   [+] should have Configuration category
+ 1ms (0ms|0ms)
+   [+] should have General category
+ 1ms (0ms|0ms)
+
+Describing New-IntegratedErrorHandler
+ Context Factory Function
+   [+] should create handler with context
+ 3ms (1ms|2ms)
+   [+] should set ThrowOnCritical when specified
+ 1ms (0ms|0ms)
+   [+] should track errors via ErrorManager
+ 1ms (1ms|0ms)
+
+Describing IntegratedErrorHandler Error Tracking
+ Context Error Logging
+✗ [GeneralErrors] TestOp failed: Test error message
+   [+] should log error and track count
+ 5ms (3ms|2ms)
+⚠ [GeneralErrors] TestOp warning: Test warning
+   [+] should log warning via ErrorManager
+ 1ms (1ms|0ms)
+✗ [FileSystemFailures] Op1 failed: Error 1
+✗ [NetworkFailures] Op2 failed: Error 2
+✗ [ParsingFailures] Op3 failed: Error 3
+   [+] should track multiple errors
+ 2ms (2ms|0ms)
+ Context Safe Execution
+   [+] should return result on success
+ 1ms (1ms|1ms)
+PS>TerminatingError(): "Test exception"
+✗ [GeneralErrors] TestOp failed: Test exception
+   [+] should catch and log exceptions
+ 2ms (2ms|0ms)
+   [+] SafeExecuteVoid should return true on success
+ 1ms (0ms|0ms)
+PS>TerminatingError(): "error"
+✗ [GeneralErrors] FailOp failed: error
+   [+] SafeExecuteVoid should return false on failure
+ 2ms (1ms|0ms)
+
+Describing Invoke-StandardOperation
+ Context Standard Pattern
+   [+] should return hashtable on success
+ 3ms (1ms|2ms)
+   [+] should include Result key with return value
+ 1ms (1ms|0ms)
+PS>TerminatingError(): "error"
+✗ [GeneralErrors] FailOp failed: error
+   [+] should return failure when operation throws
+ 8ms (8ms|0ms)
+
+Running tests from 'C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Tests\ModelUtils.Tests.ps1'
+WARNING: Get-PathManager function not found - PathUtils.ps1 may not have loaded
+WARNING: Get-SchemaRegistry function not found - Schemas.ps1 may not have loaded
+Describing OllamaManager
+ Context Version Detection
+   [+] should have MinSupportedVersion defined
+ 2ms (0ms|1ms)
+   [+] should have TestedVersions array populated
+ 1ms (1ms|0ms)
+   [+] should extract semantic version from version string
+ 54ms (53ms|0ms)
+   [+] should return boolean from IsVersionSupported
+ 52ms (52ms|0ms)
+   [+] should return boolean from IsVersionTested
+ 54ms (53ms|0ms)
+ Context System Info
+   [+] should return hashtable from GetSystemInfo
+ 325ms (324ms|1ms)
+ Context Model Operations
+PS>TerminatingError(): "Could not find type [ModelInfo[]]. Make sure that the assembly that contains that type is loaded."
+>> TerminatingError(): "Could not find type [ModelInfo[]]. Make sure that the assembly that contains that type is loaded."
+>> TerminatingError(): "Could not find type [ModelInfo[]]. Make sure that the assembly that contains that type is loaded."
+>> TerminatingError(): "Could not find type [ModelInfo[]]. Make sure that the assembly that contains that type is loaded."
+   [-] should return array from GetModels
+ 236ms (235ms|1ms)
+
+    ArgumentException: Could not find type [ModelInfo[]]. Make sure that the assembly that contains that type is loaded.
+
+Describing ModelInfo
+ Context Construction
+   [+] should extract family from model name with colon
+ 2ms (1ms|2ms)
+   [+] should extract family from model name with hyphen
+ 1ms (0ms|0ms)
+   [+] should convert to hashtable
+ 1ms (1ms|0ms)
+
+Describing Utility Functions
+ Context Get-ModelSummary
+   [+] should return status field
+ 247ms (245ms|2ms)
+
+Running tests from 'C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Tests\PathUtils.Tests.ps1'
+WARNING: Get-PathManager function not found - PathUtils.ps1 may not have loaded
+WARNING: Get-SchemaRegistry function not found - Schemas.ps1 may not have loaded
+Describing PathManager
+ Context Path Resolution
+   [+] should have ProjectRoot defined
+ 2ms (0ms|1ms)
+   [+] should have LogsFolder within ProjectRoot
+ 1ms (0ms|0ms)
+   [+] should generate log path with .xml extension
+ 1ms (0ms|0ms)
+   [+] should generate timestamped log names
+ 1ms (0ms|0ms)
+ Context Get-PathManager Factory
+   [+] should return PathManager instance
+ 1ms (1ms|1ms)
+   [+] should return same singleton instance
+ 1ms (0ms|0ms)
+   [+] should be same instance as Global:PathManager (backward compatibility)
+ 1ms (0ms|0ms)
+
+Describing Get-ProjectConfig
+ Context Configuration Loading
+   [+] should load configuration without error
+ 3ms (1ms|2ms)
+   [+] should return hashtable
+ 1ms (1ms|0ms)
+   [+] should have Logging section
+ 1ms (0ms|0ms)
+   [+] should have RetentionDays in Logging
+ 0ms (0ms|0ms)
+   [+] should have Ollama section with version info
+ 0ms (0ms|0ms)
+   [+] should cache configuration on subsequent calls
+ 1ms (0ms|0ms)
+   [+] should reload on Force
+ 1ms (1ms|0ms)
+
+Describing Invoke-LogRotation
+ Context Rotation Logic
+No files needed rotation (retention: 30 days, max size: 100MB)
+   [+] should return hashtable with DeletedCount and FreedBytes
+ 7ms (5ms|2ms)
+No files needed rotation (retention: 30 days, max size: 100MB)
+   [+] should use config defaults when no parameters specified
+ 5ms (5ms|0ms)
+No files needed rotation (retention: 7 days, max size: 100MB)
+   [+] should accept custom RetentionDays
+ 5ms (5ms|0ms)
+
+Describing Path Convenience Functions
+ Context Get-* Functions
+   [+] Get-ProjectPath should return project root
+ 2ms (0ms|2ms)
+   [+] Get-LogPath should return path in logs folder
+ 1ms (0ms|0ms)
+   [+] Get-ReportPath should return path in reports folder
+ 1ms (0ms|0ms)
+ Context New-* Functions
+   [+] New-TimestampedLogPath should create timestamped path
+ 1ms (0ms|1ms)
+   [+] New-ContextualLogPath should include operation in name
+ 1ms (0ms|0ms)
+
+Running tests from 'C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Tests\Schemas.Tests.ps1'
+WARNING: Get-PathManager function not found - PathUtils.ps1 may not have loaded
+WARNING: Get-SchemaRegistry function not found - Schemas.ps1 may not have loaded
+Describing SchemaRegistry
+ Context Schema Versioning
+   [+] should have CurrentSchemaVersion defined
+ 3ms (1ms|2ms)
+   [+] should include version in PowerShellLog schema
+ 1ms (0ms|0ms)
+   [+] should include version in all default schemas
+ 1ms (1ms|0ms)
+ Context Schema Registration
+   [+] should register default schemas on construction
+ 1ms (1ms|1ms)
+   [+] should allow custom schema registration
+ 1ms (1ms|0ms)
+   [+] should return null for unknown schema
+ 1ms (0ms|0ms)
+ Context Schema Detection
+   [+] should detect PowerShellLog schema from XML
+ 1ms (1ms|1ms)
+   [+] should fallback to GenericLog for unknown formats
+ 1ms (1ms|0ms)
+
+Describing SchemaDefinition
+ Context Validation
+   [+] should validate matching root element
+ 2ms (1ms|2ms)
+   [+] should reject non-matching root element
+ 1ms (0ms|0ms)
+   [+] should accept any root when using wildcard
+ 1ms (0ms|0ms)
+
+Running tests from 'C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Tests\XMLLogger.Tests.ps1'
+WARNING: Get-PathManager function not found - PathUtils.ps1 may not have loaded
+WARNING: Get-SchemaRegistry function not found - Schemas.ps1 may not have loaded
+Describing XMLLogger
+ Context Log File Creation
+   [+] should create a valid XML log file
+ 4ms (2ms|2ms)
+   [+] should produce parseable XML
+ 2ms (2ms|0ms)
+ Context Schema Versioning
+   [+] should include schemaVersion attribute on root element
+ 3ms (2ms|1ms)
+   [+] should include required root attributes
+ 3ms (3ms|0ms)
+ Context XML Sanitization
+   [+] should handle special XML characters in messages
+ 3ms (2ms|1ms)
+   [+] should handle special characters in hashtable keys
+ 5ms (5ms|0ms)
+   [+] should handle special characters in hashtable values
+ 3ms (3ms|0ms)
+ Context Log Levels
+   [+] should support INFO level
+ 3ms (2ms|1ms)
+   [+] should support WARNING level
+ 2ms (2ms|0ms)
+   [+] should support ERROR level
+ 2ms (2ms|0ms)
+   [+] should support SUCCESS level
+ 3ms (2ms|0ms)
+Tests completed in 2.09s
+Tests Passed: 73, 
+Failed: 1, 
+Skipped: 0, 
+Inconclusive: 0, 
+
+NotRun: 0
+**********************
+PowerShell transcript end
+End time: 20260129220138
+**********************

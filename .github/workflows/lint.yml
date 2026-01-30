@@ -1,0 +1,100 @@
+# CI/CD Pipeline - PowerShell Linting
+# Runs PSScriptAnalyzer on PowerShell scripts
+
+name: PowerShell Lint
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'PowerShell Scripts/**'
+      - '.github/workflows/lint.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'PowerShell Scripts/**'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+          Import-Module PSScriptAnalyzer -Force
+          Write-Host "PSScriptAnalyzer Version: $((Get-Module PSScriptAnalyzer).Version)"
+      
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $scripts = Get-ChildItem -Path "PowerShell Scripts" -Filter "*.ps1" -Recurse -File |
+                     Where-Object { $_.FullName -notmatch '\\Tests\\' }
+          
+          Write-Host "Analyzing $($scripts.Count) PowerShell scripts..."
+          Write-Host ""
+          
+          $totalIssues = 0
+          $errors = 0
+          $warnings = 0
+          $info = 0
+          
+          foreach ($script in $scripts) {
+            $results = Invoke-ScriptAnalyzer -Path $script.FullName -Severity @('Error', 'Warning') -ExcludeRule @(
+              'PSAvoidUsingWriteHost',           # We use Write-Host for console output intentionally
+              'PSUseShouldProcessForStateChangingFunctions'  # Too strict for this project
+            )
+            
+            if ($results) {
+              Write-Host "::group::$($script.Name)"
+              foreach ($result in $results) {
+                $totalIssues++
+                
+                switch ($result.Severity) {
+                  'Error' { 
+                    $errors++
+                    Write-Host "::error file=$($script.FullName),line=$($result.Line),col=$($result.Column)::$($result.RuleName): $($result.Message)"
+                  }
+                  'Warning' { 
+                    $warnings++
+                    Write-Host "::warning file=$($script.FullName),line=$($result.Line),col=$($result.Column)::$($result.RuleName): $($result.Message)"
+                  }
+                  default { 
+                    $info++
+                    Write-Host "::notice file=$($script.FullName),line=$($result.Line),col=$($result.Column)::$($result.RuleName): $($result.Message)"
+                  }
+                }
+              }
+              Write-Host "::endgroup::"
+            }
+          }
+          
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "Lint Results Summary"
+          Write-Host "========================================="
+          Write-Host "Scripts analyzed: $($scripts.Count)"
+          Write-Host "Total issues: $totalIssues"
+          Write-Host "  Errors: $errors"
+          Write-Host "  Warnings: $warnings"
+          Write-Host "========================================="
+          
+          # Fail only on errors, warnings are acceptable
+          if ($errors -gt 0) {
+            Write-Host "::error::Found $errors error(s) that must be fixed"
+            exit 1
+          }
+          
+          if ($warnings -gt 0) {
+            Write-Host "::warning::Found $warnings warning(s) - consider addressing these"
+          }
+          
+          Write-Host "✓ No blocking issues found"

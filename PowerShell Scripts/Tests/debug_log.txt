@@ -1,0 +1,9 @@
+Starting Debug Run
+Module Imported
+Store Created
+VecA Type: System.Single[]
+Item Added
+Query Type: System.Single[]
+VectorMath Direct Call Success: 0.9950371
+Calling FindNearest...
+FindNearest Success, Found: 1

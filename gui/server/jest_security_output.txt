@@ -1,0 +1,43 @@
+
+> local-rag-server@1.0.0 test
+> node --experimental-vm-modules node_modules/jest/bin/jest.js
+
+(node:34932) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/security.test.js
+  ΓùÅ Console
+
+    console.log
+      [Config Sync] Successfully loaded project configuration.
+
+      at log (server.js:31:15)
+
+    console.log
+      [Queue] Loaded 2 jobs from disk.
+
+      at IngestionQueue.log [as loadState] (IngestionQueue.js:145:17)
+
+PASS tests/api.routes.test.js
+  ΓùÅ Console
+
+    console.log
+      [Config Sync] Successfully loaded project configuration.
+
+      at log (server.js:31:15)
+
+    console.log
+      [Queue] Loaded 2 jobs from disk.
+
+      at IngestionQueue.log [as loadState] (IngestionQueue.js:145:17)
+
+    console.log
+      [PS Runner] Spawning: Invoke-SystemHealth.ps1 (Total Args: 0)
+
+      at PowerShellRunner.log [as spawn] (PowerShellRunner.js:33:13)
+
+
+Test Suites: 2 passed, 2 total
+Tests:       9 passed, 9 total
+Snapshots:   0 total
+Time:        0.788 s, estimated 1 s
+Ran all test suites.

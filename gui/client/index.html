@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local RAG Project | Interactive AI</title>
+    <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="dark-theme">
+    <div id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar glass">
+            <header>
+                <h1>Local RAG</h1>
+                <p>v2.1 Pro</p>
+            </header>
+            
+            <nav>
+                <div class="nav-item">
+                    <label>AI Model</label>
+                    <select id="modelSelect">
+                        <option value="llama3">Llama 3 (Default)</option>
+                    </select>
+                </div>
+                
+                <div class="nav-item">
+                    <label>Collection</label>
+                    <input type="text" id="collectionName" value="TestIngest" placeholder="Collection Name..." />
+                </div>
+                
+                <div class="nav-item">
+                    <label>Status</label>
+                    <div id="connectionStatus" class="status-indicator">Checking Ollama...</div>
+                </div>
+
+                <div class="nav-divider"></div>
+
+                <div class="nav-item">
+                    <label>Vectorize New Data</label>
+                    <input type="text" id="ingestPath" placeholder="C:\MyDocuments" />
+                    <div class="ingest-actions" style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button id="startIngest" class="btn-primary" style="flex: 1;">🚀 Now</button>
+                        <button id="enqueueIngest" class="btn-secondary" style="flex: 1;">➕ Queue</button>
+                    </div>
+                    <div id="ingestStatus" class="ingest-status-box hidden">
+                         <span class="status-spinner"></span>
+                         <span id="ingestStatusText">Initializing...</span>
+                    </div>
+                </div>
+                <div class="nav-divider"></div>
+
+                <div class="nav-item">
+                    <label>Vector Index Monitor</label>
+                    <div id="indexMonitor" class="index-monitor-box">
+                        <div class="monitor-empty">Scanning collections...</div>
+                    </div>
+                </div>
+                <div class="nav-divider"></div>
+
+                <div class="nav-item">
+                    <label>Ingestion Queue</label>
+                    <div id="queueManager" class="queue-manager-box">
+                        <div class="queue-empty">Queue is empty</div>
+                    </div>
+                </div>
+            </nav>
+            
+            <footer>
+                <button id="clearChat" class="btn-secondary">Clear Session</button>
+            </footer>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <div id="chatWindow" class="chat-window">
+                <!-- Welcome Message -->
+                <div class="message ai-message glass">
+                    <div class="content">
+                        <h2>Welcome to the Local RAG Dashboard</h2>
+                        <p>I can answer questions based on your ingested documents. Just type a query below to begin.</p>
+                        <div class="badges">
+                            <span class="badge">Local AI</span>
+                            <span class="badge">No Internet</span>
+                            <span class="badge">Privacy First</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area glass">
+                <div class="input-wrapper">
+                    <textarea id="userInput" placeholder="Ask anything about your documents..." rows="1"></textarea>
+                    <button id="sendMessage" disabled>
+                        <svg viewBox="0 0 24 24" width="24" height="24">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="input-footer">
+                    <span>PowerShell RAG Core v2.1</span>
+                    <span id="tokenCounter">0 tokens</span>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="/main.js"></script>
+</body>
+</html>
