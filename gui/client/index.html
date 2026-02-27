@@ -39,8 +39,8 @@
                     <label>Vectorize New Data</label>
                     <input type="text" id="ingestPath" placeholder="C:\MyDocuments" />
                     <div class="ingest-actions" style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button id="startIngest" class="btn-primary" style="flex: 1;">🚀 Now</button>
-                        <button id="enqueueIngest" class="btn-secondary" style="flex: 1;">➕ Queue</button>
+                        <button id="startIngest" class="btn-primary" style="flex: 1;" data-tooltip="Immediately begin vectorizing the selected data">🚀 Now</button>
+                        <button id="enqueueIngest" class="btn-secondary" style="flex: 1;" data-tooltip="Add to queue for background processing">➕ Queue</button>
                     </div>
                     <div id="ingestStatus" class="ingest-status-box hidden">
                          <span class="status-spinner"></span>
@@ -66,7 +66,7 @@
             </nav>
             
             <footer>
-                <button id="clearChat" class="btn-secondary">Clear Session</button>
+                <button id="clearChat" class="btn-secondary" data-tooltip="Clear the current conversation history">Clear Session</button>
             </footer>
         </aside>
 
@@ -91,7 +91,7 @@
             <div class="input-area glass">
                 <div class="input-wrapper">
                     <textarea id="userInput" placeholder="Ask anything about your documents..." rows="1"></textarea>
-                    <button id="sendMessage" disabled>
+                    <button id="sendMessage" disabled data-tooltip="Send your query to the AI">
                         <svg viewBox="0 0 24 24" width="24" height="24">
                             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"></path>
                         </svg>
