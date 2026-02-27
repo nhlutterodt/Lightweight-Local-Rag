@@ -1,0 +1,13 @@
+:root {
+  --bg-color: #0d0d0f;
+  --sidebar-bg: #141417;
+  --accent-primary: #3b82f6;
+  --accent-secondary: #8b5cf6;
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --message-user: #2563eb;
+  --message-ai: rgba(31, 41, 55, 0.5);
+  --font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
