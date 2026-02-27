@@ -36,6 +36,16 @@ This enhanced project provides a comprehensive suite of PowerShell utilities for
 - **Interactive HTML**: Beautiful web-based reports with styling and tables
 - **Comparison Reports**: Before/after model state analysis
 
+### 💬 **Chat Experience**
+
+- **Phased Thinking Indicators**: The chat UI provides real-time phase feedback during queries:
+  - 🔍 **Searching documents...** (blue) — RAG retrieval phase
+  - 🧠 **Reasoning...** (purple) — Model thinking phase (thinking models only)
+  - ✍️ **Writing response...** (green) — Response generation phase
+- **Reasoning Disclosure**: Thinking models (e.g., `deepseek-r1`) expose their chain-of-thought in a collapsible block, allowing users to audit the model's reasoning process
+- **Elapsed Timer**: A live timer displays throughout all phases so users always know the task is active
+- **Smart Ingestion**: Source Manifest system tracks content hashes per collection, skipping unchanged files, detecting renames without re-embedding, and cleaning up orphaned data
+
 ## Project Structure
 
 ```

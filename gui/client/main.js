@@ -217,8 +217,48 @@ async function handleSend() {
   addMessage("user", text);
 
   // Create AI Placeholder
-  const aiContentPara = addMessage("ai", "...");
+  const aiContentPara = addMessage("ai", "");
+  const contentDiv = aiContentPara.parentElement;
   let fullResponse = "";
+  let thinkingText = "";
+
+  // --- Phase-Aware Status Indicator ---
+  const stepIndicator = document.createElement("div");
+  stepIndicator.className = "thinking-status";
+  stepIndicator.innerHTML =
+    '<span class="status-spinner"></span> <span class="status-text">Searching documents...</span> <span class="status-timer">0s</span>';
+  contentDiv.prepend(stepIndicator);
+
+  const statusTextEl = stepIndicator.querySelector(".status-text");
+  const timerEl = stepIndicator.querySelector(".status-timer");
+  const startTime = Date.now();
+  const timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    timerEl.textContent = `${elapsed}s`;
+  }, 1000);
+
+  let currentPhase = "retrieval"; // retrieval → thinking → generating
+  let thinkingDetails = null; // <details> element for reasoning disclosure
+  let thinkingSummaryEl = null;
+
+  function setPhase(phase) {
+    if (currentPhase === phase) return;
+    currentPhase = phase;
+    if (phase === "thinking") {
+      statusTextEl.textContent = "Reasoning...";
+      stepIndicator.classList.add("phase-thinking");
+    } else if (phase === "generating") {
+      statusTextEl.textContent = "Writing response...";
+      stepIndicator.classList.remove("phase-thinking");
+      stepIndicator.classList.add("phase-generating");
+      // Collapse thinking if open and finalize
+      if (thinkingDetails) {
+        thinkingDetails.removeAttribute("open");
+        const wordCount = thinkingText.trim().split(/\s+/).length;
+        thinkingSummaryEl.textContent = `🧠 Reasoning (${wordCount} words — click to expand)`;
+      }
+    }
+  }
 
   try {
     const response = await fetch(`${API_URL}/chat`, {
@@ -237,15 +277,6 @@ async function handleSend() {
     const decoder = new TextDecoder();
     let buffer = "";
 
-    // Step Indicator for Transparency
-    const stepIndicator = document.createElement("div");
-    stepIndicator.className = "thinking-status";
-    stepIndicator.innerHTML =
-      '<span class="status-spinner"></span> <span class="status-text">Backend Handshake...</span>';
-    aiContentPara.parentElement.prepend(stepIndicator);
-
-    aiContentPara.innerText = "";
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -260,21 +291,41 @@ async function handleSend() {
         try {
           const data = JSON.parse(t.slice(6));
           if (data.type === "metadata") {
-            renderCitations(
-              aiContentPara.parentElement.parentElement,
-              data.citations,
-            );
+            renderCitations(contentDiv.parentElement, data.citations);
           } else if (data.type === "status") {
-            const statusText = stepIndicator.querySelector(".status-text");
             if (data.message) {
-              statusText.innerText = data.message;
-            } else {
-              stepIndicator.remove(); // Generation started, remove indicator
+              statusTextEl.textContent = data.message;
             }
-          } else if (data.message && data.message.content) {
-            fullResponse += data.message.content;
-            aiContentPara.innerText = fullResponse;
-            chatWindow.scrollTop = chatWindow.scrollHeight;
+          } else if (data.message) {
+            // Handle thinking tokens (reasoning models)
+            if (data.message.thinking) {
+              setPhase("thinking");
+              thinkingText += data.message.thinking;
+
+              if (!thinkingDetails) {
+                thinkingDetails = document.createElement("details");
+                thinkingDetails.className = "thinking-disclosure";
+                thinkingDetails.setAttribute("open", "");
+                thinkingSummaryEl = document.createElement("summary");
+                thinkingSummaryEl.textContent = "🧠 Reasoning...";
+                const thinkingContent = document.createElement("pre");
+                thinkingContent.className = "thinking-content";
+                thinkingDetails.appendChild(thinkingSummaryEl);
+                thinkingDetails.appendChild(thinkingContent);
+                contentDiv.insertBefore(thinkingDetails, aiContentPara);
+              }
+              thinkingDetails.querySelector(".thinking-content").textContent =
+                thinkingText;
+              chatWindow.scrollTop = chatWindow.scrollHeight;
+            }
+
+            // Handle content tokens (actual response)
+            if (data.message.content) {
+              setPhase("generating");
+              fullResponse += data.message.content;
+              aiContentPara.innerText = fullResponse;
+              chatWindow.scrollTop = chatWindow.scrollHeight;
+            }
           } else if (data.error) {
             throw new Error(data.details || data.error);
           }
@@ -284,11 +335,14 @@ async function handleSend() {
         }
       }
     }
+
     chatHistory.push({ role: "assistant", content: fullResponse });
   } catch (err) {
     aiContentPara.innerHTML = `<div class="error-badge">⚠️ Error</div><div class="status-offline">${err.message}</div>`;
     remoteLog(`Chat failed: ${err.message}`, "ERROR", "CHAT");
   } finally {
+    clearInterval(timerInterval);
+    stepIndicator.remove();
     isGenerating = false;
     sendBtn.disabled = false;
   }

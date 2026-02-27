@@ -327,6 +327,7 @@ app.post("/api/chat", async (req, res) => {
             model,
             messages: ollamaMessages,
             stream: true,
+            think: true,
           },
           { responseType: "stream" },
         );
