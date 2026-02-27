@@ -164,44 +164,64 @@ class VectorStore {
         }
     }
 
+    [void] RemoveBySource([string]$fileName) {
+        $removed = $this.Items.RemoveAll({
+                param($item)
+                $item.Metadata -and $item.Metadata.ContainsKey("FileName") -and $item.Metadata["FileName"] -eq $fileName
+            })
+        if ($removed -gt 0) {
+            Write-Verbose "Removed $removed items for source: $fileName"
+        }
+    }
+
     [PSCustomObject[]] FindNearest([float[]]$queryVector, [int]$k, [float]$minScore) {
         if ($this.Items.Count -eq 0) {
             return @()
         }
 
-        # 1. Calculate Scores
-        # using a list of temporary objects to sort
-        $scoredItems = [System.Collections.Generic.List[PSCustomObject]]::new()
+        # 1. Calculate all scores using C# accelerator
+        $scores = New-Object float[] $this.Items.Count
+        $validIndices = [System.Collections.Generic.List[int]]::new()
 
-        # Use the accelerator
-        # Ensure accelerator is loaded - calling static method requires it
-        # Assuming VectorMath is already loaded by module
-         
-        foreach ($item in $this.Items) {
+        for ($i = 0; $i -lt $this.Items.Count; $i++) {
             try {
-                $score = [LocalRag.VectorMath]::CosineSimilarity($queryVector, $item.Vector)
-                
+                $score = [LocalRag.VectorMath]::CosineSimilarity($queryVector, $this.Items[$i].Vector)
+                $scores[$i] = $score
                 if ($score -ge $minScore) {
-                    $obj = [PSCustomObject]@{
-                        Id       = $item.Id
-                        Score    = $score
-                        Metadata = $item.Metadata
-                    }
-                    $scoredItems.Add($obj)
+                    $validIndices.Add($i)
                 }
             }
             catch {
-                # Skip items that might cause math errors (shouldn't happen with validation)
-                Write-Warning "Math error on item $($item.Id): $_"
+                $scores[$i] = [float]-1.0
+                Write-Warning "Math error on item $($this.Items[$i].Id): $_"
             }
         }
 
-        # 2. Sort Descending
-        # We can use PowerShell's Sort-Object but for huge lists standard .NET sort is faster
-        # For simplicity and "Local" scale, Sort-Object is fine for <10k items
-        # But let's look at LINQ or standard list sort for speed if needed. 
-        # For now, simplistic approach:
-         
-        return $scoredItems | Sort-Object Score -Descending | Select-Object -First $k
+        if ($validIndices.Count -eq 0) {
+            return @()
+        }
+
+        # 2. Build filtered score array for top-k selection
+        $filteredScores = New-Object float[] $validIndices.Count
+        for ($j = 0; $j -lt $validIndices.Count; $j++) {
+            $filteredScores[$j] = $scores[$validIndices[$j]]
+        }
+
+        # 3. Use C# accelerator for top-k selection (avoids full Sort-Object pipeline)
+        $topFilteredIndices = [LocalRag.VectorMath]::TopKIndices($filteredScores, $k)
+
+        # 4. Map back to original items and build results
+        $results = [System.Collections.Generic.List[PSCustomObject]]::new()
+        foreach ($fi in $topFilteredIndices) {
+            $originalIdx = $validIndices[$fi]
+            $item = $this.Items[$originalIdx]
+            $results.Add([PSCustomObject]@{
+                    Id       = $item.Id
+                    Score    = $scores[$originalIdx]
+                    Metadata = $item.Metadata
+                })
+        }
+
+        return $results.ToArray()
     }
 }

@@ -80,6 +80,9 @@ foreach ($file in $files) {
 
         $content = Get-Content -Path $file.FullName -Raw -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($content)) { continue }
+
+        # Remove existing entries for this file to prevent duplicates on re-ingestion
+        $store.RemoveBySource($file.Name)
         
         # Use Smart Chunking
         $chunks = $chunker.SplitMarkdown($content)

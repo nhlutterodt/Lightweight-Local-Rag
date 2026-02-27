@@ -12,6 +12,7 @@ class IngestionQueue {
     this.persistencePath = path.join(dataDir, "queue.json");
     this.jobs = [];
     this.isWorking = false;
+    this._lastSave = 0;
     this.currentJob = null;
 
     if (!fs.existsSync(dataDir)) {
@@ -85,7 +86,7 @@ class IngestionQueue {
         (obj) => {
           if (obj.type === "status") {
             job.progress = obj.message;
-            this.saveState();
+            this._throttledSave();
           }
         },
         (raw) => {
@@ -117,6 +118,13 @@ class IngestionQueue {
 
   getJobs() {
     return this.jobs;
+  }
+
+  _throttledSave() {
+    const now = Date.now();
+    if (now - this._lastSave < 2000) return;
+    this._lastSave = now;
+    this.saveState();
   }
 
   saveState() {

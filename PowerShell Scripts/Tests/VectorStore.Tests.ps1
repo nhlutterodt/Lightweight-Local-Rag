@@ -69,4 +69,29 @@ Describe "VectorStore Integration" {
             { $store.Add("fail", $v3d, @{}) } | Should -Throw
         }
     }
+
+    Context "Incremental Re-ingestion" {
+        It "should remove items by source filename" {
+            $store = [VectorStore]::new($TestDir, "test_remove")
+            $v = [float[]]@(1.0, 0.0)
+            $store.Add("a", $v, @{ FileName = "doc1.md" })
+            $store.Add("b", $v, @{ FileName = "doc2.md" })
+            $store.Add("c", $v, @{ FileName = "doc1.md" })
+            
+            $store.RemoveBySource("doc1.md")
+            
+            $store.Items.Count | Should -Be 1
+            $store.Items[0].Id | Should -Be "b"
+        }
+
+        It "should handle removing non-existent source gracefully" {
+            $store = [VectorStore]::new($TestDir, "test_remove_none")
+            $v = [float[]]@(1.0, 0.0)
+            $store.Add("a", $v, @{ FileName = "doc1.md" })
+            
+            $store.RemoveBySource("nonexistent.md")
+            
+            $store.Items.Count | Should -Be 1
+        }
+    }
 }

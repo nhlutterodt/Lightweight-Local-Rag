@@ -56,4 +56,36 @@ Describe "VectorMath Accelerator" {
             { [LocalRag.VectorMath]::CosineSimilarity($v1, $v2) } | Should -Throw
         }
     }
+
+    Context "TopKIndices Selection" {
+        It "should return correct top-k indices in descending score order" {
+            $scores = [float[]]@(0.1, 0.9, 0.5, 0.7, 0.3)
+            $result = [LocalRag.VectorMath]::TopKIndices($scores, 2)
+            $result.Count | Should -Be 2
+            $result[0] | Should -Be 1  # index of 0.9
+            $result[1] | Should -Be 3  # index of 0.7
+        }
+
+        It "should return all indices sorted when k >= count" {
+            $scores = [float[]]@(0.2, 0.8, 0.5)
+            $result = [LocalRag.VectorMath]::TopKIndices($scores, 10)
+            $result.Count | Should -Be 3
+            $result[0] | Should -Be 1  # 0.8
+            $result[1] | Should -Be 2  # 0.5
+            $result[2] | Should -Be 0  # 0.2
+        }
+
+        It "should return empty array for empty input" {
+            $scores = [float[]]@()
+            $result = [LocalRag.VectorMath]::TopKIndices($scores, 5)
+            $result.Count | Should -Be 0
+        }
+
+        It "should handle k=1 correctly (find maximum)" {
+            $scores = [float[]]@(0.3, 0.1, 0.7, 0.2, 0.5)
+            $result = [LocalRag.VectorMath]::TopKIndices($scores, 1)
+            $result.Count | Should -Be 1
+            $result[0] | Should -Be 2  # index of 0.7
+        }
+    }
 }
