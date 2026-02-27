@@ -94,4 +94,30 @@ Describe "VectorStore Integration" {
             $store.Items.Count | Should -Be 1
         }
     }
+
+    Context "Metadata Update (Rename Support)" {
+        It "should update FileName and Source for matching items" {
+            $store = [VectorStore]::new($TestDir, "test_rename")
+            $v = [float[]]@(1.0, 0.0)
+            $store.Add("chunk1", $v, @{ FileName = "old.md"; Source = "C:\old.md" })
+            $store.Add("chunk2", $v, @{ FileName = "old.md"; Source = "C:\old.md" })
+            $store.Add("other", $v, @{ FileName = "other.md"; Source = "C:\other.md" })
+
+            $updated = $store.UpdateMetadataBySource("old.md", "new.md", "C:\new.md")
+
+            $updated | Should -Be 2
+            $store.Items[0].Metadata["FileName"] | Should -Be "new.md"
+            $store.Items[0].Metadata["Source"] | Should -Be "C:\new.md"
+            $store.Items[2].Metadata["FileName"] | Should -Be "other.md"
+        }
+
+        It "should return 0 when no items match" {
+            $store = [VectorStore]::new($TestDir, "test_rename_none")
+            $v = [float[]]@(1.0, 0.0)
+            $store.Add("a", $v, @{ FileName = "doc.md" })
+
+            $updated = $store.UpdateMetadataBySource("nonexistent.md", "new.md", "C:\new.md")
+            $updated | Should -Be 0
+        }
+    }
 }

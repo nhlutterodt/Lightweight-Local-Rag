@@ -48,6 +48,7 @@
         '../OllamaClient.ps1',
         '../VectorMath.ps1',
         '../VectorStore.ps1',
+        '../SourceManifest.ps1',
         '../TextChunker.ps1',
         '../SmartTextChunker.ps1',
         '../PromptTemplate.ps1',

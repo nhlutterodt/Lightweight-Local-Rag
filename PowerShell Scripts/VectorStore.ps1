@@ -174,6 +174,21 @@ class VectorStore {
         }
     }
 
+    [int] UpdateMetadataBySource([string]$oldFileName, [string]$newFileName, [string]$newSourcePath) {
+        $updated = 0
+        foreach ($item in $this.Items) {
+            if ($item.Metadata -and $item.Metadata.ContainsKey("FileName") -and
+                $item.Metadata["FileName"] -eq $oldFileName) {
+                $item.Metadata["FileName"] = $newFileName
+                if ($newSourcePath -and $item.Metadata.ContainsKey("Source")) {
+                    $item.Metadata["Source"] = $newSourcePath
+                }
+                $updated++
+            }
+        }
+        return $updated
+    }
+
     [PSCustomObject[]] FindNearest([float[]]$queryVector, [int]$k, [float]$minScore) {
         if ($this.Items.Count -eq 0) {
             return @()
