@@ -19,17 +19,18 @@ class PowerShellRunner {
    * @returns {ChildProcess} The spawned process object.
    */
   spawn(scriptName, args = [], options = {}) {
-    const { timeout, ...spawnOptions } = options;
+    const { timeout, sta, ...spawnOptions } = options;
     const scriptPath = path.join(this.scriptsDir, scriptName);
-    const spawnArgs = [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-STA",
-      "-File",
-      scriptPath,
-      ...args,
-    ];
+
+    // Base arguments
+    const spawnArgs = ["-NoProfile", "-ExecutionPolicy", "Bypass"];
+
+    // Future-proofing: allow specific scripts to request STA if they involve COM/UI that node headless can't handle
+    if (sta) {
+      spawnArgs.push("-STA");
+    }
+
+    spawnArgs.push("-File", scriptPath, ...args);
 
     console.log(
       `[PS Runner] Spawning: ${scriptName} (Total Args: ${args.length})`,
