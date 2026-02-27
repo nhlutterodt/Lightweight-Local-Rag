@@ -4,12 +4,41 @@ class TextChunker {
 
     TextChunker() {
         $this.MaxChunkSize = 1000
-        $this.Overlap = 100
+        $this.Overlap = 200
     }
 
     TextChunker([int]$maxSize, [int]$overlap) {
         $this.MaxChunkSize = $maxSize
         $this.Overlap = $overlap
+    }
+
+    # Finds the last sentence boundary (.?!\n) within a window, or last space as fallback
+    static [int] FindSentenceBoundary([string]$text, [int]$maxPos) {
+        # Search backward from maxPos for sentence-ending punctuation or newline
+        $searchStart = [Math]::Max(0, [int]($maxPos * 0.8))  # 20% tolerance window
+        
+        for ($i = $maxPos; $i -ge $searchStart; $i--) {
+            $ch = $text[$i]
+            if ($ch -eq '.' -or $ch -eq '?' -or $ch -eq '!' -or $ch -eq "`n") {
+                return $i + 1  # Split AFTER the punctuation
+            }
+        }
+
+        # No sentence boundary found — fall back to last space
+        for ($i = $maxPos; $i -ge $searchStart; $i--) {
+            if ($text[$i] -eq ' ') {
+                return $i + 1
+            }
+        }
+
+        # Absolute fallback: split at maxPos
+        return $maxPos
+    }
+
+    # Estimates token count (approx 4 chars per token)
+    static [int] EstimateTokens([string]$text) {
+        if ([string]::IsNullOrEmpty($text)) { return 0 }
+        return [int]($text.Length / 4)
     }
 
     [string[]] SplitText([string]$text) {
@@ -30,35 +59,50 @@ class TextChunker {
             $para = $para.Trim()
             if ([string]::IsNullOrWhiteSpace($para)) { continue }
 
-            # If single paragraph is HUGE, we must force split it (fallback)
+            # If single paragraph exceeds MaxChunkSize, sentence-split it
             if ($para.Length -gt $this.MaxChunkSize) {
-                # If we have pending content, dump it first
+                # Flush pending content first
                 if ($currentChunk.Length -gt 0) {
                     $chunks.Add($currentChunk.ToString())
                     $currentChunk.Clear()
                 }
-                
-                # Recursive strict split or simple slice? 
-                # For v1, let's keep it simple: Add as is (oversized) or just slice?
-                # Let's slice it roughly
+
+                # Sentence-aware splitting with overlap
                 $start = 0
                 while ($start -lt $para.Length) {
-                    $len = [Math]::Min($this.MaxChunkSize, $para.Length - $start)
-                    $chunks.Add($para.Substring($start, $len))
-                    $start += $len # No overlap logic for sub-paragraph force split yet
+                    $remaining = $para.Length - $start
+                    if ($remaining -le $this.MaxChunkSize) {
+                        $chunks.Add($para.Substring($start))
+                        break
+                    }
+
+                    $splitAt = [TextChunker]::FindSentenceBoundary($para, $start + $this.MaxChunkSize - 1)
+                    # Clamp splitAt to be at least start+1 to avoid infinite loop
+                    if ($splitAt -le $start) { $splitAt = $start + $this.MaxChunkSize }
+
+                    $chunks.Add($para.Substring($start, $splitAt - $start))
+
+                    # Apply overlap: step back by Overlap chars for next chunk
+                    $start = [Math]::Max($start + 1, $splitAt - $this.Overlap)
                 }
                 continue
             }
 
-            # If adding this paragraph exceeds max, verify current chunk
+            # If adding this paragraph exceeds max, emit current chunk
             if ($currentChunk.Length + $para.Length + 2 -gt $this.MaxChunkSize) {
-                $chunks.Add($currentChunk.ToString())
+                $emittedText = $currentChunk.ToString()
+                $chunks.Add($emittedText)
                 $currentChunk.Clear()
-                
-                # Overlap logic could go here (keeping last N chars), but strict paragraph boundaries are often cleaner
+
+                # Overlap: carry forward the last Overlap chars as prefix
+                if ($this.Overlap -gt 0 -and $emittedText.Length -gt $this.Overlap) {
+                    $overlapText = $emittedText.Substring($emittedText.Length - $this.Overlap)
+                    $currentChunk.Append($overlapText) | Out-Null
+                    $currentChunk.Append("`n`n") | Out-Null
+                }
             }
 
-            if ($currentChunk.Length -gt 0) {
+            if ($currentChunk.Length -gt 0 -and -not $currentChunk.ToString().EndsWith("`n`n")) {
                 $currentChunk.Append("`n`n") | Out-Null
             }
             $currentChunk.Append($para) | Out-Null

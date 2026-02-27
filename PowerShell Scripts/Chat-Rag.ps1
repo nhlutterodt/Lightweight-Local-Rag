@@ -4,12 +4,24 @@
 
 param(
     [string]$CollectionName = "ProjectDocs",
-    [string]$OllamaUrl = "http://localhost:11434",
-    [string]$Model = "llama3",
-    [string]$EmbedModel = "nomic-embed-text",
-    [int]$TopK = 3,
-    [float]$MinScore = 0.6
+    [string]$OllamaUrl,
+    [string]$Model,
+    [string]$EmbedModel,
+    [int]$TopK = 0,
+    [float]$MinScore = -1.0
 )
+
+# --- Load Config ---
+$configPath = Join-Path $PSScriptRoot "..\config\project-config.psd1"
+$Config = if (Test-Path $configPath) { Import-LocalizedData -BaseDirectory (Split-Path $configPath) -FileName (Split-Path $configPath -Leaf) } else { @{} }
+
+# Apply config defaults if not overridden
+if ($TopK -eq 0) { $TopK = $Config.RAG.TopK }
+# Note: MinScore was previously 0.6 here and 0.5 in Query-Rag.ps1. It is now unified to $Config.RAG.MinScore for consistency.
+if ($MinScore -eq -1.0) { $MinScore = $Config.RAG.MinScore }
+if ([string]::IsNullOrEmpty($OllamaUrl)) { $OllamaUrl = $Config.RAG.OllamaUrl }
+if ([string]::IsNullOrEmpty($EmbedModel)) { $EmbedModel = $Config.RAG.EmbeddingModel }
+if ([string]::IsNullOrEmpty($Model)) { $Model = $Config.RAG.ChatModel }
 
 # --- Load Module ---
 $modulePath = Join-Path $PSScriptRoot "LocalRagUtils\LocalRagUtils.psd1"
@@ -33,6 +45,11 @@ try { $store.Load() } catch { Write-Warning "Could not load store: $_" }
 
 if ($store.Items.Count -eq 0) {
     Write-Warning "Vector Store is empty. The AI will not have context."
+}
+
+# --- Pre-flight Model Validation ---
+if ($store.EmbeddingModel -and $store.EmbeddingModel -ne $EmbedModel) {
+    throw "Embedding model mismatch: store='$($store.EmbeddingModel)', config='$EmbedModel'. Re-ingest or correct project-config.psd1."
 }
 
 # 2. Client
@@ -66,7 +83,7 @@ while ($true) {
         
         # 1. Retrieval
         $emb = $ollama.GetEmbedding($userInput)
-        $results = $store.FindNearest($emb, $TopK, $MinScore)
+        $results = $store.FindNearest($emb, $TopK, $MinScore, $EmbedModel)
         
         # 2. Context Construction
         $contextText = ""

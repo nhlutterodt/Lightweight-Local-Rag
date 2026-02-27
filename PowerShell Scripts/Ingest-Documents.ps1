@@ -1,14 +1,25 @@
 param(
     [string]$SourcePath = "$PSScriptRoot\..\docs",
     [string]$CollectionName = "ProjectDocs",
-    [string]$OllamaUrl = "http://localhost:11434",
-    [string]$EmbeddingModel = "nomic-embed-text",
-    [int]$ChunkSize = 1000,
+    [string]$OllamaUrl,
+    [string]$EmbeddingModel,
+    [int]$ChunkSize = 0,
+    [int]$ChunkOverlap = -1,
     [switch]$ForceRebuild,
     [switch]$Signal,
     [switch]$NoCleanup,
     [switch]$NoSkip
 )
+
+# --- Load Config ---
+$configPath = Join-Path $PSScriptRoot "..\config\project-config.psd1"
+$Config = if (Test-Path $configPath) { Import-LocalizedData -BaseDirectory (Split-Path $configPath) -FileName (Split-Path $configPath -Leaf) } else { @{} }
+
+# Apply config defaults if not overridden
+if ([string]::IsNullOrEmpty($OllamaUrl)) { $OllamaUrl = $Config.RAG.OllamaUrl }
+if ([string]::IsNullOrEmpty($EmbeddingModel)) { $EmbeddingModel = $Config.RAG.EmbeddingModel }
+if ($ChunkSize -eq 0) { $ChunkSize = $Config.RAG.ChunkSize }
+if ($ChunkOverlap -eq -1) { $ChunkOverlap = $Config.RAG.ChunkOverlap }
 
 # Helper for conditional output
 function Write-ProgressSignal($msg, $type = "status") {
@@ -51,6 +62,7 @@ if (-not (Test-Path $dataDir)) { New-Item $dataDir -ItemType Directory -Force | 
 
 # --- Initialize Store + Manifest ---
 $store = [VectorStore]::new($dataDir, $CollectionName)
+$store.EmbeddingModel = $EmbeddingModel
 $manifest = [SourceManifest]::new($dataDir, $CollectionName)
 
 if ($ForceRebuild) {
@@ -64,7 +76,7 @@ else {
     $manifest.Load()
 }
 
-$chunker = [SmartTextChunker]::new($ChunkSize)
+$chunker = [SmartTextChunker]::new($ChunkSize, $ChunkOverlap)
 
 # --- Scan Files ---
 if (-not (Test-Path $SourcePath)) {
@@ -128,8 +140,8 @@ foreach ($file in $files) {
         # Remove existing entries for this file
         $store.RemoveBySource($file.Name)
 
-        # Chunk and embed
-        $chunks = $chunker.SplitMarkdown($content)
+        # Chunk and embed (dispatches by file extension)
+        $chunks = $chunker.DispatchByExtension($file.FullName, $content)
         $chunkIndex = 0
 
         foreach ($smartChunk in $chunks) {

@@ -7,15 +7,25 @@ param(
 
     [string]$CollectionName = "ProjectDocs",
     
-    [int]$TopK = 5,
+    [int]$TopK = 0,
     
-    [float]$MinScore = 0.5,
+    [float]$MinScore = -1.0,
     
-    [string]$OllamaUrl = "http://localhost:11434",
-    [string]$EmbeddingModel = "nomic-embed-text",
+    [string]$OllamaUrl,
+    [string]$EmbeddingModel,
     
     [switch]$Json
 )
+
+# --- Load Config ---
+$configPath = Join-Path $PSScriptRoot "..\config\project-config.psd1"
+$Config = if (Test-Path $configPath) { Import-LocalizedData -BaseDirectory (Split-Path $configPath) -FileName (Split-Path $configPath -Leaf) } else { @{} }
+
+# Apply config defaults if not overridden
+if ($TopK -eq 0) { $TopK = $Config.RAG.TopK }
+if ($MinScore -eq -1.0) { $MinScore = $Config.RAG.MinScore }
+if ([string]::IsNullOrEmpty($OllamaUrl)) { $OllamaUrl = $Config.RAG.OllamaUrl }
+if ([string]::IsNullOrEmpty($EmbeddingModel)) { $EmbeddingModel = $Config.RAG.EmbeddingModel }
 
 # --- Load Module ---
 $modulePath = Join-Path $PSScriptRoot "LocalRagUtils\LocalRagUtils.psd1"
@@ -46,6 +56,11 @@ if ($store.Items.Count -eq 0) {
     exit
 }
 
+# --- Pre-flight Model Validation ---
+if ($store.EmbeddingModel -and $store.EmbeddingModel -ne $EmbeddingModel) {
+    throw "Embedding model mismatch: store='$($store.EmbeddingModel)', config='$EmbeddingModel'. Re-ingest or correct project-config.psd1."
+}
+
 $ollama = [OllamaClient]::new($OllamaUrl, $EmbeddingModel)
 if (-not $ollama.IsAvailable()) {
     Write-Error "Ollama is not available at $OllamaUrl"
@@ -68,7 +83,7 @@ catch {
 if (-not $Json) { Write-Host "Searching $($store.Items.Count) documents..." -ForegroundColor Cyan }
 if ($Json) { @{ type = "status"; message = "📁 Searching vector store..." } | ConvertTo-Json -Compress }
 
-$results = $store.FindNearest($queryVec, $TopK, $MinScore)
+$results = $store.FindNearest($queryVec, $TopK, $MinScore, $EmbeddingModel)
 
 # --- Output ---
 if ($Json) {

@@ -6,6 +6,9 @@ import { fileURLToPath } from "url";
 import axios from "axios";
 import PowerShellRunner from "./PowerShellRunner.js";
 import IngestionQueue from "./IngestionQueue.js";
+import { VectorStore } from "./lib/vectorStore.js";
+import { embed, chatStream } from "./lib/ollamaClient.js";
+import { QueryLogger } from "./lib/queryLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +52,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const OLLAMA_URL =
   process.env.OLLAMA_URL ||
+  config?.RAG?.OllamaUrl ||
   config?.Ollama?.ServiceUrl ||
   "http://localhost:11434";
 const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
@@ -57,6 +61,40 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
 
 const psRunner = new PowerShellRunner(PS_SCRIPTS_DIR);
 const ingestQueue = new IngestionQueue(psRunner);
+
+// Native RAG Engine State
+let store = new VectorStore();
+const dataDir = path.join(PS_SCRIPTS_DIR, "Data");
+const binPath = path.join(dataDir, "ProjectDocs.vectors.bin");
+const metaPath = path.join(dataDir, "ProjectDocs.metadata.json");
+
+(async () => {
+  try {
+    await store.load(binPath, metaPath);
+    console.log(
+      `[VectorStore] Loaded: ${store.size} vectors, model=${store.model || "legacy"}`,
+    );
+  } catch (err) {
+    store = null;
+    console.warn(
+      `[VectorStore Warning] Store could not be loaded at startup: ${err.message}. Waiting for ingest...`,
+    );
+  }
+})();
+
+// Query Logger Setup
+const logger = new QueryLogger(
+  path.join(__dirname, "..", "..", "logs", "query_log.jsonl"),
+);
+
+const shutdown = async () => {
+  console.log("Shutting down gracefully...");
+  await logger.flush();
+  process.exit();
+};
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 app.use(cors());
 app.use(express.json());
@@ -232,7 +270,7 @@ app.post("/api/chat", async (req, res) => {
   const {
     messages,
     collection = "TestIngest",
-    model = "llama3.1:8b",
+    model = config?.RAG?.ChatModel || "llama3.1:8b",
   } = req.body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -250,114 +288,94 @@ app.post("/api/chat", async (req, res) => {
       `[RAG] Query: "${lastUserMessage}" | Collection: ${collection}`,
     );
 
-    // 1. Perform RAG Retrieval via PowerShell
-    const ps = psRunner.spawn("Query-Rag.ps1", [
-      "-Query",
-      lastUserMessage,
-      "-CollectionName",
-      collection,
-      "-Json",
-    ]);
+    if (!store) {
+      return res.status(503).json({ error: "No documents ingested yet." });
+    }
 
-    let resultData = "";
-    PowerShellRunner.parseJsonStream(
-      ps,
-      (obj) => {
-        if (obj.type === "status") {
-          res.write(`data: ${JSON.stringify(obj)}\n\n`);
-        } else {
-          // Assume it's the final RAG result if not a status update
-          resultData += JSON.stringify(obj);
-        }
-      },
-      (raw) => {
-        resultData += raw;
-      },
+    // 1. JS Native Retrieval
+    const queryVec = await embed(
+      lastUserMessage,
+      config?.RAG?.EmbeddingModel || "nomic-embed-text",
+      OLLAMA_URL,
+    );
+    const results = store.findNearest(
+      queryVec,
+      config?.RAG?.TopK || 5,
+      config?.RAG?.MinScore || 0.5,
+      config?.RAG?.EmbeddingModel,
     );
 
-    ps.stderr.on("data", (data) => {
-      const err = data.toString();
-      if (!err.includes("PowerShell") && !err.includes("Copyright")) {
-        console.warn(`[PS Warn] ${err}`);
-      }
-    });
-
-    ps.on("close", async (code) => {
-      let contextText = "No relevant local documents found.";
-      let citations = [];
-
-      try {
-        const trimmedResult = resultData.replace(/SIGNAL:[A-Z]+/g, "").trim();
-        if (trimmedResult) {
-          const ragResult = JSON.parse(trimmedResult);
-          if (ragResult.Results && ragResult.Results.length > 0) {
-            contextText = ragResult.Results.map(
+    // 2. Build Context
+    const contextText =
+      results.length > 0
+        ? results
+            .map(
               (r) => `[Source: ${r.FileName}]\n${r.ChunkText || r.TextPreview}`,
-            ).join("\n\n");
-            citations = ragResult.Results.map((r) => ({
-              file: r.FileName,
-              score: r.Score,
-              preview: r.TextPreview,
-            }));
-          }
-        }
-      } catch (e) {
-        // Only log error if it's not empty
-        if (resultData.trim())
-          console.error("[RAG Error]:", e.message, "Data:", resultData);
-      }
+            )
+            .join("\n\n")
+        : "No relevant local documents found.";
 
-      const systemPrompt = `You are a helpful assistant. Use ONLY the provided context to answer. If unsure, say you don't know.\n\nCONTEXT:\n${contextText}`;
-      const ollamaMessages = [
-        { role: "system", content: systemPrompt },
-        ...messages,
-      ];
+    const logResults = results.map((r) => ({
+      score: r.score,
+      fileName: r.FileName,
+      chunkIndex: r.ChunkIndex,
+      headerContext: r.HeaderContext,
+      preview: r.TextPreview,
+    }));
 
-      try {
-        // Clear status before starting chat
-        res.write(
-          `data: ${JSON.stringify({ type: "status", message: "" })}\n\n`,
-        );
-        res.write(
-          `data: ${JSON.stringify({ type: "metadata", citations })}\n\n`,
-        );
+    const citations = results.map((r) => ({
+      fileName: r.FileName,
+      headerContext: r.HeaderContext,
+      score: r.score,
+      preview: r.TextPreview,
+    }));
 
-        const ollamaResponse = await axios.post(
-          `${OLLAMA_URL}/api/chat`,
-          {
-            model,
-            messages: ollamaMessages,
-            stream: true,
-            think: true,
-          },
-          { responseType: "stream" },
-        );
+    // 3. Compute Logging Data
+    const topScore = results.length > 0 ? results[0].score : 0;
+    const minScoreThresh = config?.RAG?.MinScore || 0.5;
+    const lowConfidence =
+      results.length === 0 || topScore < minScoreThresh + 0.1;
 
-        ollamaResponse.data.on("data", (chunk) => {
-          res.write(`data: ${chunk.toString()}\n\n`);
-        });
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      query: lastUserMessage.substring(0, 500),
+      embeddingModel: config?.RAG?.EmbeddingModel || "nomic-embed-text",
+      chatModel: model,
+      topK: config?.RAG?.TopK || 5,
+      minScore: minScoreThresh,
+      resultCount: results.length,
+      results: logResults,
+      lowConfidence: lowConfidence,
+    };
 
-        ollamaResponse.data.on("end", () => res.end());
-      } catch (err) {
-        console.error("[Ollama Error]:", err.message);
-        res.write(
-          `data: ${JSON.stringify({ error: "Ollama Error", details: err.message })}\n\n`,
-        );
-        res.end();
-      }
+    logger.log(logEntry).catch((err) => console.error("[QueryLogger]", err));
+
+    // 4. Output Headers & System Prompt
+    res.write(`data: ${JSON.stringify({ type: "status", message: "" })}\n\n`);
+    res.write(`event: citations\ndata: ${JSON.stringify({ citations })}\n\n`);
+
+    const systemPrompt = `You are a helpful assistant. Use ONLY the provided context to answer. If unsure, say you don't know.\n\nCONTEXT:\n${contextText}`;
+    const ollamaMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ];
+
+    // 5. Native JS Streaming
+    await chatStream(ollamaMessages, model, OLLAMA_URL, (chunkText) => {
+      res.write(`data: ${chunkText.toString()}\n\n`);
     });
 
-    ps.on("error", (err) => {
-      console.error("[PS Spawn Error]:", err.message);
-      res
-        .status(500)
-        .json({ error: "Failed to start RAG engine", details: err.message });
-    });
+    res.end();
   } catch (err) {
-    console.error("[Bridge Fatal Error]:", err.message);
+    if (err.message.includes("mismatch")) {
+      return res
+        .status(500)
+        .json({ error: "Configuration Error", details: err.message });
+    }
+    console.error("[Native Chat Error]:", err.message);
     res
       .status(500)
-      .json({ error: "Internal Bridge Error", details: err.message });
+      .json({ error: "Failed to generate response", details: err.message });
   }
 });
 
@@ -439,6 +457,21 @@ app.post("/api/ingest", (req, res) => {
       const reportData = resultData.replace(/SIGNAL:[A-Z]+/g, "").trim();
       const report = JSON.parse(reportData);
       res.write(`data: ${JSON.stringify({ type: "complete", report })}\n\n`);
+
+      // Hot Reload VectorStore after ingest completes
+      store = new VectorStore();
+      store
+        .load(binPath, metaPath)
+        .then(() =>
+          console.log(
+            `[VectorStore] Hot reloaded after ingest: ${store.size} vectors`,
+          ),
+        )
+        .catch((err) =>
+          console.error(
+            `[VectorStore Error] Failed to hot-reload: ${err.message}`,
+          ),
+        );
     } catch (e) {
       res.write(
         `data: ${JSON.stringify({ type: "error", message: "Ingestion failed to generate report" })}\n\n`,

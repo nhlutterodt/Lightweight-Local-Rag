@@ -15,6 +15,7 @@ class VectorStore {
     [string] $CollectionPath
     [System.Collections.Generic.List[VectorStoreItem]] $Items
     [int] $VectorDimension
+    [string] $EmbeddingModel = $null
 
     VectorStore([string]$collectionPath, [string]$name) {
         $this.CollectionPath = $collectionPath
@@ -52,6 +53,10 @@ class VectorStore {
     }
 
     [void] Save() {
+        if ([string]::IsNullOrWhiteSpace($this.EmbeddingModel)) {
+            throw "VectorStore.EmbeddingModel must be set before saving. Use `$Config.RAG.EmbeddingModel."
+        }
+        
         $binPath = Join-Path $this.CollectionPath "$($this.Name).vectors.bin"
         $metaPath = Join-Path $this.CollectionPath "$($this.Name).metadata.json"
 
@@ -65,6 +70,11 @@ class VectorStore {
 
             $bw.Write([int]$count)
             $bw.Write([int]$dim)
+
+            # Write EmbeddingModel
+            $modelBytes = [System.Text.Encoding]::UTF8.GetBytes($this.EmbeddingModel)
+            $bw.Write([int]$modelBytes.Length)
+            $bw.Write($modelBytes)
 
             foreach ($item in $this.Items) {
                 # Verify dim consistency just in case
@@ -124,6 +134,24 @@ class VectorStore {
             $count = $br.ReadInt32()
             $dim = $br.ReadInt32()
             $this.VectorDimension = $dim
+
+            # Backwards compatibility check for model name
+            # A valid count/dim from a legacy file could be read as modelNameByteLength here.
+            # However, no float in our valid range, interpreted as an int32, is likely to perfectly
+            # fall between 1 and 256. This is a safe heuristic for backwards compat.
+            if ($br.BaseStream.Position -lt $br.BaseStream.Length) {
+                $possibleLen = $br.ReadInt32()
+                if ($possibleLen -ge 1 -and $possibleLen -le 256) {
+                    $modelBytes = $br.ReadBytes($possibleLen)
+                    $this.EmbeddingModel = [System.Text.Encoding]::UTF8.GetString($modelBytes)
+                }
+                else {
+                    # Legacy format - seek back 4 bytes
+                    $br.BaseStream.Seek(-4, [System.IO.SeekOrigin]::Current) | Out-Null
+                    $this.EmbeddingModel = $null
+                    Write-Warning "Vector store '$binPath' has no embedded model name (legacy format). Validation skipped."
+                }
+            }
 
             if ($count -ne $metaList.Count) {
                 Write-Warning "Data Corruption Warning: Vector count ($count) does not match metadata count ($($metaList.Count))"
@@ -189,7 +217,14 @@ class VectorStore {
         return $updated
     }
 
-    [PSCustomObject[]] FindNearest([float[]]$queryVector, [int]$k, [float]$minScore) {
+    [PSCustomObject[]] FindNearest([float[]]$queryVector, [int]$k, [float]$minScore, [string]$QueryModel = $null) {
+        if ($null -ne $this.EmbeddingModel -and $null -ne $QueryModel -and $this.EmbeddingModel -ne $QueryModel) {
+            throw "Embedding model mismatch: store built with '$($this.EmbeddingModel)', query uses '$QueryModel'. Re-ingest your documents with the correct model or update project-config.psd1."
+        }
+        elseif ($null -eq $this.EmbeddingModel -or $null -eq $QueryModel) {
+            Write-Warning "Skipping model validation: Store or Query model is unspecified."
+        }
+
         if ($this.Items.Count -eq 0) {
             return @()
         }

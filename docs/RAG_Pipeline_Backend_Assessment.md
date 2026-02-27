@@ -8,7 +8,9 @@
 
 ## Executive Summary
 
-The RAG pipeline is **functional and thoughtfully structured**. The core flow — Ingest → Embed → Store → Query → Augment → Generate — is complete and operational. However, the audit reveals **seven architecturally critical improvement areas** that, if left unaddressed, will constrain scalability, retrieval quality, and system reliability as the project matures beyond its current prototype-to-mature stage.
+The RAG pipeline is **functional and thoughtfully structured**. The core flow — Ingest → Embed → Store → Query → Augment → Generate — is complete and operational. A recent intervention addressed the two most critical (P0) architectural flaws, meaning retrieval context is now full-fidelity and chunking is structure-aware.
+
+However, the audit reveals **five remaining improvement areas (P1-P2)** that, if left unaddressed, will constrain scalability, retrieval quality, and system reliability as the project matures beyond its current prototype-to-mature stage.
 
 ---
 
@@ -46,10 +48,18 @@ flowchart LR
 
 ## Assessment Findings
 
-### Finding 1: Chunking Strategy Severely Limits Retrieval Quality
+### Finding 1: Chunking Strategy Severely Limits Retrieval Quality -> ✅ RESOLVED (P0)
 
-**Severity:** 🔴 Critical  
-**Files:** `TextChunker.ps1`, `SmartTextChunker.ps1`
+**Severity:** 🔴 Critical _(Resolved)_  
+**Files:** `TextChunker.ps1`, `SmartTextChunker.ps1`, `Ingest-Documents.ps1`
+
+**Resolution Summary:**
+
+- **Overlap & Sentence Awareness:** Implemented sliding-window overlap (`ChunkOverlap = 200`) and a `FindSentenceBoundary()` fallback to prevent mid-word force-splits.
+- **File-Type Routing:** Added `DispatchByExtension()` to `SmartTextChunker`. `.ps1` code splits accurately on function boundaries, `.xml` on elements, `.md` on headers, and `.txt` on paragraphs.
+
+<details>
+<summary>View original finding details</summary>
 
 | Issue                                     | Detail                                                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -66,12 +76,23 @@ flowchart LR
 3. Introduce **file-type dispatching**: route `.ps1` files through a code-specific chunker that splits on function boundaries; route `.xml` files through an element-level chunker. The current `SplitMarkdown()` for all formats is lossy.
 4. Move to **token-estimated sizing** (approx. 4 chars/token as noted in Phase 8 design) so chunk sizes align with LLM context window budgets.
 
+</details>
+
 ---
 
-### Finding 2: Context Construction Is Truncation-Blind
+### Finding 2: Context Construction Is Truncation-Blind -> ✅ RESOLVED (P0)
 
-**Severity:** 🔴 Critical  
-**Files:** `Chat-Rag.ps1` (lines 72–80), `server.js` (lines 294–296, 309)
+**Severity:** 🔴 Critical _(Resolved)_  
+**Files:** `Chat-Rag.ps1`, `server.js`, `Ingest-Documents.ps1`, `Query-Rag.ps1`
+
+**Resolution Summary:**
+
+- **Full Chunk Text in Metadata:** `Ingest-Documents.ps1` now explicitly stores the full chunk content in a `ChunkText` field metadata property, separate from `TextPreview`.
+- **RAG Grounding Update:** `Chat-Rag.ps1` and `server.js` now construct prompt context using `ChunkText` (falling back to `TextPreview` for old data). The UI citations still correctly use `TextPreview`.
+- Tokens are not yet strictly budgeted, but the model receives full paragraph context instead of 100-character sentence fragments.
+
+<details>
+<summary>View original finding details</summary>
 
 | Issue                         | Detail                                                                                                                                                                       |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -86,6 +107,8 @@ flowchart LR
    - Creating a separate `.chunks.json` text store keyed by chunk ID.
 2. Implement a **token budget** (`TokenEstimator` as described in Phase 8 design doc but never implemented). Hard-cap the total context at e.g. 2048 tokens to prevent silent truncation by the LLM.
 3. Add **result deduplication**: if two results share the same `FileName` and overlapping `ChunkIndex`, merge or drop the lower-scored one.
+
+</details>
 
 ---
 
@@ -154,9 +177,9 @@ flowchart LR
 
 ---
 
-### Finding 6: RAG Config Is Hardcoded Across 3 Unlinked Locations
+### Finding 6: RAG Config Is Hardcoded Across 3 Unlinked Locations -> 🟡 PARTIALLY RESOLVED (P1)
 
-**Severity:** 🟡 Medium  
+**Severity:** 🟡 Medium _(Upgraded to P1)_  
 **Files:** `project-config.psd1`, `Ingest-Documents.ps1`, `Query-Rag.ps1`, `Chat-Rag.ps1`, `server.js`
 
 | Parameter       | `project-config.psd1`    | `Ingest-Documents.ps1`   | `Query-Rag.ps1`          | `Chat-Rag.ps1`           | `server.js`          |
@@ -170,22 +193,12 @@ flowchart LR
 
 **Impact:** Changing the embedding model requires editing 3+ files. `MinScore` differs between CLI and chat without documented reasoning.
 
-**Recommended Fix:**
-Add a `RAG` section to `project-config.psd1`:
+**Status:**
+A `RAG` configuration block containing `EmbeddingModel`, `ChatModel`, `ChunkSize`, `ChunkOverlap`, `TopK`, `MinScore`, and `MaxContextTokens` has been added to `project-config.psd1`.
+**However, the individual scripts (e.g., `Ingest-Documents.ps1`, `Query-Rag.ps1`, `Chat-Rag.ps1`) have not yet been wired to proactively load and use this config block**, leaving the fallback defaults hardcoded in the script parameter blocks.
 
-```powershell
-RAG = @{
-    EmbeddingModel = "nomic-embed-text"
-    ChatModel      = "llama3.1:8b"
-    ChunkSize      = 1000
-    ChunkOverlap   = 200
-    TopK           = 5
-    MinScore       = 0.5
-    MaxContextTokens = 2048
-}
-```
-
-Have each script read from config with parameter overrides, and have the Node.js bridge load these values via `loadProjectConfig()`.
+**Remaining Action Required:**
+Implement dynamic configuration loading in `Ingest-Documents.ps1`, `Query-Rag.ps1`, `Chat-Rag.ps1`, and `server.js` to draw from the `.psd1` settings, ensuring single-source-of-truth reliability.
 
 ---
 
@@ -225,21 +238,22 @@ These components are solid and should **not** be changed:
 
 ---
 
-## Priority Roadmap
+## Revised Priority Roadmap (Post-P0)
 
-| Priority | Finding                                              | Effort      | Impact                                                      |
-| -------- | ---------------------------------------------------- | ----------- | ----------------------------------------------------------- |
-| 🔴 P0    | **#2** Context truncation / `TextPreview` as context | Low         | Retrieval quality is fundamentally broken without full text |
-| 🔴 P0    | **#1** Chunking overlap + sentence-awareness         | Medium      | Directly improves every query result                        |
-| 🟠 P1    | **#5** Embedding model binding                       | Low         | Prevents silent data corruption on model change             |
-| 🟠 P1    | **#6** Centralize RAG config                         | Low         | Reduces config drift, enables single-point changes          |
-| 🟠 P1    | **#4** Bridge cold-start optimization                | Medium–High | Reduces per-request latency by 2–5 seconds                  |
-| 🟡 P2    | **#7** Query logging + retrieval feedback            | Low         | Essential for diagnosing quality issues post-deployment     |
-| 🟡 P2    | **#3** Vector index pre-filtering                    | Medium      | Only needed when dataset grows beyond ~10K chunks           |
+With P0 completed, attention shifts entirely to addressing performance bottlenecks, system configuration maturity, and model-safety validations.
+
+| Priority | Finding                                   | Effort      | Impact                                                                                           |
+| -------- | ----------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| � P1     | **#4** Bridge cold-start optimization     | Medium–High | Reduces per-request latency by 2–5 seconds (`process-per-request` model is causing severe lag)   |
+| 🟠 P1    | **#5** Embedding model binding            | Low         | Prevents silent data corruption on model change by validating models embedded in `.vectors.bin`  |
+| 🟠 P1    | **#6** Centralize RAG config (Wiring)     | Low         | Finish wiring scripts to use the newly centralized config block                                  |
+| 🟡 P2    | **#7** Query logging + retrieval feedback | Low         | Essential for diagnosing quality issues post-deployment                                          |
+| 🟡 P2    | **#3** Vector index pre-filtering         | Medium      | Only needed when dataset grows beyond ~10K chunks (current brute-force scan is adequate for now) |
 
 ---
 
-## Immediate Next Step
+## Recommended Next Step
 
 > [!IMPORTANT]
-> **Finding #2 (Context sent as truncated `TextPreview`) should be fixed first.** This is a single-variable bug: the full chunk text is embedded into vectors but then thrown away. Only a 100-character preview is persisted in metadata, and that preview is what gets sent to the LLM as "context." The LLM is literally answering based on sentence fragments. Fixing this is a low-effort, high-impact change to `Ingest-Documents.ps1` (store full text) and `server.js` / `Chat-Rag.ps1` (pass full text to prompt).
+> **Finding #4 (Bridge cold-start optimization)** offers the most immediate user-facing value. It currently takes 2-5 seconds for the conversational RAG context process to spin up (`server.js` spawning a new PowerShell process on every request). Moving towards a pooled PowerShell runner or directly parsing vectors from Node.js is the next frontier.
+> Alternatively, **Finding #6** is a very fast win and stabilizes the configurations.

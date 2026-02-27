@@ -115,6 +115,18 @@
         ShowSeparators = $true
     }
     
+    # ===== RAG Pipeline Configuration =====
+    RAG      = @{
+        OllamaUrl        = "http://localhost:11434"
+        EmbeddingModel   = "nomic-embed-text"
+        ChatModel        = "llama3.1:8b"
+        ChunkSize        = 1000
+        ChunkOverlap     = 200
+        TopK             = 5
+        MinScore         = 0.5
+        MaxContextTokens = 2048
+    }
+    
     # ===== Metadata =====
     Metadata = @{
         ConfigVersion = "1.0.0"
