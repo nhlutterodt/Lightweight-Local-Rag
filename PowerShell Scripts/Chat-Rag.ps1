@@ -72,7 +72,8 @@ while ($true) {
         $contextText = ""
         if ($results.Count -gt 0) {
             $contextText = ($results | ForEach-Object { 
-                    "[Source: $($_.Metadata['FileName'])]`n$($_.Metadata['TextPreview'])..." 
+                    $text = if ($_.Metadata['ChunkText']) { $_.Metadata['ChunkText'] } else { $_.Metadata['TextPreview'] }
+                    "[Source: $($_.Metadata['FileName'])]`n$text" 
                 }) -join "`n`n"
         }
         else {

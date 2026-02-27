@@ -80,6 +80,7 @@ if ($Json) {
             @{
                 Score       = [Math]::Round($_.Score, 4)
                 FileName    = $_.Metadata["FileName"]
+                ChunkText   = if ($_.Metadata["ChunkText"]) { $_.Metadata["ChunkText"] } else { $_.Metadata["TextPreview"] }
                 TextPreview = $_.Metadata["TextPreview"]
             }
         }

@@ -292,11 +292,12 @@ app.post("/api/chat", async (req, res) => {
           const ragResult = JSON.parse(trimmedResult);
           if (ragResult.Results && ragResult.Results.length > 0) {
             contextText = ragResult.Results.map(
-              (r) => `[Source: ${r.FileName}]\n${r.TextPreview}...`,
+              (r) => `[Source: ${r.FileName}]\n${r.ChunkText || r.TextPreview}`,
             ).join("\n\n");
             citations = ragResult.Results.map((r) => ({
               file: r.FileName,
               score: r.Score,
+              preview: r.TextPreview,
             }));
           }
         }

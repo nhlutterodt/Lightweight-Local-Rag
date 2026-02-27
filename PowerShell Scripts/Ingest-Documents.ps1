@@ -141,6 +141,7 @@ foreach ($file in $files) {
                     Source        = $file.FullName
                     FileName      = $file.Name
                     ChunkIndex    = $chunkIndex
+                    ChunkText     = $smartChunk.Text
                     TextPreview   = $smartChunk.Text.Substring(0, [Math]::Min(100, $smartChunk.Text.Length))
                     HeaderContext = $smartChunk.HeaderContext
                 }
