@@ -127,6 +127,31 @@ function isSafePath(inputPath) {
   return true;
 }
 
+// --- Native Folder Selection ---
+app.get("/api/browse", (req, res) => {
+  const ps = psRunner.spawn("Select-Folder.ps1", []);
+  let result = "";
+
+  ps.stdout.on("data", (data) => (result += data.toString()));
+
+  ps.on("close", (code) => {
+    try {
+      if (result.trim()) {
+        const parsed = JSON.parse(result);
+        res.json(parsed);
+      } else {
+        throw new Error("No output from native dialog script");
+      }
+    } catch (e) {
+      res.status(500).json({
+        status: "error",
+        message: "Failed to parse folder selection result",
+        error: e.message,
+      });
+    }
+  });
+});
+
 // --- Queue Management ---
 
 // Get current queue state

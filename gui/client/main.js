@@ -30,12 +30,38 @@ const clearBtn = document.getElementById("clearChat");
 const indexMonitor = document.getElementById("indexMonitor");
 const enqueueIngestBtn = document.getElementById("enqueueIngest");
 const queueManager = document.getElementById("queueManager");
+const browseFolderBtn = document.getElementById("browseFolderBtn");
 
 let chatHistory = [];
 let isGenerating = false;
 
 startIngestBtn.addEventListener("click", handleIngest);
 enqueueIngestBtn.addEventListener("click", handleEnqueue);
+browseFolderBtn.addEventListener("click", handleBrowse);
+
+/**
+ * Handle Folder Browse
+ */
+async function handleBrowse() {
+  browseFolderBtn.disabled = true;
+  browseFolderBtn.textContent = "⏳";
+  try {
+    const response = await fetch(`${API_URL}/browse`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === "success" && data.path) {
+        ingestPathInput.value = data.path;
+      }
+    } else {
+      console.warn("Folder browse failed:", await response.text());
+    }
+  } catch (err) {
+    console.error("Folder browse error:", err);
+  } finally {
+    browseFolderBtn.disabled = false;
+    browseFolderBtn.textContent = "📁";
+  }
+}
 
 /**
  * Handle Folder Ingestion

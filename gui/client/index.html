@@ -37,7 +37,10 @@
 
                 <div class="nav-item">
                     <label>Vectorize New Data</label>
-                    <input type="text" id="ingestPath" placeholder="C:\MyDocuments" />
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="ingestPath" placeholder="C:\MyDocuments" style="flex: 1;" />
+                        <button id="browseFolderBtn" class="btn-secondary" style="margin-top: 0; padding: 0 12px; width: auto;" data-tooltip="Browse for a folder">📁</button>
+                    </div>
                     <div class="ingest-actions" style="display: flex; gap: 10px; margin-top: 10px;">
                         <button id="startIngest" class="btn-primary" style="flex: 1;" data-tooltip="Immediately begin vectorizing the selected data">🚀 Now</button>
                         <button id="enqueueIngest" class="btn-secondary" style="flex: 1;" data-tooltip="Add to queue for background processing">➕ Queue</button>

@@ -25,6 +25,7 @@ class PowerShellRunner {
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
+      "-STA",
       "-File",
       scriptPath,
       ...args,
