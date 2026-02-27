@@ -317,18 +317,25 @@ app.post("/api/chat", async (req, res) => {
       return res.status(503).json({ error: "No documents ingested yet." });
     }
 
+    const t0 = process.hrtime.bigint();
+
     // 1. JS Native Retrieval
+    const tEmbedStart = process.hrtime.bigint();
     const queryVec = await embed(
       lastUserMessage,
       config?.RAG?.EmbeddingModel || "nomic-embed-text",
       OLLAMA_URL,
     );
+    const tEmbedEnd = process.hrtime.bigint();
+
+    const tSearchStart = process.hrtime.bigint();
     const results = store.findNearest(
       queryVec,
       config?.RAG?.TopK || 5,
       config?.RAG?.MinScore || 0.5,
       config?.RAG?.EmbeddingModel,
     );
+    const tSearchEnd = process.hrtime.bigint();
 
     // 2. Build Context
     const contextText =
@@ -375,7 +382,18 @@ app.post("/api/chat", async (req, res) => {
 
     logger.log(logEntry).catch((err) => console.error("[QueryLogger]", err));
 
-    // 4. Output Headers & System Prompt
+    // 4. Output Headers, Server-Timing, & System Prompt
+    const embedMs = Number(tEmbedEnd - tEmbedStart) / 1e6;
+    const searchMs = Number(tSearchEnd - tSearchStart) / 1e6;
+    const totalMs = Number(process.hrtime.bigint() - t0) / 1e6;
+    res.setHeader(
+      "Server-Timing",
+      `embed;dur=${embedMs.toFixed(1)}, search;dur=${searchMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`,
+    );
+    console.log(
+      `[RAG Timing] embed=${embedMs.toFixed(1)}ms  search=${searchMs.toFixed(1)}ms  total=${totalMs.toFixed(1)}ms`,
+    );
+
     res.write(`data: ${JSON.stringify({ type: "status", message: "" })}\n\n`);
     res.write(`event: citations\ndata: ${JSON.stringify({ citations })}\n\n`);
 
