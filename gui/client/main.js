@@ -392,7 +392,7 @@ function renderCitations(messageElement, citations) {
     iconSpan.className = "icon";
     iconSpan.textContent = "📖 ";
 
-    const fileText = document.createTextNode(` ${c.file} `);
+    const fileText = document.createTextNode(` ${c.fileName} `);
 
     const scoreSmall = document.createElement("small");
     scoreSmall.textContent = `(${(c.score * 100).toFixed(0)}%)`;

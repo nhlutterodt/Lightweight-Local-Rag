@@ -395,7 +395,7 @@ app.post("/api/chat", async (req, res) => {
     );
 
     res.write(`data: ${JSON.stringify({ type: "status", message: "" })}\n\n`);
-    res.write(`event: citations\ndata: ${JSON.stringify({ citations })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: "metadata", citations })}\n\n`);
 
     const systemPrompt = `You are a helpful assistant. Use ONLY the provided context to answer. If unsure, say you don't know.\n\nCONTEXT:\n${contextText}`;
     const ollamaMessages = [
@@ -405,7 +405,9 @@ app.post("/api/chat", async (req, res) => {
 
     // 5. Native JS Streaming
     await chatStream(ollamaMessages, model, OLLAMA_URL, (chunkText) => {
-      res.write(`data: ${chunkText.toString()}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ message: { content: chunkText.toString() } })}\n\n`,
+      );
     });
 
     res.end();
