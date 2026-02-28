@@ -128,6 +128,43 @@ flowchart LR
 
 ---
 
+### Finding 8: SSE Stream Format Mismatch (Empty Responses) -> ✅ RESOLVED (P0)
+
+**Severity:** 🔴 Critical _(Resolved)_  
+**Files:** `server.js`, `main.js`
+
+**Resolution Summary:**
+
+- **Bug Fixed:** The native Node.js bridge was streaming raw text (`data: Hello`) instead of the structured JSON the client expected (`data: {"message":{"content":"Hello"}}`), causing empty chat bubbles. Citations were also sending `file` instead of `fileName`.
+- **Contract Defined:** Conformed the Node server output explicitly to the client parser's JSON shape, resolving the bug and restoring full chat operations.
+
+---
+
+### Finding 9: Impossible State Model Selection -> ✅ RESOLVED (P1)
+
+**Severity:** 🟠 High _(Resolved)_  
+**Files:** `server.js`, `main.js`, `models.test.js`
+
+**Resolution Summary:**
+
+- **Bug Fixed:** The client naive `!name.includes('embed')` filter allowed advanced embedding models (like `bge-m3`) to leak into the chat dropdown, while failing to validate if required core models were installed.
+- **Role Classification:** Enriched the `/api/models` endpoint to classify models using Ollama's `details.family` metadata securely.
+- **Smart Feedback:** Added startup validation of required models and actionable yellow warning banners with exact `ollama pull` commands if required models are missing.
+
+---
+
+### Finding 10: Lack of Regression Testing Guardrails -> ✅ RESOLVED (P1)
+
+**Severity:** 🟠 High _(Resolved)_  
+**Files:** `tests/sse.contract.test.js`, `tests/vectorStore.test.js`, `docs/SSE_CONTRACT.md`
+
+**Resolution Summary:**
+
+- **Contract Tests:** Engineered strict JSON SSE contract tests and VectorStore array shape validation to prevent serialization regressions.
+- **Mutation Tested:** Proved the test suite's efficacy by deliberately introducing past bugs and confirming the suite caught 100% of mutations.
+
+---
+
 ## What's Working Well
 
 These foundational components continue driving the core operations solidly and should remain undisturbed:
@@ -150,9 +187,12 @@ The backend engine is systematically stabilized. The active technical pipeline d
 | -------- | ----------------------------------------- | ---------- | ---------------------------------------------------------------------- |
 | 🟢 P0    | **#1** Chunking Quality Limit             | **Done**   | Massive context/quality boost.                                         |
 | 🟢 P0    | **#2** Context Size Budget / Truncation   | **Done**   | RAG LLM prompts mapped 1:1 against raw chunks safely.                  |
+| 🟢 P0    | **#8** SSE Stream Format Mismatch         | **Done**   | Fixed silent failure causing empty chat UI responses.                  |
 | 🟢 P1    | **#4** Bridge cold-start optimization     | **Done**   | Extinguished 2-5sec pwsh process invocation lock per user interaction! |
 | 🟢 P1    | **#5** Embedding model binding            | **Done**   | Mitigated topological mismatch degradation entirely natively.          |
 | 🟢 P1    | **#6** Centralize RAG config (Wiring)     | **Done**   | Normalized architecture limits directly via `.psd1`.                   |
+| 🟢 P1    | **#9** Impossible State Model Selection   | **Done**   | Validates model families, prevents UI model mismatches natively.       |
+| 🟢 P1    | **#10** Regression Testing Guardrails     | **Done**   | 48 strict tests prevent serialization and classification drift.        |
 | 🟢 P2    | **#7** Query logging + retrieval feedback | **Done**   | Instantiated JSONL telemetry tracking for pipeline fine-tuning.        |
 | 🟡 P2    | **#3** Vector index pre-filtering         | _Deferred_ | Planned intervention upon dataset traversing ~10K active nodes.        |
 
