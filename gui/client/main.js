@@ -170,8 +170,8 @@ async function init() {
     const data = await res.json();
 
     if (data.models) {
-      // Filter out embedding models to prevent chat errors
-      const chatModels = data.models.filter((m) => !m.name.includes("embed"));
+      // Filter to chat-capable models only (server classifies by family)
+      const chatModels = data.models.filter((m) => m.role === "chat");
 
       modelSelect.innerHTML = chatModels
         .map(
@@ -180,8 +180,45 @@ async function init() {
         )
         .join("");
 
-      statusIndicator.innerText = "System Online";
-      statusIndicator.className = "status-indicator status-online";
+      // Pre-select the configured chat model if available
+      if (data.required?.chat?.name) {
+        const configuredName = data.required.chat.name;
+        const matchOption = Array.from(modelSelect.options).find(
+          (opt) =>
+            opt.value === configuredName ||
+            opt.value.startsWith(configuredName + ":"),
+        );
+        if (matchOption) {
+          modelSelect.value = matchOption.value;
+        }
+      }
+
+      // Show missing model warnings
+      const warningEl = document.getElementById("modelWarning");
+      if (data.ready === false && warningEl) {
+        const missing = [];
+        if (!data.required.embed.installed) {
+          missing.push(
+            `<strong>Embedding model</strong> <code>${data.required.embed.name}</code> is not installed.<br>` +
+              `Run: <code>${data.required.embed.pullCommand}</code>`,
+          );
+        }
+        if (!data.required.chat.installed) {
+          missing.push(
+            `<strong>Chat model</strong> <code>${data.required.chat.name}</code> is not installed.<br>` +
+              `Run: <code>${data.required.chat.pullCommand}</code>`,
+          );
+        }
+        warningEl.innerHTML =
+          `<div class="model-warning-icon">⚠️</div>` +
+          `<div class="model-warning-text">${missing.join("<br><br>")}</div>`;
+        warningEl.classList.remove("hidden");
+      }
+
+      statusIndicator.innerText = data.ready
+        ? "System Online"
+        : "Models Missing";
+      statusIndicator.className = `status-indicator ${data.ready ? "status-online" : "status-warning"}`;
       sendBtn.disabled = false;
       remoteLog("Frontend connected and systems online", "SUCCESS", "SESSION");
     }

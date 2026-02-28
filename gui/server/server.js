@@ -278,11 +278,68 @@ app.post("/api/log", (req, res) => {
   });
 });
 
-// Proxy to Ollama Models
+// Embedding model families — these cannot be used for chat
+const EMBED_FAMILIES = new Set(["bert", "nomic-bert"]);
+
+function classifyModelRole(model) {
+  const family = model.details?.family?.toLowerCase() || "";
+  if (EMBED_FAMILIES.has(family)) return "embed";
+  return "chat";
+}
+
+// Enriched Model Endpoint
 app.get("/api/models", async (req, res) => {
   try {
     const response = await axios.get(`${OLLAMA_URL}/api/tags`);
-    res.json(response.data);
+    const rawModels = response.data?.models || [];
+
+    // Classify each model
+    const models = rawModels.map((m) => ({
+      name: m.name,
+      size: m.size,
+      family: m.details?.family || "unknown",
+      parameterSize: m.details?.parameter_size || "unknown",
+      quantization: m.details?.quantization_level || "unknown",
+      role: classifyModelRole(m),
+    }));
+
+    // Check required models from config
+    const requiredEmbedName = config?.RAG?.EmbeddingModel || "nomic-embed-text";
+    const requiredChatName = config?.RAG?.ChatModel || "llama3.1:8b";
+
+    const embedInstalled = rawModels.some(
+      (m) =>
+        m.name === requiredEmbedName ||
+        m.name.startsWith(requiredEmbedName + ":"),
+    );
+    const chatInstalled = rawModels.some(
+      (m) =>
+        m.name === requiredChatName ||
+        m.name.startsWith(requiredChatName + ":"),
+    );
+
+    const required = {
+      embed: {
+        name: requiredEmbedName,
+        installed: embedInstalled,
+        ...(embedInstalled
+          ? {}
+          : { pullCommand: `ollama pull ${requiredEmbedName}` }),
+      },
+      chat: {
+        name: requiredChatName,
+        installed: chatInstalled,
+        ...(chatInstalled
+          ? {}
+          : { pullCommand: `ollama pull ${requiredChatName}` }),
+      },
+    };
+
+    res.json({
+      models,
+      required,
+      ready: embedInstalled && chatInstalled,
+    });
   } catch (error) {
     res
       .status(502)

@@ -86,3 +86,44 @@
 .status-offline {
   color: #ef4444;
 }
+.status-warning {
+  color: #f59e0b;
+}
+
+/* Model Warning Banner */
+.model-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.model-warning-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.model-warning-text {
+  color: var(--text-secondary, #ccc);
+}
+
+.model-warning-text code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  color: #f59e0b;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
