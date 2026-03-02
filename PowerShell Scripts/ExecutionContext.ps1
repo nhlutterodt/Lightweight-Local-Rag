@@ -5,7 +5,8 @@
 try {
     . "$PSScriptRoot\XMLLogger.ps1"
     $script:XMLLoggerAvailable = $true
-} catch {
+}
+catch {
     $script:XMLLoggerAvailable = $false
     Write-Verbose "XMLLogger.ps1 not available - logging features will be disabled"
 }
@@ -13,7 +14,8 @@ try {
 try {
     . "$PSScriptRoot\DateTimeUtils.ps1"
     $script:DateTimeUtilsAvailable = $true
-} catch {
+}
+catch {
     $script:DateTimeUtilsAvailable = $false
     Write-Verbose "DateTimeUtils.ps1 not available - fallback timing will be used"
 }
@@ -21,7 +23,8 @@ try {
 try {
     . "$PSScriptRoot\ConsoleUtils.ps1"
     $script:ConsoleUtilsAvailable = $true
-} catch {
+}
+catch {
     $script:ConsoleUtilsAvailable = $false
     Write-Verbose "ConsoleUtils.ps1 not available - basic console output will be used"
 }
@@ -79,11 +82,12 @@ class ExecutionContext {
         # Check if DateTimeUtils is available
         if (Get-Command -Name "New-PerformanceTimer" -ErrorAction SilentlyContinue) {
             $this.Timer = New-PerformanceTimer -OperationName $this.OperationName
-        } else {
+        }
+        else {
             # Fallback to simple timing
             $this.Timer = @{
-                "StartTime" = $this.StartTime
-                "Checkpoints" = @{}
+                "StartTime"     = $this.StartTime
+                "Checkpoints"   = @{}
                 "OperationName" = $this.OperationName
             }
         }
@@ -100,32 +104,38 @@ class ExecutionContext {
                 $xmlLoggerType = [System.Type]::GetType("XMLLogger")
                 if ($xmlLoggerType) {
                     $this.Logger = & $xmlLoggerType::NewWithContextualPath "execution" "context" $this.OperationName $sessionName
-                } else {
+                }
+                else {
                     # Fallback - try to create directly if available in session
                     $createMethod = Get-Command "New-Object" -ErrorAction SilentlyContinue
                     if ($createMethod) {
                         try {
-                            # Alternative approach - use Invoke-Expression to dynamically call XMLLogger
-                            $this.Logger = Invoke-Expression "[XMLLogger]::NewWithContextualPath('execution', 'context', '$($this.OperationName)', '$sessionName')"
-                        } catch {
+                            # Alternative approach - use scriptblock to delay type resolution securely
+                            $sb = [scriptblock]::Create("[XMLLogger]::NewWithContextualPath('execution', 'context', `$args[0], `$args[1])")
+                            $this.Logger = & $sb $this.OperationName $sessionName
+                        }
+                        catch {
                             throw "XMLLogger available but could not instantiate: $_"
                         }
-                    } else {
+                    }
+                    else {
                         throw "XMLLogger type not properly loaded"
                     }
                 }
                 $this.LoggingEnabled = $true
                 
                 $this.Logger.LogInfo($this.LogCategory, "ExecutionContext logger initialized", @{
-                    "OperationName" = $this.OperationName
-                    "LogContext" = $logContext
-                    "StartTime" = $this.StartTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-                })
-            } else {
+                        "OperationName" = $this.OperationName
+                        "LogContext"    = $logContext
+                        "StartTime"     = $this.StartTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+                    })
+            }
+            else {
                 $this.LoggingEnabled = $false
                 Write-Verbose "XMLLogger not available - logging disabled for this execution context"
             }
-        } catch {
+        }
+        catch {
             # XMLLogger not available, disable logging gracefully
             $this.LoggingEnabled = $false
             $this.Logger = $null
@@ -144,13 +154,15 @@ class ExecutionContext {
         try {
             $psVersionInfo = Get-Variable -Name "PSVersionTable" -Scope Global -ErrorAction Stop
             $this.Metadata["powershellVersion"] = $psVersionInfo.Value.PSVersion.ToString()
-        } catch {
+        }
+        catch {
             $this.Metadata["powershellVersion"] = "Unknown"
         }
         
         if ($this.ConsoleOutputEnabled -and (Get-Command -Name "Write-Header" -ErrorAction SilentlyContinue)) {
             Write-Header $this.OperationName.ToUpper()
-        } elseif ($this.ConsoleOutputEnabled) {
+        }
+        elseif ($this.ConsoleOutputEnabled) {
             Write-Host "`n=== $($this.OperationName.ToUpper()) ===" -ForegroundColor Cyan
         }
         
@@ -166,16 +178,17 @@ class ExecutionContext {
         
         $this.Phases[$phaseName] = @{
             "startTime" = $phaseStartTime
-            "endTime" = $null
-            "order" = $this.PhaseCounter
-            "status" = "running"
+            "endTime"   = $null
+            "order"     = $this.PhaseCounter
+            "status"    = "running"
         }
         
         # Console output
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-Section" -ErrorAction SilentlyContinue) {
                 Write-Section $phaseName
-            } else {
+            }
+            else {
                 Write-Host "`n$phaseName" -ForegroundColor Yellow
                 Write-Host ("-" * $phaseName.Length) -ForegroundColor Yellow
             }
@@ -184,17 +197,18 @@ class ExecutionContext {
         # Timer checkpoint
         if ($this.Timer -and ($this.Timer.GetType().Name -eq "PerformanceTimer")) {
             $this.Timer.AddCheckpoint("$phaseName started")
-        } elseif ($this.Timer -and $this.Timer -is [hashtable] -and $this.Timer.ContainsKey("Checkpoints")) {
+        }
+        elseif ($this.Timer -and $this.Timer -is [hashtable] -and $this.Timer.ContainsKey("Checkpoints")) {
             $this.Timer.Checkpoints["$phaseName started"] = $phaseStartTime
         }
         
         # Logging
         if ($this.LoggingEnabled -and $this.Logger) {
             $this.Logger.LogInfo("PHASE", "$phaseName started", @{
-                "phaseName" = $phaseName
-                "phaseOrder" = $this.PhaseCounter
-                "startTime" = $phaseStartTime.ToString("o")
-            })
+                    "phaseName"  = $phaseName
+                    "phaseOrder" = $this.PhaseCounter
+                    "startTime"  = $phaseStartTime.ToString("o")
+                })
         }
     }
     
@@ -214,13 +228,15 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             $formattedDuration = if (Get-Command -Name "Format-ElapsedTime" -ErrorAction SilentlyContinue) {
                 Format-ElapsedTime $phaseDuration
-            } else {
+            }
+            else {
                 "$($phaseDuration.TotalSeconds.ToString('F2'))s"
             }
             
             if (Get-Command -Name "Write-SuccessMessage" -ErrorAction SilentlyContinue) {
                 Write-SuccessMessage "$phaseName completed ($formattedDuration)"
-            } else {
+            }
+            else {
                 Write-Host "✓ $phaseName completed ($formattedDuration)" -ForegroundColor Green
             }
         }
@@ -228,17 +244,18 @@ class ExecutionContext {
         # Timer checkpoint
         if ($this.Timer -and ($this.Timer.GetType().Name -eq "PerformanceTimer")) {
             $this.Timer.AddCheckpoint("$phaseName completed")
-        } elseif ($this.Timer -and $this.Timer -is [hashtable] -and $this.Timer.ContainsKey("Checkpoints")) {
+        }
+        elseif ($this.Timer -and $this.Timer -is [hashtable] -and $this.Timer.ContainsKey("Checkpoints")) {
             $this.Timer.Checkpoints["$phaseName completed"] = $phaseEndTime
         }
         
         # Logging
         if ($this.LoggingEnabled -and $this.Logger) {
             $this.Logger.LogInfo("PHASE", "$phaseName completed", @{
-                "phaseName" = $phaseName
-                "duration" = $phaseDuration.TotalSeconds
-                "endTime" = $phaseEndTime.ToString("o")
-            })
+                    "phaseName" = $phaseName
+                    "duration"  = $phaseDuration.TotalSeconds
+                    "endTime"   = $phaseEndTime.ToString("o")
+                })
         }
     }
     
@@ -259,7 +276,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-ErrorMessage" -ErrorAction SilentlyContinue) {
                 Write-ErrorMessage "$phaseName failed: $errorMessage"
-            } else {
+            }
+            else {
                 Write-Host "✗ $phaseName failed: $errorMessage" -ForegroundColor Red
             }
         }
@@ -267,11 +285,11 @@ class ExecutionContext {
         # Logging
         if ($this.LoggingEnabled -and $this.Logger) {
             $this.Logger.LogError("PHASE", "$phaseName failed", @{
-                "phaseName" = $phaseName
-                "error" = $errorMessage
-                "duration" = $phaseDuration.TotalSeconds
-                "endTime" = $phaseEndTime.ToString("o")
-            })
+                    "phaseName" = $phaseName
+                    "error"     = $errorMessage
+                    "duration"  = $phaseDuration.TotalSeconds
+                    "endTime"   = $phaseEndTime.ToString("o")
+                })
         }
     }
     
@@ -287,7 +305,8 @@ class ExecutionContext {
         # Timer checkpoint
         if ($this.Timer -and ($this.Timer.GetType().Name -eq "PerformanceTimer")) {
             $this.Timer.AddCheckpoint($checkpointName)
-        } elseif ($this.Timer -and $this.Timer -is [hashtable] -and $this.Timer.ContainsKey("Checkpoints")) {
+        }
+        elseif ($this.Timer -and $this.Timer -is [hashtable] -and $this.Timer.ContainsKey("Checkpoints")) {
             $this.Timer.Checkpoints[$checkpointName] = $checkpointTime
         }
         
@@ -295,7 +314,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-DetailMessage" -ErrorAction SilentlyContinue) {
                 Write-DetailMessage "Checkpoint: $checkpointName"
-            } else {
+            }
+            else {
                 Write-Host "  Checkpoint: $checkpointName" -ForegroundColor Gray
             }
         }
@@ -303,8 +323,8 @@ class ExecutionContext {
         # Logging
         if ($this.LoggingEnabled -and $this.Logger) {
             $this.Logger.LogInfo("CHECKPOINT", $checkpointName, @{
-                "checkpointTime" = $checkpointTime.ToString("o")
-            })
+                    "checkpointTime" = $checkpointTime.ToString("o")
+                })
         }
     }
     
@@ -318,7 +338,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-InfoMessage" -ErrorAction SilentlyContinue) {
                 Write-InfoMessage $message
-            } else {
+            }
+            else {
                 Write-Host "ℹ $message" -ForegroundColor Blue
             }
         }
@@ -338,7 +359,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-SuccessMessage" -ErrorAction SilentlyContinue) {
                 Write-SuccessMessage $message
-            } else {
+            }
+            else {
                 Write-Host "✓ $message" -ForegroundColor Green
             }
         }
@@ -358,7 +380,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-WarningMessage" -ErrorAction SilentlyContinue) {
                 Write-WarningMessage $message
-            } else {
+            }
+            else {
                 Write-Host "⚠ $message" -ForegroundColor Yellow
             }
         }
@@ -378,7 +401,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-ErrorMessage" -ErrorAction SilentlyContinue) {
                 Write-ErrorMessage $message
-            } else {
+            }
+            else {
                 Write-Host "✗ $message" -ForegroundColor Red
             }
         }
@@ -393,7 +417,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-KeyValuePair" -ErrorAction SilentlyContinue) {
                 Write-KeyValuePair $key $value
-            } else {
+            }
+            else {
                 Write-Host "  $key`: $value" -ForegroundColor Gray
             }
         }
@@ -409,16 +434,16 @@ class ExecutionContext {
         $runningPhases = $this.Phases.Keys | Where-Object { $this.Phases[$_]["status"] -eq "running" }
         
         return @{
-            "operationName" = $this.OperationName
-            "startTime" = $this.StartTime
-            "endTime" = $this.EndTime
-            "totalElapsed" = $totalElapsed
+            "operationName"   = $this.OperationName
+            "startTime"       = $this.StartTime
+            "endTime"         = $this.EndTime
+            "totalElapsed"    = $totalElapsed
             "completedPhases" = @($completedPhases)
-            "failedPhases" = @($failedPhases)
-            "runningPhases" = @($runningPhases)
-            "totalPhases" = $this.Phases.Count
-            "metadata" = $this.Metadata
-            "status" = if ($failedPhases.Count -gt 0) { "failed" } elseif ($runningPhases.Count -gt 0) { "running" } else { "completed" }
+            "failedPhases"    = @($failedPhases)
+            "runningPhases"   = @($runningPhases)
+            "totalPhases"     = $this.Phases.Count
+            "metadata"        = $this.Metadata
+            "status"          = if ($failedPhases.Count -gt 0) { "failed" } elseif ($runningPhases.Count -gt 0) { "running" } else { "completed" }
         }
     }
     
@@ -434,19 +459,22 @@ class ExecutionContext {
             
             if (Get-Command -Name "Write-Section" -ErrorAction SilentlyContinue) {
                 Write-Section "Execution Complete"
-            } else {
+            }
+            else {
                 Write-Host "=== Execution Complete ===" -ForegroundColor Cyan
             }
             
             $formattedElapsed = if (Get-Command -Name "Format-ElapsedTime" -ErrorAction SilentlyContinue) {
                 Format-ElapsedTime $totalElapsed
-            } else {
+            }
+            else {
                 "$($totalElapsed.TotalSeconds.ToString('F2'))s"
             }
             
             if (Get-Command -Name "Write-SuccessMessage" -ErrorAction SilentlyContinue) {
                 Write-SuccessMessage "$($this.OperationName) completed"
-            } else {
+            }
+            else {
                 Write-Host "✓ $($this.OperationName) completed" -ForegroundColor Green
             }
             
@@ -461,7 +489,8 @@ class ExecutionContext {
             if ($this.Timer -and (Get-Command -Name "GetSummary" -ErrorAction SilentlyContinue)) {
                 if (Get-Command -Name "Write-DetailMessage" -ErrorAction SilentlyContinue) {
                     Write-DetailMessage $this.Timer.GetSummary()
-                } else {
+                }
+                else {
                     Write-Host $this.Timer.GetSummary() -ForegroundColor Gray
                 }
             }
@@ -470,12 +499,12 @@ class ExecutionContext {
         # Final logging
         if ($this.LoggingEnabled -and $this.Logger) {
             $this.Logger.LogInfo("COMPLETION", "Operation completed", @{
-                "totalTime" = $totalElapsed.TotalSeconds
-                "completedPhases" = $summary.completedPhases.Count
-                "failedPhases" = $summary.failedPhases.Count
-                "finalStatus" = $summary.status
-                "endTime" = $this.EndTime.ToString("o")
-            })
+                    "totalTime"       = $totalElapsed.TotalSeconds
+                    "completedPhases" = $summary.completedPhases.Count
+                    "failedPhases"    = $summary.failedPhases.Count
+                    "finalStatus"     = $summary.status
+                    "endTime"         = $this.EndTime.ToString("o")
+                })
             
             $this.Logger.SaveLog()
             
@@ -487,7 +516,8 @@ class ExecutionContext {
         if ($this.ConsoleOutputEnabled) {
             if (Get-Command -Name "Write-Separator" -ErrorAction SilentlyContinue) {
                 Write-Separator
-            } else {
+            }
+            else {
                 Write-Host ("-" * 50) -ForegroundColor Gray
             }
         }
@@ -504,7 +534,7 @@ class ExecutionContext {
 # Convenience functions for easy usage
 function New-ExecutionContext {
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$OperationName,
         [string]$LogContext = "",
         [switch]$DisableConsole
@@ -512,7 +542,8 @@ function New-ExecutionContext {
     
     if ($LogContext) {
         return [ExecutionContext]::new($OperationName, $LogContext, (-not $DisableConsole.IsPresent))
-    } else {
+    }
+    else {
         $context = [ExecutionContext]::new($OperationName)
         $context.ConsoleOutputEnabled = (-not $DisableConsole.IsPresent)
         return $context
@@ -521,9 +552,9 @@ function New-ExecutionContext {
 
 function Invoke-WithExecutionContext {
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$OperationName,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [ScriptBlock]$ScriptBlock,
         [string]$LogContext = "",
         [switch]$DisableConsole
@@ -535,7 +566,8 @@ function Invoke-WithExecutionContext {
         $result = & $ScriptBlock $context
         $context.Finalize()
         return $result
-    } catch {
+    }
+    catch {
         $context.FinalizeWithError($_.Exception.Message)
         throw
     }

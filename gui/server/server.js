@@ -80,7 +80,7 @@ const shutdown = async () => {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-app.use(cors());
+app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json());
 
 // Serve React dist if available, else fallback to old vanilla client
@@ -92,8 +92,17 @@ if (fs.existsSync(reactDistPath)) {
 }
 
 // --- Security Helpers ---
-// Determine allowed roots for browsing/ingesting (default to user's home dir for safety)
-const ALLOWED_BROWSE_ROOTS = (process.env.ALLOWED_BROWSE_ROOTS || os.homedir())
+// Determine allowed roots for browsing/ingesting
+// Default to a RAG_Documents folder in the user's home directory to restrict broad access
+const defaultBrowseRoot = path.join(os.homedir(), "RAG_Documents");
+// Ensure default directory exists
+if (!fs.existsSync(defaultBrowseRoot)) {
+  fs.mkdirSync(defaultBrowseRoot, { recursive: true });
+}
+
+const ALLOWED_BROWSE_ROOTS = (
+  process.env.ALLOWED_BROWSE_ROOTS || defaultBrowseRoot
+)
   .split(";")
   .map((r) => path.normalize(r).toLowerCase());
 
@@ -625,8 +634,8 @@ app.post("/api/ingest", (req, res) => {
 
 // Only start server if run directly (not imported)
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  app.listen(PORT, () => {
-    console.log(`🚀 Bridge Server running at http://localhost:${PORT}`);
+  app.listen(PORT, "127.0.0.1", () => {
+    console.log(`🚀 Bridge Server running at http://127.0.0.1:${PORT}`);
     console.log(`📂 PowerShell Scripts: ${PS_SCRIPTS_DIR}`);
   });
 }
