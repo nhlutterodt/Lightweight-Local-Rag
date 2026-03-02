@@ -18,7 +18,8 @@ export async function embed(text, model, baseUrl) {
     return new Float32Array(data.embedding);
   };
 
-  embedPromise = embedPromise.then(execute).catch(() => execute());
+  const next = () => execute();
+  embedPromise = embedPromise.catch(() => {}).then(next);
   return embedPromise;
 }
 

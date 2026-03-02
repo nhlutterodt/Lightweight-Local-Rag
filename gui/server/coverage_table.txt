@@ -1,0 +1,240 @@
+(node:64208) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44212) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/xmlLogger.test.js
+PASS tests/healthCheck.test.js
+(node:45264) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/vectorStore.test.js
+(node:37048) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/configLoader.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+    console.warn
+      [ConfigLoader] Config file not found at C:\Users\Owner\AppData\Local\Temp\rag-config-test-ifgxM1\config\project-config.psd1 ΓÇö using defaults.
+
+      382 |       }
+      383 |     } else {
+    > 384 |       console.warn(
+          |               ^
+      385 |         `[ConfigLoader] Config file not found at ${configPath} ΓÇö using defaults.`,
+      386 |       );
+      387 |     }
+
+      at warn (lib/configLoader.js:384:15)
+      at Object.<anonymous> (tests/configLoader.test.js:173:14)
+
+    console.warn
+      [ConfigLoader] Failed to parse project-config.psd1 ΓÇö using defaults.
+
+      377 |         );
+      378 |       } else {
+    > 379 |         console.warn(
+          |                 ^
+      380 |           "[ConfigLoader] Failed to parse project-config.psd1 ΓÇö using defaults.",
+      381 |         );
+      382 |       }
+
+      at warn (lib/configLoader.js:379:17)
+      at Object.<anonymous> (tests/configLoader.test.js:203:14)
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+(node:25244) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:45344) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:64180) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:63564) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/security.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.warn (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at log (server.js:55:13)
+
+PASS tests/models.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.log [as loadState] (IngestionQueue.js:301:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.warn (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at log (server.js:55:13)
+
+(node:65132) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/sse.contract.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.log [as loadState] (IngestionQueue.js:301:17)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=nomic-embed-text
+
+      at log (server.js:55:13)
+
+    console.log
+      [RAG] Query: "What is this project about?" | Collection: TestIngest
+
+      at log (server.js:435:13)
+
+    console.log
+      [RAG Timing] embed=0.5ms  search=0.1ms  total=1.9ms
+
+      at log (server.js:540:13)
+
+PASS tests/browse.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.log [as loadState] (IngestionQueue.js:301:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.warn (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at log (server.js:55:13)
+
+PASS tests/api.routes.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at log (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.log [as loadState] (IngestionQueue.js:301:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.warn (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at log (server.js:55:13)
+
+(node:19244) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+--------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------
+File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                              
+--------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------
+All files           |   45.75 |    44.52 |   42.71 |    46.7 |                                                                                                
+ server             |    46.9 |    40.19 |    55.1 |   48.07 |                                                                                                
+  IngestionQueue.js |   16.23 |     6.45 |   33.33 |   17.73 | 41,50-263,271-285,297-298,306-307                                                              
+  server.js         |   67.09 |    54.92 |    64.7 |   67.26 | 59-62,75-77,91,180-196,223-227,241,250,265-328,333-343,440,479-482,556-559,577-595,603,610-612 
+ server/lib         |   44.94 |    47.23 |   31.48 |   45.73 |                                                                                                
+  configLoader.js   |   89.06 |       85 |     100 |    90.9 | 150-154,192-194,224-225,251,286,325-326,345,389                                                
+  documentParser.js |       0 |        0 |       0 |       0 | 14-206                                                                                         
+  healthCheck.js    |   91.66 |    84.21 |     100 |    90.9 | 54,74                                                                                          
+  ollamaClient.js   |    2.94 |        0 |       0 |    3.12 | 5-71                                                                                           
+  queryLogger.js    |   33.33 |        0 |      40 |      35 | 18-44                                                                                          
+  smartChunker.js   |       0 |        0 |       0 |       0 | 5-318                                                                                          
+  vectorStore.js    |   86.11 |    60.71 |      75 |   86.11 | 66,77,81,110-111                                                                               
+  xmlLogger.js      |      85 |    66.66 |     100 |      85 | 29,55-56                                                                                       
+--------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------
+
+Test Suites: 1 skipped, 9 passed, 9 of 10 total
+Tests:       4 skipped, 81 passed, 85 total
+Snapshots:   0 total
+Time:        2.01 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
