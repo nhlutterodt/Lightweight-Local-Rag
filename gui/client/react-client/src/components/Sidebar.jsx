@@ -1,6 +1,7 @@
 import React from 'react';
+import AnalyticsPanel from './AnalyticsPanel';
 
-function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics }) {
+function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, queue, isWide }) {
   return (
     <aside className="sidebar glass">
       <header>
@@ -57,31 +58,8 @@ function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics }) 
         </div>
         <div className="nav-divider"></div>
 
-        <div className="nav-item">
-          <label>Vector Index Monitor</label>
-          <div id="indexMonitor" className="index-monitor-box">
-            {metrics.length === 0 ? (
-              <div className="monitor-empty">No indices found</div>
-            ) : (
-               metrics.map(m => (
-                 <div key={m.name} className="monitor-item">
-                    <div className="monitor-header">
-                      <span className="monitor-name" title={m.name}>{m.name}</span>
-                      <span className={`monitor-health ${m.health === "CORRUPT" ? "corrupt" : ""}`}>{m.health}</span>
-                    </div>
-                 </div>
-               ))
-            )}
-          </div>
-        </div>
-        <div className="nav-divider"></div>
+        {!isWide && <AnalyticsPanel metrics={metrics} queue={queue} />}
 
-        <div className="nav-item">
-          <label>Ingestion Queue</label>
-          <div id="queueManager" className="queue-manager-box">
-            <div className="queue-empty">Queue is empty</div>
-          </div>
-        </div>
       </nav>
       
       <footer>

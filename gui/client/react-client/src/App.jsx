@@ -3,10 +3,15 @@ import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import InputArea from './components/InputArea';
 import { useRagApi } from './hooks/useRagApi';
+import { useWindowDimensions } from './hooks/useWindowDimensions';
+import AnalyticsPanel from './components/AnalyticsPanel';
 import './index.css';
 
 function App() {
   const { isConnected, models, metrics, queue, streamChat, enqueueJob } = useRagApi();
+  const { width } = useWindowDimensions();
+  const isWide = width > 1200;
+  
   const [activeModel, setActiveModel] = useState("llama3");
   const [chatHistory, setChatHistory] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -51,11 +56,25 @@ function App() {
         setActiveModel={setActiveModel}
         isConnected={isConnected}
         metrics={metrics}
+        queue={queue}
+        isWide={isWide}
       />
       <main className="chat-container">
         <ChatWindow history={chatHistory} />
         <InputArea onSend={handleSendQuery} disabled={isGenerating || !isConnected} />
       </main>
+
+      {isWide && (
+        <aside className="sidebar glass" style={{ borderLeft: '1px solid var(--glass-border)', borderRight: 'none', background: 'rgba(59, 130, 246, 0.02)' }}>
+          <header style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
+            <h2 style={{ fontSize: '1.2rem', color: 'var(--text-main)', margin: 0 }}>System Analytics</h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', marginTop: '4px' }}>High-Density View</p>
+          </header>
+          <nav>
+            <AnalyticsPanel metrics={metrics} queue={queue} />
+          </nav>
+        </aside>
+      )}
     </div>
   );
 }

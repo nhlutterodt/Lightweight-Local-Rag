@@ -35,7 +35,7 @@
   padding: 1.5rem;
   border-radius: 20px;
   width: 100%;
-  max-width: 900px;
+  /* Removed max-width for fluid 3-column layout */
   margin: 0 auto;
 }
 
