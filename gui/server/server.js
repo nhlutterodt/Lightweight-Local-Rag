@@ -9,6 +9,8 @@ import IngestionQueue from "./IngestionQueue.js";
 import { VectorStore } from "./lib/vectorStore.js";
 import { embed, chatStream } from "./lib/ollamaClient.js";
 import { QueryLogger } from "./lib/queryLogger.js";
+import * as lancedb from "@lancedb/lancedb";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,25 +64,36 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
 const psRunner = new PowerShellRunner(PS_SCRIPTS_DIR);
 const ingestQueue = new IngestionQueue(psRunner);
 
-// Native RAG Engine State
-let store = new VectorStore();
-const dataDir = path.join(PS_SCRIPTS_DIR, "Data");
-const binPath = path.join(dataDir, "ProjectDocs.vectors.bin");
-const metaPath = path.join(dataDir, "ProjectDocs.metadata.json");
+// ==========================================
+// 1. LanceDB Initialization (Async)
+// ==========================================
+let store;
+let collectionName = "TestIngest"; // Default collection. Could be dynamic later.
 
-(async () => {
+async function initializeVectorStore() {
+  const dataDir = config?.Paths?.DataDir
+    ? config.Paths.DataDir
+    : path.join(__dirname, "..", "..", "PowerShell Scripts", "Data");
+
+  const dbDir = path.join(dataDir, "vector_store.lance");
+  store = new VectorStore();
   try {
-    await store.load(binPath, metaPath);
+    // We pass the required embedding model (from project-config) as validation
+    const targetModel = config?.RAG?.EmbeddingModel || "nomic-embed-text";
+    await store.load(dbDir, collectionName, targetModel);
     console.log(
-      `[VectorStore] Loaded: ${store.size} vectors, model=${store.model || "legacy"}`,
+      `[VectorStore] Connected to LanceDB at ${dbDir}, Collection: ${collectionName}. Model=${store.model || "legacy"}`,
     );
   } catch (err) {
-    store = null;
-    console.warn(
-      `[VectorStore Warning] Store could not be loaded at startup: ${err.message}. Waiting for ingest...`,
+    console.error(
+      "[VectorStore] Warning: Initialization failed or table missing.",
     );
+    console.error(err.message);
   }
-})();
+}
+
+// Call init. Server starts anyway, but RAG requires it to succeed eventually.
+initializeVectorStore();
 
 // Query Logger Setup
 const logger = new QueryLogger(
@@ -222,32 +235,72 @@ let lastCacheUpdate = 0;
 const CACHE_TTL = 5000; // 5s
 
 // Vector Index Metrics
-app.get("/api/index/metrics", (req, res) => {
+app.get("/api/index/metrics", async (req, res) => {
   const now = Date.now();
   if (metricsCache && now - lastCacheUpdate < CACHE_TTL) {
     return res.json(metricsCache);
   }
 
-  const ps = psRunner.spawn("Get-VectorMetrics.ps1", []);
-  let result = "";
-  ps.stdout.on("data", (data) => (result += data.toString()));
+  try {
+    const dataDir = config?.Paths?.DataDir
+      ? config.Paths.DataDir
+      : path.join(__dirname, "..", "..", "PowerShell Scripts", "Data");
+    const dbDir = path.join(dataDir, "vector_store.lance");
 
-  ps.on("close", (code) => {
-    try {
-      if (code === 0 && result.trim()) {
-        const metrics = JSON.parse(result);
-        metricsCache = metrics;
-        lastCacheUpdate = Date.now();
-        res.json(metrics);
-      } else {
-        res
-          .status(500)
-          .json({ error: "Failed to fetch metrics", details: result });
-      }
-    } catch (e) {
-      res.status(500).json({ error: "Parsing failed", details: result });
+    // If DB doesn't exist, return empty
+    if (!fs.existsSync(dbDir)) {
+      metricsCache = [];
+      lastCacheUpdate = now;
+      return res.json([]);
     }
-  });
+
+    const db = await lancedb.connect(dbDir);
+    const tableNames = await db.tableNames();
+    const metrics = [];
+
+    // Calculate approximate size of lance directory
+    let totalDbSize = 0;
+    try {
+      totalDbSize = fs
+        .readdirSync(dbDir)
+        .reduce(
+          (acc, file) => acc + fs.statSync(path.join(dbDir, file)).size,
+          0,
+        );
+    } catch (e) {}
+
+    for (const name of tableNames) {
+      try {
+        const table = await db.openTable(name);
+        const count = await table.countRows();
+
+        metrics.push({
+          name: name,
+          file: `vector_store.lance/${name}`,
+          lastModified: new Date().toISOString(),
+          totalSizeBytes: Math.floor(totalDbSize / tableNames.length), // rough physical estimate
+          vectorCount: count,
+          dimension: store?.dims || 0,
+          health: "OK",
+          ChunkCount: count,
+          EmbeddingModel: config?.RAG?.EmbeddingModel || "unknown",
+        });
+      } catch (err) {
+        metrics.push({
+          name: name,
+          health: "CORRUPT",
+          error: err.message,
+        });
+      }
+    }
+
+    metricsCache = metrics;
+    lastCacheUpdate = now;
+    res.json(metrics);
+  } catch (e) {
+    console.error("[Metrics Error]", e);
+    res.status(500).json({ status: "error", message: e.message });
+  }
 });
 
 app.post("/api/log", (req, res) => {
@@ -378,21 +431,23 @@ app.post("/api/chat", async (req, res) => {
 
     // 1. JS Native Retrieval
     const tEmbedStart = process.hrtime.bigint();
-    const queryVec = await embed(
+    const queryVector = await embed(
       lastUserMessage,
       config?.RAG?.EmbeddingModel || "nomic-embed-text",
       OLLAMA_URL,
     );
     const tEmbedEnd = process.hrtime.bigint();
 
-    const tSearchStart = process.hrtime.bigint();
-    const results = store.findNearest(
-      queryVec,
-      config?.RAG?.TopK || 5,
-      config?.RAG?.MinScore || 0.5,
-      config?.RAG?.EmbeddingModel,
+    // --- 2. Hot-Path Retrieval (LanceDB) ---
+    const tSearchStart = performance.now();
+
+    // store.findNearest is now an async LanceDB projection
+    const results = await store.findNearest(
+      queryVector,
+      config.RAG.TopK,
+      config.RAG.MinScore,
     );
-    const tSearchEnd = process.hrtime.bigint();
+    const searchMs = performance.now() - tSearchStart;
 
     // 2. Build Context
     const contextText =
@@ -441,7 +496,6 @@ app.post("/api/chat", async (req, res) => {
 
     // 4. Output Headers, Server-Timing, & System Prompt
     const embedMs = Number(tEmbedEnd - tEmbedStart) / 1e6;
-    const searchMs = Number(tSearchEnd - tSearchStart) / 1e6;
     const totalMs = Number(process.hrtime.bigint() - t0) / 1e6;
     res.setHeader(
       "Server-Timing",
@@ -470,14 +524,25 @@ app.post("/api/chat", async (req, res) => {
     res.end();
   } catch (err) {
     if (err.message.includes("mismatch")) {
-      return res
-        .status(500)
-        .json({ error: "Configuration Error", details: err.message });
+      // If we haven't sent headers yet, we can return 500
+      if (!res.headersSent) {
+        return res
+          .status(500)
+          .json({ error: "Configuration Error", details: err.message });
+      }
     }
     console.error("[Native Chat Error]:", err.message);
-    res
-      .status(500)
-      .json({ error: "Failed to generate response", details: err.message });
+
+    if (!res.headersSent) {
+      res
+        .status(500)
+        .json({ error: "Failed to generate response", details: err.message });
+    } else {
+      res.write(
+        `data: ${JSON.stringify({ type: "error", message: err.message })}\n\n`,
+      );
+      res.end();
+    }
   }
 });
 
@@ -561,13 +626,9 @@ app.post("/api/ingest", (req, res) => {
       res.write(`data: ${JSON.stringify({ type: "complete", report })}\n\n`);
 
       // Hot Reload VectorStore after ingest completes
-      store = new VectorStore();
-      store
-        .load(binPath, metaPath)
+      initializeVectorStore()
         .then(() =>
-          console.log(
-            `[VectorStore] Hot reloaded after ingest: ${store.size} vectors`,
-          ),
+          console.log(`[VectorStore] Hot reloaded LanceDB after ingest.`),
         )
         .catch((err) =>
           console.error(

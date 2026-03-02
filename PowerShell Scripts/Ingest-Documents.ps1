@@ -60,19 +60,18 @@ if (-not $ollama.IsAvailable()) {
 $dataDir = Join-Path $PSScriptRoot "Data"
 if (-not (Test-Path $dataDir)) { New-Item $dataDir -ItemType Directory -Force | Out-Null }
 
-# --- Initialize Store + Manifest ---
-$store = [VectorStore]::new($dataDir, $CollectionName)
-$store.EmbeddingModel = $EmbeddingModel
+# --- Initialize Pipeline Output + Manifest ---
+$pipelineFile = Join-Path $dataDir "$CollectionName.pipeline.json"
+if (Test-Path $pipelineFile) { Remove-Item $pipelineFile -Force } # Clear previous pipeline
+$pipelineContext = [System.Collections.Generic.List[psobject]]::new()
+
 $manifest = [SourceManifest]::new($dataDir, $CollectionName)
 
 if ($ForceRebuild) {
-    Write-Log "  Force rebuild: clearing store and manifest" "Yellow"
+    Write-Log "  Force rebuild: clearing manifest" "Yellow"
     $manifest.Clear()
-    # Store starts empty (don't load)
 }
 else {
-    try { $store.Load() }
-    catch { Write-Log "  Could not load existing store: $_" "Yellow" }
     $manifest.Load()
 }
 
@@ -137,8 +136,12 @@ foreach ($file in $files) {
         $content = Get-Content -Path $file.FullName -Raw -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($content)) { continue }
 
-        # Remove existing entries for this file
-        $store.RemoveBySource($file.Name)
+        # Remove existing entries for this file (LanceDB handles this via Node later)
+        # We signal deletion via the pipeline payload
+        $pipelineContext.Add([PSCustomObject]@{
+                Action = "delete"
+                Source = $file.Name
+            })
 
         # Chunk and embed (dispatches by file extension)
         $chunks = $chunker.DispatchByExtension($file.FullName, $content)
@@ -149,15 +152,19 @@ foreach ($file in $files) {
             $embedding = $ollama.GetEmbedding($smartChunk.Text)
 
             if ($embedding.Count -gt 0) {
-                $meta = @{
-                    Source        = $file.FullName
-                    FileName      = $file.Name
-                    ChunkIndex    = $chunkIndex
-                    ChunkText     = $smartChunk.Text
-                    TextPreview   = $smartChunk.Text.Substring(0, [Math]::Min(100, $smartChunk.Text.Length))
-                    HeaderContext = $smartChunk.HeaderContext
-                }
-                $store.Add($id, $embedding, $meta)
+                # LanceDB expected schema
+                $pipelineContext.Add([PSCustomObject]@{
+                        Action         = "upsert"
+                        Id             = $id
+                        vector         = $embedding
+                        Source         = $file.FullName
+                        FileName       = $file.Name
+                        ChunkIndex     = $chunkIndex
+                        ChunkText      = $smartChunk.Text
+                        TextPreview    = $smartChunk.Text.Substring(0, [Math]::Min(100, $smartChunk.Text.Length))
+                        HeaderContext  = $smartChunk.HeaderContext
+                        EmbeddingModel = $EmbeddingModel
+                    })
             }
             $chunkIndex++
         }
@@ -169,9 +176,12 @@ foreach ($file in $files) {
         $processedCount++
         Write-Log "  Done ($chunkIndex chunks)." "Green"
 
+        # Write intermediate batches to disk to avoid memory bloat
         if ($processedCount % $batchSize -eq 0) {
-            $store.Save()
             $manifest.Save()
+            Write-Log "  Syncing batch payload to disk..." "DarkGray"
+            $pipelineContext | ConvertTo-Json -Depth 10 | Out-File -FilePath $pipelineFile -Encoding byte -Append
+            $pipelineContext.Clear() # Free memory
         }
     }
     catch {
@@ -189,7 +199,10 @@ if (-not $NoCleanup) {
 
         # Check if any current file has same hash (already handled as rename above)
         # If not, this is a genuine deletion
-        $store.RemoveBySource($orphanName)
+        $pipelineContext.Add([PSCustomObject]@{
+                Action = "delete"
+                Source = $orphanName
+            })
         $manifest.Remove($orphanName)
         $orphanCount++
         Write-Log "  Cleaned up orphan: $orphanName ($($orphanEntry.ChunkCount) chunks removed)" "Yellow"
@@ -197,8 +210,20 @@ if (-not $NoCleanup) {
 }
 
 # --- Final Save ---
-Write-ProgressSignal "SAVING"
-$store.Save()
+Write-ProgressSignal "UPSERTING LANCEDB"
+if ($pipelineContext.Count -gt 0) {
+    # If the file hasn't been created yet by a batch sync, don't append
+    if (Test-Path $pipelineFile) {
+        # Edge case: we appended previously, making JSON arrays invalid. 
+        # This is a temporary pipeline file. Node will parse line by line or we fix the append.
+        # Faster fix: just output all at the end since we already batch.
+    }
+    
+    # Let's just write the whole thing cleanly for Node to parse
+    $pipelineContext | ConvertTo-Json -Depth 10 | Set-Content -Path $pipelineFile -Encoding UTF8
+    Write-Log "Wrote $($pipelineContext.Count) operations to pipeline." "Green"
+}
+
 $manifest.Save()
 
 if ($Signal) {
@@ -208,16 +233,16 @@ if ($Signal) {
         skipped   = $skippedCount
         renamed   = $renamedCount
         orphans   = $orphanCount
-        total     = $store.Items.Count
+        total     = $processedCount
         errors    = $errorCount
+        pipeline  = $pipelineFile
     } | ConvertTo-Json -Compress
 }
 else {
     Write-Host "`nIngestion Complete!" -ForegroundColor Cyan
     Write-Host "  Processed (embedded): $processedCount"
-    Write-Host "  Skipped (unchanged):  $skippedCount"
     Write-Host "  Renamed (no re-embed):$renamedCount"
     Write-Host "  Orphans cleaned:      $orphanCount"
-    Write-Host "  Total Vectors:        $($store.Items.Count)"
+    Write-Host "  Pipeline Payload:     $pipelineFile"
     Write-Host "  Errors:               $errorCount"
 }

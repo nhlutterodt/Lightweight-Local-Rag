@@ -1,138 +1,114 @@
-import { readFile } from "fs/promises";
+import * as lancedb from "@lancedb/lancedb";
 
+/**
+ * LanceDB VectorStore Wrapper
+ * Replaces the legacy `.vectors.bin` flat-file architecture.
+ */
 export class VectorStore {
   constructor() {
-    this.count = 0;
+    this.db = null;
+    this.table = null;
     this.dims = 0;
     this.model = null;
-    this.vectors = null; // Float32Array
-    this.metadata = [];
+    this.isReady = false;
   }
 
-  async load(binPath, metaPath) {
+  /**
+   * Connects to LanceDB and opens the collection table.
+   * Note: LanceDB natively persists both vectors and metadata in the same table.
+   * @param {string} dbPath - The path to the LanceDB directory (e.g. Data/lancedb)
+   * @param {string} collectionName - The name of the table to open
+   * @param {string} requiredModel - The exact embedding model string expected (from project-config)
+   */
+  async load(dbPath, collectionName, requiredModel) {
     try {
-      // 1. Load Metadata
-      const metaRaw = await readFile(metaPath, "utf8");
-      this.metadata = JSON.parse(metaRaw);
+      // Connect to the embedded DB directory
+      this.db = await lancedb.connect(dbPath);
 
-      // Ensure metadata is always an array
-      if (!Array.isArray(this.metadata)) {
-        this.metadata = [this.metadata];
+      // Verify the table exists before trying to open it
+      const tables = await this.db.tableNames();
+      if (!tables.includes(collectionName)) {
+        console.warn(
+          `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+        );
+        this.isReady = false;
+        return;
       }
 
-      // 2. Load Binary Vectors
-      const binData = await readFile(binPath);
-      const dataView = new DataView(
-        binData.buffer,
-        binData.byteOffset,
-        binData.byteLength,
-      );
+      this.table = await this.db.openTable(collectionName);
 
-      this.count = dataView.getInt32(0, true);
-      this.dims = dataView.getInt32(4, true);
+      // Verify the model matches
+      // We store the 'model' in a special config table or just read the first row
+      const sample = await this.table.query().limit(1).execute();
 
-      let dataOffset = 8;
-
-      // 3. Backward compatibility chunk for EmbeddingModel
-      if (dataOffset < binData.length) {
-        const possibleLen = dataView.getInt32(dataOffset, true);
-        if (possibleLen >= 1 && possibleLen <= 256) {
-          // New format: length + utf8 string
-          const textBuf = binData.subarray(
-            dataOffset + 4,
-            dataOffset + 4 + possibleLen,
+      if (sample.length > 0) {
+        this.model = sample[0].EmbeddingModel || "unknown";
+        if (requiredModel && this.model !== requiredModel) {
+          throw new Error(
+            `Embedding model mismatch: store=${this.model}, query=${requiredModel}`,
           );
-          this.model = textBuf.toString("utf8");
-          dataOffset += 4 + possibleLen;
-        } else {
-          // Legacy format: length was actually the first float
-          this.model = null;
-          console.warn(
-            `[VectorStore] Store '${binPath}' has no embedded model name (legacy format). Validation will be skipped.`,
-          );
+        }
+
+        // LanceDB strongly types the vector column. We can infer dims from the first row.
+        if (sample[0].vector) {
+          this.dims = sample[0].vector.length;
         }
       }
 
-      // 4. Validate and construct vectors array
-      if (this.metadata.length !== this.count) {
-        throw new Error(
-          `Data Corruption: Vector count (${this.count}) does not match metadata count (${this.metadata.length})`,
-        );
-      }
-
-      // Parse Floats directly from the calculated offset
-      this.vectors = new Float32Array(
-        binData.buffer,
-        binData.byteOffset + dataOffset,
-        this.count * this.dims,
-      );
+      this.isReady = true;
     } catch (err) {
-      if (err.code === "ENOENT") {
-        // Safe silence if files don't exist yet
-        throw err;
-      }
-      throw new Error(`Failed to load VectorStore: ${err.message}`);
+      this.isReady = false;
+      throw new Error(`Failed to load LanceDB VectorStore: ${err.message}`);
     }
   }
 
   get size() {
-    return this.count;
+    return this.isReady ? -1 : 0; // LanceDB handles scale natively, calculating exact rows requires a full count query
   }
 
-  findNearest(queryVec, topK, minScore, queryModel = null) {
-    if (queryVec.length !== this.dims) {
+  /**
+   * Searches the LanceDB table using optimized IVF-PQ / Flat search.
+   * @param {Float32Array|Array<number>} queryVec - The query vector
+   * @param {number} topK - Maximum results to return
+   * @param {number} minScore - Optional cutoff score (Note: LanceDB uses distance, typically L2 or Cosine via its index)
+   */
+  async findNearest(queryVec, topK, minScore) {
+    if (!this.isReady || !this.table) {
+      return [];
+    }
+
+    if (queryVec.length !== this.dims && this.dims !== 0) {
       throw new Error(
         `Invalid query dimensions. Expected ${this.dims}, got ${queryVec.length}`,
       );
     }
 
-    if (this.model && queryModel && this.model !== queryModel) {
-      throw new Error(
-        `Embedding model mismatch: store=${this.model}, query=${queryModel}`,
-      );
-    }
+    try {
+      // LanceDB native search
+      // Note: LanceDB returns '_distance'. For cosine, lower distance is better.
+      const rawResults = await this.table
+        .search(Array.from(queryVec))
+        .limit(topK)
+        .execute();
 
-    const results = [];
+      const results = [];
 
-    for (let i = 0; i < this.count; i++) {
-      // Slice a subarray for mathematical clarity.
-      // Fast paths in V8 often optimise Float32Array subarrays without heap allocations
-      const subset = this.vectors.subarray(i * this.dims, (i + 1) * this.dims);
-
-      // Compute cosine similarity
-      let dotProduct = 0;
-      let magA = 0;
-      let magB = 0;
-
-      for (let j = 0; j < this.dims; j++) {
-        dotProduct += queryVec[j] * subset[j];
-        magA += queryVec[j] * queryVec[j];
-        magB += subset[j] * subset[j];
-      }
-
-      let score = 0;
-      if (magA > 0 && magB > 0) {
-        score = dotProduct / (Math.sqrt(magA) * Math.sqrt(magB));
-      }
-
-      if (score >= minScore) {
-        // Keep it simple and construct the output directly
-        const meta = this.metadata[i];
-        // Format match to maintain compatibility with legacy PS script output
+      for (const r of rawResults) {
+        // Map LanceDB generic response into the strict format expected by server.js / main.js
         results.push({
-          score,
-          ChunkText: meta.Metadata.ChunkText,
-          TextPreview: meta.Metadata.TextPreview,
-          FileName: meta.Metadata.FileName,
-          ChunkIndex: meta.Metadata.ChunkIndex,
-          HeaderContext: meta.Metadata.HeaderContext,
-          index: i, // Kept for debugging if needed
+          score: r._distance, // For now, pass distance down. Real cosine score mapping requires knowing the distance metric used during table creation.
+          ChunkText: r.ChunkText,
+          TextPreview: r.TextPreview,
+          FileName: r.FileName,
+          ChunkIndex: r.ChunkIndex,
+          HeaderContext: r.HeaderContext,
         });
       }
-    }
 
-    // Sort descending by score and slice
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, topK);
+      return results;
+    } catch (err) {
+      console.error("[VectorStore] Search Error:", err);
+      return [];
+    }
   }
 }

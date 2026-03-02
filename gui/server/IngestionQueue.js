@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import * as lancedb from "@lancedb/lancedb";
 import PowerShellRunner from "./PowerShellRunner.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -81,12 +82,16 @@ class IngestionQueue {
         "-Signal",
       ]);
 
+      let pipelinePath = null;
+
       PowerShellRunner.parseJsonStream(
         ps,
         (obj) => {
           if (obj.type === "status") {
             job.progress = obj.message;
             this._throttledSave();
+          } else if (obj.status === "complete" && obj.pipeline) {
+            pipelinePath = obj.pipeline;
           }
         },
         (raw) => {
@@ -94,9 +99,57 @@ class IngestionQueue {
         },
       );
 
-      ps.on("close", (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`Process exited with code ${code}`));
+      ps.on("close", async (code) => {
+        if (code === 0) {
+          try {
+            if (pipelinePath && fs.existsSync(pipelinePath)) {
+              job.progress = "Ingesting Into LanceDB...";
+              this.saveState();
+
+              const payloadRaw = fs.readFileSync(pipelinePath, "utf8");
+              const operations = JSON.parse(payloadRaw);
+
+              // 1. Connect to LanceDB
+              const dbDir = path.join(
+                this.persistencePath,
+                "..",
+                "vector_store.lance",
+              );
+              const db = await lancedb.connect(dbDir);
+
+              let table;
+              const tables = await db.tableNames();
+
+              // 2. Perform Operations
+              for (const op of operations) {
+                if (op.Action === "delete") {
+                  if (tables.includes(job.collection)) {
+                    table = await db.openTable(job.collection);
+                    await table.delete(`FileName = '${op.Source}'`);
+                  }
+                } else if (op.Action === "upsert") {
+                  // If the table doesn't exist, Create it using the inferred schema of the first upsert
+                  if (!tables.includes(job.collection) && !table) {
+                    // LanceDB schema inference
+                    table = await db.createTable(job.collection, [op]);
+                    tables.push(job.collection);
+                  } else {
+                    if (!table) table = await db.openTable(job.collection);
+                    await table.add([op]);
+                  }
+                }
+              }
+
+              // Cleanup the temporary pipeline file
+              fs.unlinkSync(pipelinePath);
+            }
+            resolve();
+          } catch (err) {
+            reject(new Error(`LanceDB Ingestion Failed: ${err.message}`));
+          }
+        } else {
+          reject(new Error(`Process exited with code ${code}`));
+        }
       });
 
       ps.on("error", (err) => reject(err));

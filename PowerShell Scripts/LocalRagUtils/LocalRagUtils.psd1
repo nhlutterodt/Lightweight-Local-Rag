@@ -46,8 +46,6 @@
         '../ExecutionContext.ps1',
         '../ScriptLoader.ps1',
         '../OllamaClient.ps1',
-        '../VectorMath.ps1',
-        '../VectorStore.ps1',
         '../SourceManifest.ps1',
         '../TextChunker.ps1',
         '../SmartTextChunker.ps1',
