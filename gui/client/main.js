@@ -35,7 +35,7 @@ const browseFolderBtn = document.getElementById("browseFolderBtn");
 let chatHistory = [];
 let isGenerating = false;
 
-startIngestBtn.addEventListener("click", handleIngest);
+startIngestBtn.addEventListener("click", handleEnqueue);
 enqueueIngestBtn.addEventListener("click", handleEnqueue);
 browseFolderBtn.addEventListener("click", handleBrowse);
 
@@ -63,72 +63,7 @@ async function handleBrowse() {
   }
 }
 
-/**
- * Handle Folder Ingestion
- */
-async function handleIngest() {
-  const path = ingestPathInput.value.trim();
-  const collection = collectionInput.value.trim();
-
-  if (!path) {
-    alert("Please provide an absolute path to a folder.");
-    return;
-  }
-
-  startIngestBtn.disabled = true;
-  ingestStatusBox.classList.remove("hidden");
-  ingestStatusText.innerText = "Initializing Backend...";
-
-  try {
-    const response = await fetch(`${API_URL}/ingest`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, collection }),
-    });
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t.startsWith("data: ")) continue;
-        try {
-          const data = JSON.parse(t.slice(6));
-          if (data.type === "status") {
-            ingestStatusText.innerText = data.message;
-          } else if (data.type === "complete") {
-            const r = data.report;
-            ingestStatusText.innerHTML = `<strong>Vectorization Complete!</strong><br>📄 ${r.processed} Files<br>🔢 ${r.total} Total Vectors`;
-            setTimeout(() => {
-              ingestStatusBox.classList.add("hidden");
-              startIngestBtn.disabled = false;
-              fetchIndexMetrics(); // Refresh monitor after ingest
-            }, 8000);
-          } else if (data.type === "error") {
-            throw new Error(data.message);
-          }
-        } catch (e) {
-          if (t.includes("complete")) continue;
-          console.error("[Ingest Stream Error]", e);
-        }
-      }
-    }
-  } catch (err) {
-    ingestStatusText.innerText = "❌ Error: " + err.message;
-    startIngestBtn.disabled = false;
-    remoteLog(`Ingestion failed: ${err.message}`, "ERROR", "INGEST");
-  }
-}
-
+// Legacy handleIngest removed. Queue automatically processes jobs natively.
 /**
  * Handle Job Enqueue
  */
@@ -150,7 +85,7 @@ async function handleEnqueue() {
 
     if (response.ok) {
       ingestPathInput.value = "";
-      fetchQueueState();
+      // State updates automatically via SSE stream now
       remoteLog(`Job enqueued: ${path}`, "INFO", "QUEUE");
     } else {
       const data = await response.json();
@@ -227,9 +162,8 @@ async function init() {
     fetchIndexMetrics();
     // Periodic Index Check (20s)
     setInterval(fetchIndexMetrics, 20000);
-    // Periodic Queue Check (5s)
-    setInterval(fetchQueueState, 5000);
-    fetchQueueState();
+    // Initialize SSE Real-time Queue Stream
+    initQueueStream();
   } catch (err) {
     statusIndicator.innerText = "Ollama Offline";
     statusIndicator.className = "status-indicator status-offline";
@@ -516,28 +450,34 @@ function renderIndexMonitor(metrics) {
 }
 
 /**
- * Fetch and Render Ingestion Queue
+ * Initialize Real-Time SSE Queue Stream
  */
-async function fetchQueueState() {
-  try {
-    const response = await fetch(`${API_URL}/queue`);
-    if (!response.ok) throw new Error("Queue fetch failed");
-    const data = await response.json();
-    renderQueueManager(data);
-  } catch (e) {
-    console.error("[Queue Monitor Error]", e);
-  }
+function initQueueStream() {
+  const eventSource = new EventSource(`${API_URL}/queue/stream`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const jobs = JSON.parse(event.data);
+      renderQueueManager(jobs);
+    } catch (e) {
+      console.error("[Queue Stream Parse Error]", e);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.warn("[Queue Stream Error] Attempting to reconnect...", err);
+    // EventSource auto-reconnects by default
+  };
 }
 
 async function cancelJob(id) {
   try {
     const res = await fetch(`${API_URL}/queue/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      fetchQueueState();
-    } else {
+    if (!res.ok) {
       const data = await res.json();
       alert(data.error);
     }
+    // Success UI updates automatically via SSE stream
   } catch (e) {
     console.error("[Cancel Job Error]", e);
   }

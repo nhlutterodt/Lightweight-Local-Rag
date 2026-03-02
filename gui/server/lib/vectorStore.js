@@ -84,12 +84,11 @@ export class VectorStore {
     }
 
     try {
-      // LanceDB native search
-      // Note: LanceDB returns '_distance'. For cosine, lower distance is better.
+      // LanceDB native search array collapse
       const rawResults = await this.table
         .search(Array.from(queryVec))
         .limit(topK)
-        .execute();
+        .toArray();
 
       const results = [];
 
@@ -97,8 +96,9 @@ export class VectorStore {
         // Map LanceDB generic response into the strict format expected by server.js / main.js
         results.push({
           score: r._distance, // For now, pass distance down. Real cosine score mapping requires knowing the distance metric used during table creation.
-          ChunkText: r.ChunkText,
-          TextPreview: r.TextPreview,
+          ChunkText: r.Text || r.ChunkText,
+          TextPreview:
+            r.TextPreview || (r.Text ? r.Text.substring(0, 150) + "..." : ""),
           FileName: r.FileName,
           ChunkIndex: r.ChunkIndex,
           HeaderContext: r.HeaderContext,

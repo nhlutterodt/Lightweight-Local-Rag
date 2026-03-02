@@ -1,25 +1,48 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { EventEmitter } from "events";
 import * as lancedb from "@lancedb/lancedb";
-import PowerShellRunner from "./PowerShellRunner.js";
+import * as ollamaClient from "./lib/ollamaClient.js";
+
+import { SmartTextChunker } from "./lib/smartChunker.js";
+import { DocumentParser } from "./lib/documentParser.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-class IngestionQueue {
-  constructor(psRunner, dataDir = path.join(__dirname, "data")) {
-    this.psRunner = psRunner;
-    this.persistencePath = path.join(dataDir, "queue.json");
+class IngestionQueue extends EventEmitter {
+  constructor() {
+    super();
     this.jobs = [];
     this.isWorking = false;
     this._lastSave = 0;
     this.currentJob = null;
+    this.config = null;
+    this.dataDir = null;
+    this.persistencePath = null;
+  }
 
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+  // Allow server.js to pass down the config cleanly
+  setConfig(config) {
+    this.config = config;
+    const defaultDataDir = path.join(
+      __dirname,
+      "..",
+      "..",
+      "PowerShell Scripts",
+      "Data",
+    );
+    this.dataDir = config?.Paths?.DataDir
+      ? config.Paths.DataDir
+      : defaultDataDir;
+
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
     }
+    this.persistencePath = path.join(this.dataDir, "queue.json");
 
+    // Now that we have the path, load state
     this.loadState();
   }
 
@@ -56,7 +79,7 @@ class IngestionQueue {
     console.log(`[Queue] Starting Job ${job.id}: ${job.path}`);
 
     try {
-      await this.executeIngest(job);
+      await this.executeNodeIngest(job);
       job.status = "completed";
       job.progress = "Complete";
     } catch (err) {
@@ -72,88 +95,159 @@ class IngestionQueue {
     }
   }
 
-  executeIngest(job) {
-    return new Promise((resolve, reject) => {
-      const ps = this.psRunner.spawn("Ingest-Documents.ps1", [
-        "-SourcePath",
-        job.path,
-        "-CollectionName",
-        job.collection,
-        "-Signal",
-      ]);
+  async executeNodeIngest(job) {
+    const model = this.config?.RAG?.EmbeddingModel || "nomic-embed-text";
+    const baseUrl = this.config?.RAG?.OllamaUrl || "http://localhost:11434";
+    const chunkSize = this.config?.RAG?.ChunkSize || 1000;
+    const chunkOverlap = this.config?.RAG?.ChunkOverlap || 200;
 
-      let pipelinePath = null;
+    const dbDir = path.join(this.dataDir, "vector_store.lance");
 
-      PowerShellRunner.parseJsonStream(
-        ps,
-        (obj) => {
-          if (obj.type === "status") {
-            job.progress = obj.message;
-            this._throttledSave();
-          } else if (obj.status === "complete" && obj.pipeline) {
-            pipelinePath = obj.pipeline;
+    // 1. Initialize DB and Table configuration
+    const db = await lancedb.connect(dbDir);
+    const tables = await db.tableNames();
+    let table = null;
+
+    // 2. Initialize Parser and Chunker
+    const parser = new DocumentParser(this.dataDir, job.collection);
+    await parser.load();
+    const chunker = new SmartTextChunker(chunkSize, chunkOverlap);
+
+    job.progress = "Scanning directory...";
+    this._throttledSave();
+
+    // 3. Scan Files
+    const files = await DocumentParser.scanDirectory(job.path);
+    if (!files || files.length === 0) {
+      throw new Error(`Source path contains no eligible files: ${job.path}`);
+    }
+
+    const currentFileNames = files.map((f) => path.basename(f));
+
+    job.progress = `Processing 0 / ${files.length} files`;
+    this._throttledSave();
+
+    // 4. Processing Loop
+    let processedCount = 0;
+    for (const filePath of files) {
+      const fileName = path.basename(filePath);
+      job.progress = `Processing ${fileName} (${processedCount + 1}/${files.length})`;
+      this._throttledSave();
+
+      const fileHash = await DocumentParser.getFileHash(filePath);
+
+      // Check Manifest (Skip Unchanged)
+      if (parser.isUnchanged(fileName, fileHash)) {
+        processedCount++;
+        continue;
+      }
+
+      // Check Manifest (Rename Detection)
+      const hashMatch = parser.findByHash(fileHash);
+      if (hashMatch && hashMatch.FileName !== fileName) {
+        if (tables.includes(job.collection)) {
+          if (!table) table = await db.openTable(job.collection);
+          // Update metadata in LanceDB to point to the new filename
+          await table.update({
+            where: `FileName = '${hashMatch.FileName}'`,
+            values: { FileName: fileName },
+          });
+        }
+
+        parser.remove(hashMatch.FileName);
+        parser.addOrUpdate(
+          fileName,
+          filePath,
+          fileHash,
+          hashMatch.ChunkCount,
+          hashMatch.FileSize,
+          model,
+        );
+        processedCount++;
+        continue;
+      }
+
+      // Read Content
+      const content = await fs.promises.readFile(filePath, "utf8");
+      if (!content || !content.trim()) {
+        processedCount++;
+        continue;
+      }
+
+      // Remove existing vectors for this file before re-embedding
+      if (tables.includes(job.collection)) {
+        if (!table) table = await db.openTable(job.collection);
+        await table.delete(`FileName = '${fileName}'`);
+      }
+
+      // Chunk and Embed
+      const chunks = chunker.dispatchByExtension(filePath, content);
+      for (let i = 0; i < chunks.length; i++) {
+        const smartChunk = chunks[i];
+        try {
+          // Native Fetch to Ollama
+          const vector = await ollamaClient.embed(
+            smartChunk.text,
+            model,
+            baseUrl,
+          );
+
+          const record = {
+            vector: Array.from(vector), // Convert Float32Array to standard array for LanceDB
+            FileName: fileName,
+            ChunkIndex: i,
+            Text: smartChunk.text,
+            HeaderContext: smartChunk.headerContext || "None",
+            EmbeddingModel: model,
+          };
+
+          // Upsert into LanceDB immediately natively
+          if (!tables.includes(job.collection) && !table) {
+            table = await db.createTable(job.collection, [record]);
+            tables.push(job.collection);
+          } else {
+            if (!table) table = await db.openTable(job.collection);
+            await table.add([record]);
           }
-        },
-        (raw) => {
-          // Track raw output if needed
-        },
+        } catch (embedError) {
+          console.error(
+            `[Ingest Error] Failed to embed chunk ${i} of ${fileName}:`,
+            embedError.message,
+          );
+        }
+      }
+
+      // Update Manifest
+      const stats = await fs.promises.stat(filePath);
+      parser.addOrUpdate(
+        fileName,
+        filePath,
+        fileHash,
+        chunks.length,
+        stats.size,
+        model,
       );
 
-      ps.on("close", async (code) => {
-        if (code === 0) {
-          try {
-            if (pipelinePath && fs.existsSync(pipelinePath)) {
-              job.progress = "Ingesting Into LanceDB...";
-              this.saveState();
+      processedCount++;
+    }
 
-              const payloadRaw = fs.readFileSync(pipelinePath, "utf8");
-              const operations = JSON.parse(payloadRaw);
+    // 5. Orphan Cleanup
+    job.progress = "Cleaning up orphans...";
+    this._throttledSave();
 
-              // 1. Connect to LanceDB
-              const dbDir = path.join(
-                this.persistencePath,
-                "..",
-                "vector_store.lance",
-              );
-              const db = await lancedb.connect(dbDir);
+    const orphans = parser.getOrphans(currentFileNames);
+    for (const orphan of orphans) {
+      if (tables.includes(job.collection)) {
+        if (!table) table = await db.openTable(job.collection);
+        await table.delete(`FileName = '${orphan}'`);
+      }
+      parser.remove(orphan);
+    }
 
-              let table;
-              const tables = await db.tableNames();
-
-              // 2. Perform Operations
-              for (const op of operations) {
-                if (op.Action === "delete") {
-                  if (tables.includes(job.collection)) {
-                    table = await db.openTable(job.collection);
-                    await table.delete(`FileName = '${op.Source}'`);
-                  }
-                } else if (op.Action === "upsert") {
-                  // If the table doesn't exist, Create it using the inferred schema of the first upsert
-                  if (!tables.includes(job.collection) && !table) {
-                    // LanceDB schema inference
-                    table = await db.createTable(job.collection, [op]);
-                    tables.push(job.collection);
-                  } else {
-                    if (!table) table = await db.openTable(job.collection);
-                    await table.add([op]);
-                  }
-                }
-              }
-
-              // Cleanup the temporary pipeline file
-              fs.unlinkSync(pipelinePath);
-            }
-            resolve();
-          } catch (err) {
-            reject(new Error(`LanceDB Ingestion Failed: ${err.message}`));
-          }
-        } else {
-          reject(new Error(`Process exited with code ${code}`));
-        }
-      });
-
-      ps.on("error", (err) => reject(err));
-    });
+    // 6. Save State
+    await parser.save();
+    job.progress = "Complete";
+    this.saveState();
   }
 
   cancelJob(id) {
@@ -165,7 +259,7 @@ class IngestionQueue {
       this.saveState();
       return true;
     }
-    // Note: To cancel active jobs, we'd need to track the process handle
+    // Note: cancelling active promises is not natively supported without AbortControllers
     return false;
   }
 
@@ -186,6 +280,7 @@ class IngestionQueue {
         this.persistencePath,
         JSON.stringify(this.jobs, null, 2),
       );
+      this.emit("update", this.jobs);
     } catch (err) {
       console.error("[Queue Persistence Error]", err.message);
     }

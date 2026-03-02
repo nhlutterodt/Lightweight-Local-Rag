@@ -62,13 +62,14 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
   : path.join(__dirname, "..", "..", "PowerShell Scripts");
 
 const psRunner = new PowerShellRunner(PS_SCRIPTS_DIR);
-const ingestQueue = new IngestionQueue(psRunner);
+const ingestQueue = new IngestionQueue();
+if (config) ingestQueue.setConfig(config);
 
 // ==========================================
 // 1. LanceDB Initialization (Async)
 // ==========================================
 let store;
-let collectionName = "TestIngest"; // Default collection. Could be dynamic later.
+let collectionName = "TestIngestNodeFinal"; // Native JS Insertion test
 
 async function initializeVectorStore() {
   const dataDir = config?.Paths?.DataDir
@@ -170,6 +171,28 @@ app.get("/api/browse", (req, res) => {
 // Get current queue state
 app.get("/api/queue", (req, res) => {
   res.json(ingestQueue.getJobs());
+});
+
+// Stream real-time queue states via SSE
+app.get("/api/queue/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  // Send initial state
+  res.write(`data: ${JSON.stringify(ingestQueue.getJobs())}\n\n`);
+
+  // Push updates natively when the queue saves state
+  const onUpdate = (jobs) => {
+    res.write(`data: ${JSON.stringify(jobs)}\n\n`);
+  };
+
+  ingestQueue.on("update", onUpdate);
+
+  // Clean up listener when client closes connection
+  req.on("close", () => {
+    ingestQueue.removeListener("update", onUpdate);
+  });
 });
 
 // Enqueue a new ingestion task
@@ -547,101 +570,11 @@ app.post("/api/chat", async (req, res) => {
 });
 
 // Ingestion Endpoint
+// Legacy Endpoint Removed (Critique 1 - PowerShell Ejection)
 app.post("/api/ingest", (req, res) => {
-  const { path: sourcePath, collection } = req.body;
-
-  if (!sourcePath || !collection) {
-    return res
-      .status(400)
-      .json({ error: "Source path and collection name are required" });
-  }
-
-  if (!isValidCollection(collection)) {
-    return res.status(400).json({ error: "Invalid collection name" });
-  }
-  if (!isSafePath(sourcePath)) {
-    return res.status(403).json({ error: "Unsafe or restricted input path" });
-  }
-
-  // Optional Queue Delegation
-  if (req.body.queue) {
-    const job = ingestQueue.enqueue(sourcePath, collection);
-    return res.status(202).json(job);
-  }
-
-  // Conflict Prevention
-  if (ingestQueue.isWorking) {
-    return res.status(409).json({
-      error: "Conflict",
-      message: "An ingestion task is already running in the background queue.",
-    });
-  }
-
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
-
-  console.log(
-    `[Ingest] Starting vectorization for: ${sourcePath} -> ${collection}`,
-  );
-
-  const ps = psRunner.spawn("Ingest-Documents.ps1", [
-    "-SourcePath",
-    sourcePath,
-    "-CollectionName",
-    collection,
-    "-Signal",
-  ]);
-
-  let resultData = "";
-
-  PowerShellRunner.parseJsonStream(
-    ps,
-    (obj) => {
-      if (obj.type === "status") {
-        res.write(`data: ${JSON.stringify(obj)}\n\n`);
-      } else {
-        resultData += JSON.stringify(obj);
-      }
-    },
-    (raw) => {
-      resultData += raw;
-    },
-  );
-
-  ps.stderr.on("data", (data) => {
-    const err = data.toString();
-    if (!err.includes("PowerShell") && !err.includes("Copyright")) {
-      console.warn(`[Ingest Warn] ${err}`);
-    }
-  });
-
-  ps.on("close", (code) => {
-    console.log(`[Ingest] Process finished (Code: ${code})`);
-    try {
-      const reportData = resultData.replace(/SIGNAL:[A-Z]+/g, "").trim();
-      const report = JSON.parse(reportData);
-      res.write(`data: ${JSON.stringify({ type: "complete", report })}\n\n`);
-
-      // Hot Reload VectorStore after ingest completes
-      initializeVectorStore()
-        .then(() =>
-          console.log(`[VectorStore] Hot reloaded LanceDB after ingest.`),
-        )
-        .catch((err) =>
-          console.error(
-            `[VectorStore Error] Failed to hot-reload: ${err.message}`,
-          ),
-        );
-    } catch (e) {
-      res.write(
-        `data: ${JSON.stringify({ type: "error", message: "Ingestion failed to generate report" })}\n\n`,
-      );
-    }
-    res.end();
-  });
+  res
+    .status(410)
+    .json({ error: "Deprecated. Use /api/queue for native Node ingestion." });
 });
 
 // Only start server if run directly (not imported)
