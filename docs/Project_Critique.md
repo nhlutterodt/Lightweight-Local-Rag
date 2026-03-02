@@ -58,6 +58,19 @@ The client explicitly pulls the active `/api/queue` array every 3 seconds while 
 1. **Stateless Resiliency:** Local servers crash, restarts happen, and laptops sleep. WebSocket management requires complex heartbeat tracking, reconnection jitter, and state reconciliation logic.
 2. **Volume Characteristics:** The ingestion queue is an inherently low-frequency mechanism. A basic HTTP `GET` every few seconds incurs effectively zero processor tax on the local machine loopback interface.
 
-**Verdict:** While objectively inferior in a highly scaled cloud environment, local HTTP polling is wildly more resilient and simpler to implement inside the zero-dependency paradigm.
+**Verdict (UPDATE: Migrated to SSE):** While local HTTP polling was resilient, it has officially been replaced with a native Node.js Server-Sent Event (SSE) stream on `/api/queue/stream`. This combines the lack of websocket payload complexity with true reactive event hooking in the UI, marking a definitive maturity step for the ingestion engine.
 
 ---
+
+## Critique 5: API Resilience & Context Management
+
+**The Critique:**  
+A lightweight server inherently struggles with edge cases: 1) users closing browser tabs while an LLM is mid-generation lock up the AI forever, and 2) shoving dozens of text chunks into a LLaMA system prompt can blindly exceed the 8k context window, causing a 500 error cascade.
+
+**The Justification ("Why Today"):**
+
+1. **AbortControllers (Native Fetch):** The Express server natively hooks into `req.on('close')`, injecting an `AbortController` signal down into the Ollama `fetch` pipeline. Tab closures instantly halt GPU inference.
+2. **Pre-flight Token Budgets:** The LanceDB retrieval matches are subjected to a heuristic token budget (~4000 tokens) _before_ prompt injection. The server gracefully drops the lowest-scored chunks rather than detonating Ollama's VRAM constraints.
+3. **Embedding Mutex:** A module-level Promise semaphore serializes embedding requests. Concurrent UI calls no longer attempt to force Ollama to hot-swap embedding and chat models simultaneously in VRAM.
+
+**Verdict:** The Node.js application layer has been explicitly hardened. By enforcing token budgets, sequential embedding locks, and HTTP abort signals, the project achieves production-grade local inference stability without adopting a kubernetes-level reverse proxy.
