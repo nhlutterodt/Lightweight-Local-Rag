@@ -1,24 +1,39 @@
+// Mutex for sequential embedding requests
+let embedPromise = Promise.resolve();
+
 export async function embed(text, model, baseUrl) {
-  const response = await fetch(`${baseUrl}/api/embeddings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, prompt: text }),
-  });
+  const execute = async () => {
+    const response = await fetch(`${baseUrl}/api/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt: text }),
+    });
 
-  if (!response.ok) {
-    const textBody = await response.text().catch(() => "");
-    throw new Error(`Ollama embed failed: ${response.status} ${textBody}`);
-  }
+    if (!response.ok) {
+      const textBody = await response.text().catch(() => "");
+      throw new Error(`Ollama embed failed: ${response.status} ${textBody}`);
+    }
 
-  const data = await response.json();
-  return new Float32Array(data.embedding);
+    const data = await response.json();
+    return new Float32Array(data.embedding);
+  };
+
+  embedPromise = embedPromise.then(execute).catch(() => execute());
+  return embedPromise;
 }
 
-export async function chatStream(messages, model, baseUrl, onChunk) {
+export async function chatStream(
+  messages,
+  model,
+  baseUrl,
+  onChunk,
+  abortSignal = null,
+) {
   const response = await fetch(`${baseUrl}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages, stream: true }),
+    signal: abortSignal,
   });
 
   if (!response.ok) {

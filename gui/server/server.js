@@ -112,7 +112,14 @@ process.on("SIGTERM", shutdown);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../client")));
+
+// Serve React dist if available, else fallback to old vanilla client
+const reactDistPath = path.join(__dirname, "../client/react-client/dist");
+if (fs.existsSync(reactDistPath)) {
+  app.use(express.static(reactDistPath));
+} else {
+  app.use(express.static(path.join(__dirname, "../client")));
+}
 
 // --- Security Helpers ---
 function isValidCollection(name) {
@@ -228,8 +235,17 @@ app.delete("/api/queue/:id", (req, res) => {
   }
 });
 
-// Health Check
+// Health Check Caching
+let healthCache = null;
+let lastHealthUpdate = 0;
+const HEALTH_CACHE_TTL = 15000; // 15s
+
 app.get("/api/health", (req, res) => {
+  const now = Date.now();
+  if (healthCache && now - lastHealthUpdate < HEALTH_CACHE_TTL) {
+    return res.json(healthCache);
+  }
+
   const ps = psRunner.spawn("Invoke-SystemHealth.ps1", []);
   let result = "";
   ps.stdout.on("data", (data) => (result += data.toString()));
@@ -238,15 +254,17 @@ app.get("/api/health", (req, res) => {
     try {
       if (result.trim()) {
         const health = JSON.parse(result);
+        healthCache = health;
+        lastHealthUpdate = now;
         res.json(health);
       } else {
         throw new Error("No output from health script");
       }
     } catch (e) {
       res.status(500).json({
-        status: "error",
-        message: "Health check diagnostic failed",
-        error: e.message,
+        type: "System Health Error",
+        status: 500,
+        detail: e.message,
       });
     }
   });
@@ -472,17 +490,40 @@ app.post("/api/chat", async (req, res) => {
     );
     const searchMs = performance.now() - tSearchStart;
 
-    // 2. Build Context
+    // 2. Build Context with Pre-flight Token Budget Enforcement
+    // Rough estimate: 1 word ≈ 1.3 tokens.
+    // We aim to keep total context well under an 8k limit (e.g. 4000 max context tokens)
+    const MAX_CONTEXT_TOKENS = 4000;
+    let currentTokenEstimate = 0;
+    const approvedResults = [];
+
+    for (const r of results) {
+      const chunkWords = (r.ChunkText || r.TextPreview || "").split(
+        /\s+/,
+      ).length;
+      const chunkTokens = Math.ceil(chunkWords * 1.3);
+
+      if (currentTokenEstimate + chunkTokens > MAX_CONTEXT_TOKENS) {
+        console.warn(
+          `[RAG Context] Dropped citation ${r.FileName} to enforce token budget limit.`,
+        );
+        continue;
+      }
+
+      approvedResults.push(r);
+      currentTokenEstimate += chunkTokens;
+    }
+
     const contextText =
-      results.length > 0
-        ? results
+      approvedResults.length > 0
+        ? approvedResults
             .map(
               (r) => `[Source: ${r.FileName}]\n${r.ChunkText || r.TextPreview}`,
             )
             .join("\n\n")
         : "No relevant local documents found.";
 
-    const logResults = results.map((r) => ({
+    const logResults = approvedResults.map((r) => ({
       score: r.score,
       fileName: r.FileName,
       chunkIndex: r.ChunkIndex,
@@ -490,7 +531,7 @@ app.post("/api/chat", async (req, res) => {
       preview: r.TextPreview,
     }));
 
-    const citations = results.map((r) => ({
+    const citations = approvedResults.map((r) => ({
       fileName: r.FileName,
       headerContext: r.HeaderContext,
       score: r.score,
@@ -537,12 +578,27 @@ app.post("/api/chat", async (req, res) => {
       ...messages,
     ];
 
-    // 5. Native JS Streaming
-    await chatStream(ollamaMessages, model, OLLAMA_URL, (chunkText) => {
-      res.write(
-        `data: ${JSON.stringify({ message: { content: chunkText.toString() } })}\n\n`,
+    // AbortController setup
+    const abortController = new AbortController();
+    req.on("close", () => {
+      console.log(
+        `[RAG Stream] Client disconnected natively, aborting LLM generation.`,
       );
+      abortController.abort();
     });
+
+    // 5. Native JS Streaming
+    await chatStream(
+      ollamaMessages,
+      model,
+      OLLAMA_URL,
+      (chunkText) => {
+        res.write(
+          `data: ${JSON.stringify({ message: { content: chunkText.toString() } })}\n\n`,
+        );
+      },
+      abortController.signal,
+    );
 
     res.end();
   } catch (err) {

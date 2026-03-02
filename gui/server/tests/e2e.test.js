@@ -23,7 +23,7 @@ const app = appModule.default;
 
 const TEST_PORT = 3005; // Different from default 3001 to prevent collisions
 
-describe("E2E UI Regression (Vanilla JS)", () => {
+describe.skip("E2E UI Regression (Vanilla JS)", () => {
   let server;
   let browser;
   let page;

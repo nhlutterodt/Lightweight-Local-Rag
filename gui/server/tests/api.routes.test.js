@@ -28,7 +28,7 @@ describe("API Routes Integration (ESM)", () => {
       // It might fail or return nothing, but server shouldn't crash.
       // Actually, server.js sends 500 if no output.
       if (res.statusCode === 500) {
-        expect(res.body.error).toBeDefined(); // "No output from health script" or similar
+        expect(res.body.detail).toBeDefined(); // "No output from health script" or similar
       } else {
         expect(res.statusCode).toBe(200);
       }
