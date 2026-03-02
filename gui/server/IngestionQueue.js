@@ -151,8 +151,9 @@ class IngestionQueue extends EventEmitter {
         if (tables.includes(job.collection)) {
           if (!table) table = await db.openTable(job.collection);
           // Update metadata in LanceDB to point to the new filename
+          const safeOldFileName = hashMatch.FileName.replace(/'/g, "''");
           await table.update({
-            where: `FileName = '${hashMatch.FileName}'`,
+            where: `FileName = '${safeOldFileName}'`,
             values: { FileName: fileName },
           });
         }
@@ -166,6 +167,26 @@ class IngestionQueue extends EventEmitter {
           hashMatch.FileSize,
           model,
         );
+        processedCount++;
+        continue;
+      }
+
+      // Enforce file size limits to prevent Memory Exhaustion / DoS
+      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+      let fileStats = null;
+      try {
+        fileStats = await fs.promises.stat(filePath);
+      } catch (statErr) {
+        console.warn(
+          `[Ingest Warn] Could not stat ${fileName}: ${statErr.message}`,
+        );
+        processedCount++;
+        continue;
+      }
+      if (fileStats.size > MAX_FILE_SIZE) {
+        console.warn(`[Ingest Warn] Skipping ${fileName}: Exceeds 50MB limit.`);
+        job.progress = `Skipped ${fileName} (too large)`;
+        this._throttledSave();
         processedCount++;
         continue;
       }
@@ -208,7 +229,8 @@ class IngestionQueue extends EventEmitter {
       // Remove existing vectors for this file before re-embedding
       if (tables.includes(job.collection)) {
         if (!table) table = await db.openTable(job.collection);
-        await table.delete(`FileName = '${fileName}'`);
+        const safeFileName = fileName.replace(/'/g, "''");
+        await table.delete(`FileName = '${safeFileName}'`);
       }
 
       // Chunk and Embed
@@ -270,7 +292,8 @@ class IngestionQueue extends EventEmitter {
     for (const orphan of orphans) {
       if (tables.includes(job.collection)) {
         if (!table) table = await db.openTable(job.collection);
-        await table.delete(`FileName = '${orphan}'`);
+        const safeOrphan = orphan.replace(/'/g, "''");
+        await table.delete(`FileName = '${safeOrphan}'`);
       }
       parser.remove(orphan);
     }

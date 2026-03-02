@@ -497,9 +497,7 @@ app.post("/api/chat", async (req, res) => {
     const approvedResults = [];
 
     for (const r of results) {
-      const chunkWords = (r.ChunkText || r.TextPreview || "").split(
-        /\s+/,
-      ).length;
+      const chunkWords = (r.ChunkText || r.TextPreview || "").split(" ").length;
       const chunkTokens = Math.ceil(chunkWords * 1.3);
 
       if (currentTokenEstimate + chunkTokens > MAX_CONTEXT_TOKENS) {
