@@ -1,7 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AnalyticsPanel from './AnalyticsPanel';
+import FolderBrowserModal from './FolderBrowserModal';
 
-function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, queue, isWide }) {
+function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, queue, isWide, onEnqueue }) {
+  const [collectionName, setCollectionName] = useState("TestIngest");
+  const [ingestPath, setIngestPath] = useState("");
+  const [isBrowseOpen, setIsBrowseOpen] = useState(false);
+  const [enqueueError, setEnqueueError] = useState(null);
+
+  const handleEnqueue = async () => {
+    setEnqueueError(null);
+    if (!ingestPath || !collectionName) {
+      setEnqueueError("Path and collection are required.");
+      return;
+    }
+    try {
+      if (onEnqueue) {
+        await onEnqueue(ingestPath, collectionName);
+        setIngestPath(""); // clear on success
+      }
+    } catch (err) {
+      setEnqueueError(err.message);
+    }
+  };
   return (
     <aside className="sidebar glass">
       <header>
@@ -31,7 +52,13 @@ function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, qu
         
         <div className="nav-item">
           <label>Collection</label>
-          <input type="text" id="collectionName" defaultValue="TestIngest" placeholder="Collection Name..." />
+          <input 
+            type="text" 
+            id="collectionName" 
+            value={collectionName} 
+            onChange={(e) => setCollectionName(e.target.value)} 
+            placeholder="Collection Name..." 
+          />
         </div>
         
         <div className="nav-item">
@@ -49,12 +76,37 @@ function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, qu
         <div className="nav-item">
           <label>Vectorize New Data</label>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <input type="text" id="ingestPath" placeholder="C:\MyDocuments" style={{ flex: 1 }} />
-            <button id="browseFolderBtn" className="btn-secondary" style={{ marginTop: 0, padding: '0 12px', width: 'auto' }} data-tooltip="Browse for a folder">📁</button>
+            <input 
+              type="text" 
+              id="ingestPath" 
+              value={ingestPath}
+              onChange={(e) => setIngestPath(e.target.value)}
+              placeholder="C:\MyDocuments" 
+              style={{ flex: 1 }} 
+            />
+            <button 
+              id="browseFolderBtn" 
+              className="btn-secondary" 
+              style={{ marginTop: 0, padding: '0 12px', width: 'auto' }} 
+              data-tooltip="Browse for a folder"
+              onClick={() => setIsBrowseOpen(true)}
+            >
+              📁
+            </button>
           </div>
           <div className="ingest-actions" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-            <button id="enqueueIngest" className="btn-primary" style={{ flex: 1 }} data-tooltip="Add to queue for background processing">➕ Queue</button>
+            <button 
+              id="enqueueIngest" 
+              className="btn-primary" 
+              style={{ flex: 1 }} 
+              data-tooltip="Add to queue for background processing"
+              onClick={handleEnqueue}
+              disabled={!isConnected || !ingestPath}
+            >
+              ➕ Queue
+            </button>
           </div>
+          {enqueueError && <div style={{ color: 'var(--color-error)', fontSize: '0.8rem', marginTop: '5px' }}>{enqueueError}</div>}
         </div>
         <div className="nav-divider"></div>
 
@@ -65,6 +117,16 @@ function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, qu
       <footer>
         <button id="clearChat" className="btn-secondary" data-tooltip="Clear the current conversation history">Clear Session</button>
       </footer>
+      
+      <FolderBrowserModal 
+        isOpen={isBrowseOpen} 
+        onClose={() => setIsBrowseOpen(false)} 
+        initialPath={ingestPath}
+        onSelect={(path) => {
+          setIngestPath(path);
+          setIsBrowseOpen(false);
+        }} 
+      />
     </aside>
   );
 }

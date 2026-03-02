@@ -58,6 +58,7 @@ function App() {
         metrics={metrics}
         queue={queue}
         isWide={isWide}
+        onEnqueue={enqueueJob}
       />
       <main className="chat-container">
         <ChatWindow history={chatHistory} />

@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  server:
+    build: 
+      context: .
+      dockerfile: gui/server/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      # Allow the backend to browse the /data mounted volume
+      - ALLOWED_BROWSE_ROOTS=/data
+    volumes:
+      # Named volume for persistent Vector Store DB
+      - db_data:/app/PowerShell Scripts/Data
+      # Named volume for the /api/browse root
+      - ingest_data:/data
+    depends_on:
+      - ollama
+
+  client:
+    build:
+      context: ./gui/client/react-client
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Remove the comments below to enable GPU acceleration if the host is configured for it
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_data:
+  db_data:
+  ingest_data:

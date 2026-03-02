@@ -1,54 +1,25 @@
 import express from "express";
 import cors from "cors";
-import { spawn, spawnSync } from "child_process";
+import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
+import os from "os";
 import { fileURLToPath } from "url";
 import axios from "axios";
-import PowerShellRunner from "./PowerShellRunner.js";
+import { loadConfig } from "./lib/configLoader.js";
 import IngestionQueue from "./IngestionQueue.js";
 import { VectorStore } from "./lib/vectorStore.js";
 import { embed, chatStream } from "./lib/ollamaClient.js";
 import { QueryLogger } from "./lib/queryLogger.js";
+import { getSystemHealth } from "./lib/healthCheck.js";
+import { bridgeLogger } from "./lib/xmlLogger.js";
 import * as lancedb from "@lancedb/lancedb";
-import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- Configuration Sync ---
-function loadProjectConfig() {
-  const rootDir = path.join(__dirname, "..", "..");
-  const scriptPath = path.join(
-    rootDir,
-    "PowerShell Scripts",
-    "Get-ProjectConfig.ps1",
-  );
-
-  try {
-    const result = spawnSync(
-      "pwsh",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
-      { encoding: "utf8" },
-    );
-
-    if (result.status === 0 && result.stdout) {
-      const parsed = JSON.parse(result.stdout);
-      console.log("[Config Sync] Successfully loaded project configuration.");
-      return parsed;
-    }
-    console.warn(
-      "[Config Sync Warning] Script finished with non-zero code or empty output.",
-    );
-  } catch (err) {
-    console.error(
-      "[Config Sync Error] Failed to execute config sync:",
-      err.message,
-    );
-  }
-  return null;
-}
-
-const config = loadProjectConfig();
+// --- Configuration (native JS loader — no pwsh dependency) ---
+const config = loadConfig(path.resolve(__dirname, "..", ".."));
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -61,7 +32,6 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
   ? path.join(__dirname, "..", "..", config.Paths.ScriptsDirectory)
   : path.join(__dirname, "..", "..", "PowerShell Scripts");
 
-const psRunner = new PowerShellRunner(PS_SCRIPTS_DIR);
 const ingestQueue = new IngestionQueue();
 if (config) ingestQueue.setConfig(config);
 
@@ -122,55 +92,80 @@ if (fs.existsSync(reactDistPath)) {
 }
 
 // --- Security Helpers ---
+// Determine allowed roots for browsing/ingesting (default to user's home dir for safety)
+const ALLOWED_BROWSE_ROOTS = (process.env.ALLOWED_BROWSE_ROOTS || os.homedir())
+  .split(";")
+  .map((r) => path.normalize(r).toLowerCase());
+
 function isValidCollection(name) {
   return /^[a-zA-Z0-9_\-]+$/.test(name);
 }
 
 function isSafePath(inputPath) {
+  if (!inputPath || typeof inputPath !== "string") return false;
+
   // 1. Must be absolute
   if (!path.isAbsolute(inputPath)) return false;
 
-  // 2. Block system roots broadly (e.g. C:\Windows, /input, /sys)
-  const normalized = path.normalize(inputPath).toLowerCase();
-
-  if (
-    normalized.startsWith("c:\\windows") ||
-    normalized.startsWith("c:\\program files") ||
-    normalized.startsWith("/etc") ||
-    normalized.startsWith("/var")
-  ) {
-    return false;
-  }
-
-  // 3. Must not contain traversal relative components after normalization (path.normalize handles .. mostly)
+  // 2. Prevent directory traversal
+  const normalized = path.normalize(inputPath);
   if (normalized.includes("..")) return false;
 
-  return true;
+  // 3. Must be within an allowed root
+  const normalizedLower = normalized.toLowerCase();
+  const isAllowed = ALLOWED_BROWSE_ROOTS.some((root) =>
+    normalizedLower.startsWith(root),
+  );
+
+  return isAllowed;
 }
 
-// --- Native Folder Selection ---
-app.get("/api/browse", (req, res) => {
-  const ps = psRunner.spawn("Select-Folder.ps1", []);
-  let result = "";
+// --- Cross-Platform Folder Selection API ---
+app.get("/api/browse", async (req, res) => {
+  const targetPath = req.query.path || os.homedir();
 
-  ps.stdout.on("data", (data) => (result += data.toString()));
+  if (!isSafePath(targetPath)) {
+    return res.status(403).json({
+      status: "error",
+      message: "Access to this path is restricted.",
+    });
+  }
 
-  ps.on("close", (code) => {
-    try {
-      if (result.trim()) {
-        const parsed = JSON.parse(result);
-        res.json(parsed);
-      } else {
-        throw new Error("No output from native dialog script");
-      }
-    } catch (e) {
-      res.status(500).json({
-        status: "error",
-        message: "Failed to parse folder selection result",
-        error: e.message,
+  try {
+    const entries = await fs.promises.readdir(targetPath, {
+      withFileTypes: true,
+    });
+
+    // Return directories and supported file types
+    const contents = entries
+      .filter((entry) => !entry.name.startsWith(".")) // skip hidden
+      .map((entry) => ({
+        name: entry.name,
+        isDirectory: entry.isDirectory(),
+        path: path.join(targetPath, entry.name),
+      }))
+      // Sort: Directories first, then alphabetically
+      .sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
       });
-    }
-  });
+
+    res.json({
+      currentPath: path.normalize(targetPath),
+      parentPath:
+        path.dirname(targetPath) !== targetPath
+          ? path.dirname(targetPath)
+          : null,
+      contents,
+    });
+  } catch (e) {
+    res.status(500).json({
+      status: "error",
+      message: "Failed to read directory",
+      error: e.message,
+    });
+  }
 });
 
 // --- Queue Management ---
@@ -240,34 +235,24 @@ let healthCache = null;
 let lastHealthUpdate = 0;
 const HEALTH_CACHE_TTL = 15000; // 15s
 
-app.get("/api/health", (req, res) => {
+app.get("/api/health", async (req, res) => {
   const now = Date.now();
   if (healthCache && now - lastHealthUpdate < HEALTH_CACHE_TTL) {
     return res.json(healthCache);
   }
 
-  const ps = psRunner.spawn("Invoke-SystemHealth.ps1", []);
-  let result = "";
-  ps.stdout.on("data", (data) => (result += data.toString()));
-
-  ps.on("close", (code) => {
-    try {
-      if (result.trim()) {
-        const health = JSON.parse(result);
-        healthCache = health;
-        lastHealthUpdate = now;
-        res.json(health);
-      } else {
-        throw new Error("No output from health script");
-      }
-    } catch (e) {
-      res.status(500).json({
-        type: "System Health Error",
-        status: 500,
-        detail: e.message,
-      });
-    }
-  });
+  try {
+    const health = await getSystemHealth(config);
+    healthCache = health;
+    lastHealthUpdate = now;
+    res.json(health);
+  } catch (e) {
+    res.status(500).json({
+      type: "System Health Error",
+      status: 500,
+      detail: e.message,
+    });
+  }
 });
 
 // --- Caching for Performance ---
@@ -344,32 +329,19 @@ app.get("/api/index/metrics", async (req, res) => {
   }
 });
 
-app.post("/api/log", (req, res) => {
+app.post("/api/log", async (req, res) => {
   const { message, level = "INFO", category = "UI" } = req.body;
 
   if (!message) {
     return res.status(400).json({ error: "Message is required" });
   }
 
-  const ps = psRunner.spawn("Append-LogEntry.ps1", [
-    "-Message",
-    message,
-    "-Level",
-    level,
-    "-Category",
-    category,
-  ]);
-
-  let result = "";
-  ps.stdout.on("data", (data) => (result += data.toString()));
-
-  ps.on("close", (code) => {
-    if (code === 0) {
-      res.json({ status: "logged" });
-    } else {
-      res.status(500).json({ error: "Logging failed", details: result });
-    }
-  });
+  const success = await bridgeLogger.append(level, category, message);
+  if (success) {
+    res.json({ status: "logged" });
+  } else {
+    res.status(500).json({ error: "Logging failed" });
+  }
 });
 
 // Embedding model families — these cannot be used for chat

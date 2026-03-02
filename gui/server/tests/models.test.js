@@ -81,18 +81,6 @@ jest.unstable_mockModule("child_process", () => ({
       if (event === "close") cb(0);
     }),
   })),
-  spawnSync: jest.fn(() => ({
-    status: 0,
-    stdout: JSON.stringify({
-      RAG: {
-        OllamaUrl: "http://localhost:11434",
-        EmbeddingModel: "nomic-embed-text",
-        ChatModel: "llama3.1:8b",
-        TopK: 5,
-        MinScore: 0.5,
-      },
-    }),
-  })),
 }));
 
 // Mock axios to return our simulated Ollama response
@@ -204,35 +192,21 @@ describe("GET /api/models — Model Classification", () => {
   });
 });
 
-describe("GET /api/models — Missing Required Models", () => {
+describe("GET /api/models — Ollama Unreachable (502)", () => {
   let response;
-  let data;
 
   beforeAll(async () => {
-    // Reconfigure spawnSync to report a model that isn't installed
-    const { spawnSync } = await import("child_process");
-    spawnSync.mockReturnValue({
-      status: 0,
-      stdout: JSON.stringify({
-        RAG: {
-          OllamaUrl: "http://localhost:11434",
-          EmbeddingModel: "nomic-embed-text",
-          ChatModel: "phi4:latest", // Not in mock list
-        },
-      }),
-    });
-
-    // Re-import to pick up new config
-    // Note: Jest ESM caching prevents true re-import, so we test the endpoint
-    // with the current config which has llama3.1:8b (installed).
-    // The classification logic is what matters most — tested above.
+    // Simulate Ollama being down for this test
+    const { default: axios } = await import("axios");
+    axios.get.mockRejectedValueOnce(new Error("ECONNREFUSED"));
     response = await request(app).get("/api/models");
-    data = response.body;
   });
 
-  it("should still return a valid response shape", () => {
-    expect(response.statusCode).toBe(200);
-    expect(Array.isArray(data.models)).toBe(true);
-    expect(data.required).toBeDefined();
+  it("returns 502 when Ollama is unreachable", () => {
+    expect(response.statusCode).toBe(502);
+  });
+
+  it("returns an error field describing the failure", () => {
+    expect(response.body.error).toMatch(/Ollama service unreachable/i);
   });
 });

@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 
-// ESM Mocking for child_process
+// ESM Mocking for child_process — spawn is only used by IngestionQueue now
 jest.unstable_mockModule("child_process", () => ({
   spawn: jest.fn(() => ({
     stdout: { on: jest.fn() },
@@ -9,10 +9,6 @@ jest.unstable_mockModule("child_process", () => ({
     on: jest.fn((event, cb) => {
       if (event === "close") cb(0);
     }),
-  })),
-  spawnSync: jest.fn(() => ({
-    status: 0,
-    stdout: JSON.stringify({ Status: "MockConfig" }),
   })),
 }));
 
@@ -24,14 +20,9 @@ describe("API Routes Integration (ESM)", () => {
   describe("GET /api/health", () => {
     it("should return 200 OK", async () => {
       const res = await request(app).get("/api/health");
-      // Health endpoint waits for stdout data. Our mock emits none.
-      // It might fail or return nothing, but server shouldn't crash.
-      // Actually, server.js sends 500 if no output.
-      if (res.statusCode === 500) {
-        expect(res.body.detail).toBeDefined(); // "No output from health script" or similar
-      } else {
-        expect(res.statusCode).toBe(200);
-      }
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toHaveProperty("status");
+      expect(res.body).toHaveProperty("checks");
     });
   });
 

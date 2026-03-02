@@ -2,7 +2,38 @@
 
 ## Overview
 
-This enhanced project provides a comprehensive suite of PowerShell utilities for AI model monitoring, XML-based structured logging, and automated report generation. The architecture has been significantly improved with modular utilities and centralized schema management.
+This enhanced project provides a comprehensive suite of PowerShell utilities for AI model monitoring, XML-based structured logging, and automated report generation. The architecture has been significantly improved with modular utilities and centralized schema management. It now also supports full multi-container cross-platform Docker deployment.
+
+## 🐳 Docker Deployment
+
+You can now run the entire RAG application (Frontend, Backend, and Ollama) using Docker Compose without needing to install Node.js or PowerShell on your host machine.
+
+### Quick Start
+
+1. Ensure Docker Desktop (or Docker Engine + docker-compose) is installed.
+2. Run the following command from the project root:
+   ```bash
+   docker-compose up --build
+   ```
+3. Access the web UI at `http://localhost:8080`.
+
+### Enabling GPU Support (Optional)
+
+If you have a compatible NVIDIA GPU and the NVIDIA Container Toolkit installed on your Linux host or WSL2, you can enable hardware acceleration for Ollama to drastically improve embedding and inference generation speeds:
+
+1. Open `docker-compose.yml`.
+2. Locate the `ollama` service section.
+3. Uncomment the `deploy` block under the `ollama` service:
+   ```yaml
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   ```
+4. Restart the containers with `docker-compose up -d`.
 
 ## Enhanced Features
 

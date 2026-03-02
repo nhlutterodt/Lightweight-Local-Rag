@@ -13,28 +13,13 @@ import request from "supertest";
 
 // ── Mocks ────────────────────────────────────────────────────
 
-// Mock child_process (needed by server.js for config loading / PowerShellRunner)
+// Mock child_process — spawn still used by PowerShellRunner (health/log routes)
 jest.unstable_mockModule("child_process", () => ({
   spawn: jest.fn(() => ({
     stdout: { on: jest.fn() },
     stderr: { on: jest.fn() },
     on: jest.fn((event, cb) => {
       if (event === "close") cb(0);
-    }),
-  })),
-  spawnSync: jest.fn(() => ({
-    status: 0,
-    stdout: JSON.stringify({
-      RAG: {
-        OllamaUrl: "http://localhost:11434",
-        EmbeddingModel: "nomic-embed-text",
-        ChatModel: "test-model",
-        TopK: 3,
-        MinScore: 0.3,
-        ChunkSize: 1000,
-        ChunkOverlap: 200,
-        MaxContextTokens: 2048,
-      },
     }),
   })),
 }));
