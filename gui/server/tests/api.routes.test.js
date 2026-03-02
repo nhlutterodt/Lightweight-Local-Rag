@@ -44,17 +44,17 @@ describe("API Routes Integration (ESM)", () => {
     });
   });
 
-  describe("POST /api/ingest", () => {
+  describe("POST /api/queue", () => {
     it("should return 400 if path is missing", async () => {
       const res = await request(app)
-        .post("/api/ingest")
+        .post("/api/queue")
         .send({ collection: "test" });
       expect(res.statusCode).toBe(400);
     });
 
     it("should return 400 if collection is missing", async () => {
       const res = await request(app)
-        .post("/api/ingest")
+        .post("/api/queue")
         .send({ path: "C:/tmp" });
       expect(res.statusCode).toBe(400);
     });

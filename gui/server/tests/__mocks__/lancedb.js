@@ -34,9 +34,15 @@ const mockResults = [
 ];
 
 const mockExecute = jest.fn().mockResolvedValue(mockResults);
-const mockLimit = jest.fn().mockReturnValue({ execute: mockExecute });
-const mockSearch = jest.fn().mockReturnValue({ limit: mockLimit });
-const mockQuery = jest.fn().mockReturnValue({ limit: mockLimit });
+const mockLimit = jest
+  .fn()
+  .mockReturnValue({ execute: mockExecute, toArray: mockExecute });
+const mockSearch = jest
+  .fn()
+  .mockReturnValue({ limit: mockLimit, toArray: mockExecute });
+const mockQuery = jest
+  .fn()
+  .mockReturnValue({ limit: mockLimit, toArray: mockExecute });
 
 const mockTable = {
   query: mockQuery,
