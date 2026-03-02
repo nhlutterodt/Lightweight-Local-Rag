@@ -39,6 +39,11 @@ function App() {
 
     // Fire actual stream
     await streamChat(newChat, activeModel, "TestIngest", (data) => {
+       if (data.type === "error") {
+         incomingResponse += `\n\n⚠️ **Error:** ${data.message}`;
+         setChatHistory([...newChat, { role: "ai", content: incomingResponse }]);
+         return;
+       }
        if (data.message && data.message.content) {
          incomingResponse += data.message.content;
          setChatHistory([...newChat, { role: "ai", content: incomingResponse }]);
@@ -59,9 +64,10 @@ function App() {
         queue={queue}
         isWide={isWide}
         onEnqueue={enqueueJob}
+        onClearSession={() => setChatHistory([])}
       />
       <main className="chat-container">
-        <ChatWindow history={chatHistory} />
+        <ChatWindow history={chatHistory} isGenerating={isGenerating} />
         <InputArea onSend={handleSendQuery} disabled={isGenerating || !isConnected} />
       </main>
 

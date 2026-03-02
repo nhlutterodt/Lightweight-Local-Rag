@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import AnalyticsPanel from './AnalyticsPanel';
 import FolderBrowserModal from './FolderBrowserModal';
 
-function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, queue, isWide, onEnqueue }) {
+function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, queue, isWide, onEnqueue, onClearSession }) {
   const [collectionName, setCollectionName] = useState("TestIngest");
   const [ingestPath, setIngestPath] = useState("");
   const [isBrowseOpen, setIsBrowseOpen] = useState(false);
@@ -115,7 +115,7 @@ function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, qu
       </nav>
       
       <footer>
-        <button id="clearChat" className="btn-secondary" data-tooltip="Clear the current conversation history">Clear Session</button>
+        <button id="clearChat" className="btn-secondary" data-tooltip="Clear the current conversation history" onClick={onClearSession}>Clear Session</button>
       </footer>
       
       <FolderBrowserModal 

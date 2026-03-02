@@ -28,10 +28,11 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+    # ports:
+    #   - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ~/.ollama:/root/.ollama
+      - ollama_data:/root/.ollama_backup
     # Remove the comments below to enable GPU acceleration if the host is configured for it
     # deploy:
     #   resources:
@@ -40,6 +41,18 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
+
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: >
+      sh -c "sleep 5 && 
+      ollama pull nomic-embed-text && 
+      ollama pull llama3.1:8b"
+    environment:
+      - OLLAMA_HOST=ollama:11434
 
 volumes:
   ollama_data:
