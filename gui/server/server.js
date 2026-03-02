@@ -454,6 +454,24 @@ app.post("/api/chat", async (req, res) => {
     // --- 2. Hot-Path Retrieval (LanceDB) ---
     const tSearchStart = performance.now();
 
+    const dataDir = config?.Paths?.DataDir
+      ? config.Paths.DataDir
+      : path.join(__dirname, "..", "..", "PowerShell Scripts", "Data");
+    const dbDir = path.join(dataDir, "vector_store.lance");
+
+    try {
+      await store.load(
+        dbDir,
+        collection,
+        config?.RAG?.EmbeddingModel || "nomic-embed-text",
+      );
+    } catch (err) {
+      console.warn(
+        `[RAG Warning] Error loading collection ${collection}:`,
+        err.message,
+      );
+    }
+
     // store.findNearest is now an async LanceDB projection
     const results = await store.findNearest(
       queryVector,

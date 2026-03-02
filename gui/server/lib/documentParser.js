@@ -182,7 +182,7 @@ class DocumentParser {
 
   static async scanDirectory(
     dirPath,
-    allowedExtensions = [".md", ".txt", ".ps1", ".xml"],
+    allowedExtensions = [".md", ".txt", ".ps1", ".xml", ".pdf"],
   ) {
     let results = [];
 

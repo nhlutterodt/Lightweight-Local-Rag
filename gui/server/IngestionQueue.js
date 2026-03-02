@@ -7,6 +7,9 @@ import * as ollamaClient from "./lib/ollamaClient.js";
 
 import { SmartTextChunker } from "./lib/smartChunker.js";
 import { DocumentParser } from "./lib/documentParser.js";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+import PDFParser from "pdf2json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,7 +171,35 @@ class IngestionQueue extends EventEmitter {
       }
 
       // Read Content
-      const content = await fs.promises.readFile(filePath, "utf8");
+      let content = "";
+      try {
+        if (filePath.toLowerCase().endsWith(".pdf")) {
+          const buffer = await fs.promises.readFile(filePath);
+
+          content = await new Promise((resolve, reject) => {
+            const pdfParser = new PDFParser(this, 1);
+
+            pdfParser.on("pdfParser_dataError", (errData) =>
+              reject(errData.parserError),
+            );
+            pdfParser.on("pdfParser_dataReady", (pdfData) => {
+              const rawText = pdfParser.getRawTextContent();
+              resolve(rawText);
+            });
+
+            pdfParser.parseBuffer(buffer);
+          });
+        } else {
+          content = await fs.promises.readFile(filePath, "utf8");
+        }
+      } catch (readErr) {
+        console.warn(
+          `[Ingest Warn] Failed to read ${fileName}: ${readErr.message}`,
+        );
+        processedCount++;
+        continue;
+      }
+
       if (!content || !content.trim()) {
         processedCount++;
         continue;
