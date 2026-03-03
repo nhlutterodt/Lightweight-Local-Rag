@@ -277,6 +277,25 @@ describe("IngestionQueue", () => {
       expect(ollamaClient.embed).not.toHaveBeenCalled();
     });
 
+    it("should escape single quotes in filenames to prevent LanceDB filter injection", async () => {
+      const testFilePath = path.join(tempDir, "file_renamed.md");
+      fs.writeFileSync(testFilePath, "dummy content");
+      MOCK_STATE.files = [testFilePath];
+      MOCK_STATE.hashMatch = {
+        FileName: "attacker's_file.md",
+        ChunkCount: 1,
+        FileSize: 10,
+      };
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      expect(mockTable.update).toHaveBeenCalledWith({
+        where: "FileName = 'attacker''s_file.md'",
+        values: { FileName: "file_renamed.md" },
+      });
+    });
+
     it("should ignore files with empty content", async () => {
       const testFilePath = path.join(tempDir, "empty.md");
       fs.writeFileSync(testFilePath, "   \n  ");
@@ -286,6 +305,30 @@ describe("IngestionQueue", () => {
       await queue.executeNodeIngest(job);
 
       expect(ollamaClient.embed).not.toHaveBeenCalled();
+    });
+
+    it("should skip files that exceed the 50MB file size limit to prevent memory exhaustion", async () => {
+      const testFilePath = path.join(tempDir, "huge.md");
+      fs.writeFileSync(testFilePath, "dummy");
+      MOCK_STATE.files = [testFilePath];
+
+      const statSpy = jest.spyOn(fs.promises, "stat").mockResolvedValue({
+        size: 51 * 1024 * 1024, // 51 MB
+      });
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      try {
+        const job = queue.enqueue(tempDir, "my_collection");
+        await queue.executeNodeIngest(job);
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining("Exceeds 50MB limit"),
+        );
+        expect(ollamaClient.embed).not.toHaveBeenCalled();
+      } finally {
+        statSpy.mockRestore();
+        warnSpy.mockRestore();
+      }
     });
 
     it("should create a new collection if table doesn't exist", async () => {

@@ -1,0 +1,336 @@
+
+> local-rag-server@1.0.0 test
+> node --experimental-vm-modules node_modules/jest/bin/jest.js
+
+(node:52848) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL tests/IngestionQueue.test.js
+  ΓùÅ Console
+
+    console.log
+      [Queue] Loaded 2 jobs from disk.
+
+      at IngestionQueue.loadState (IngestionQueue.js:355:17)
+
+    console.log
+      [Queue] Starting Job 1772506941007: /my/docs
+
+      at IngestionQueue.processNext (IngestionQueue.js:82:13)
+
+    console.log
+      [Queue] Starting Job 1772506941011: /my/docs
+
+      at IngestionQueue.processNext (IngestionQueue.js:82:13)
+
+    console.error
+      [Queue] Job 1772506941011 failed: Ingest Failed
+
+      89 |       job.status = "failed";
+      90 |       job.progress = `Error: ${err.message}`;
+    > 91 |       console.error(`[Queue] Job ${job.id} failed:`, err.message);
+         |               ^
+      92 |     } finally {
+      93 |       job.completedAt = new Date().toISOString();
+      94 |       this.isWorking = false;
+
+      at IngestionQueue.processNext (IngestionQueue.js:91:15)
+
+    console.warn
+      [Ingest Warn] Skipping huge.md: Exceeds 50MB limit.
+
+      185 |       }
+      186 |       if (fileStats.size > MAX_FILE_SIZE) {
+    > 187 |         console.warn(`[Ingest Warn] Skipping ${fileName}: Exceeds 50MB limit.`);
+          |                 ^
+      188 |         job.progress = `Skipped ${fileName} (too large)`;
+      189 |         this._throttledSave();
+      190 |         processedCount++;
+
+      at IngestionQueue.executeNodeIngest (IngestionQueue.js:187:17)
+      at Object.<anonymous> (tests/IngestionQueue.test.js:320:7)
+
+    console.warn
+      [Ingest Warn] Skipping new_db.md: Exceeds 50MB limit.
+
+      185 |       }
+      186 |       if (fileStats.size > MAX_FILE_SIZE) {
+    > 187 |         console.warn(`[Ingest Warn] Skipping ${fileName}: Exceeds 50MB limit.`);
+          |                 ^
+      188 |         job.progress = `Skipped ${fileName} (too large)`;
+      189 |         this._throttledSave();
+      190 |         processedCount++;
+
+      at IngestionQueue.executeNodeIngest (IngestionQueue.js:187:17)
+      at Object.<anonymous> (tests/IngestionQueue.test.js:335:7)
+
+    console.warn
+      [Ingest Warn] Skipping embed_fail.md: Exceeds 50MB limit.
+
+      185 |       }
+      186 |       if (fileStats.size > MAX_FILE_SIZE) {
+    > 187 |         console.warn(`[Ingest Warn] Skipping ${fileName}: Exceeds 50MB limit.`);
+          |                 ^
+      188 |         job.progress = `Skipped ${fileName} (too large)`;
+      189 |         this._throttledSave();
+      190 |         processedCount++;
+
+      at IngestionQueue.executeNodeIngest (IngestionQueue.js:187:17)
+      at Object.<anonymous> (tests/IngestionQueue.test.js:351:7)
+
+  ΓùÅ IngestionQueue ΓÇ║ executeNodeIngest ΓÇ║ should skip files that exceed the 50MB file size limit to prevent memory exhaustion
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "Skipped huge.md (too large)"
+    Received string:    "Complete"
+
+      320 |       await queue.executeNodeIngest(job);
+      321 |
+    > 322 |       expect(job.progress).toContain("Skipped huge.md (too large)");
+          |                            ^
+      323 |       expect(ollamaClient.embed).not.toHaveBeenCalled();
+      324 |
+      325 |       statSpy.mockRestore();
+
+      at Object.<anonymous> (tests/IngestionQueue.test.js:322:28)
+
+  ΓùÅ IngestionQueue ΓÇ║ executeNodeIngest ΓÇ║ should create a new collection if table doesn't exist
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "new_collection", Any<Array>
+
+    Number of calls: 0
+
+      335 |       await queue.executeNodeIngest(job);
+      336 |
+    > 337 |       expect(mockDb.createTable).toHaveBeenCalledWith(
+          |                                  ^
+      338 |         "new_collection",
+      339 |         expect.any(Array),
+      340 |       );
+
+      at Object.<anonymous> (tests/IngestionQueue.test.js:337:34)
+
+  ΓùÅ IngestionQueue ΓÇ║ executeNodeIngest ΓÇ║ should swallow errors gracefully if embedding fails
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      351 |       await queue.executeNodeIngest(job);
+      352 |
+    > 353 |       expect(ollamaClient.embed).toHaveBeenCalled();
+          |                                  ^
+      354 |       expect(mockTable.add).not.toHaveBeenCalled(); // Failed to embed, so not added
+      355 |     });
+      356 |   });
+
+      at Object.<anonymous> (tests/IngestionQueue.test.js:353:34)
+
+PASS tests/api.routes.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.loadState (IngestionQueue.js:355:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.load (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at initializeVectorStore (server.js:55:13)
+
+PASS tests/browse.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.loadState (IngestionQueue.js:355:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.load (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at initializeVectorStore (server.js:55:13)
+
+PASS tests/sse.contract.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.loadState (IngestionQueue.js:355:17)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=nomic-embed-text
+
+      at initializeVectorStore (server.js:55:13)
+
+    console.log
+      [RAG] Query: "What is this project about?" | Collection: TestIngest
+
+      at server.js:444:13
+
+    console.log
+      [RAG Timing] embed=0.2ms  search=0.1ms  total=0.4ms
+
+      at server.js:565:13
+
+PASS tests/models.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+    console.log
+      [Queue] Loaded 10 jobs from disk.
+
+      at IngestionQueue.loadState (IngestionQueue.js:355:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.load (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at initializeVectorStore (server.js:55:13)
+
+PASS tests/security.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+    console.warn
+      [VectorStore] Table 'TestIngestNodeFinal' does not exist yet. Returning empty state.
+
+      29 |       const tables = await this.db.tableNames();
+      30 |       if (!tables.includes(collectionName)) {
+    > 31 |         console.warn(
+         |                 ^
+      32 |           `[VectorStore] Table '${collectionName}' does not exist yet. Returning empty state.`,
+      33 |         );
+      34 |         this.isReady = false;
+
+      at VectorStore.load (lib/vectorStore.js:31:17)
+      at initializeVectorStore (server.js:54:5)
+
+    console.log
+      [VectorStore] Connected to LanceDB at C:\Users\Owner\Local-Rag-Project-v2\Local-RAG-Project-v2\PowerShell Scripts\Data\vector_store.lance, Collection: TestIngestNodeFinal. Model=legacy
+
+      at initializeVectorStore (server.js:55:13)
+
+PASS tests/configLoader.test.js
+  ΓùÅ Console
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+    console.warn
+      [ConfigLoader] Config file not found at C:\Users\Owner\AppData\Local\Temp\rag-config-test-gfHI9x\config\project-config.psd1 ΓÇö using defaults.
+
+      382 |       }
+      383 |     } else {
+    > 384 |       console.warn(
+          |               ^
+      385 |         `[ConfigLoader] Config file not found at ${configPath} ΓÇö using defaults.`,
+      386 |       );
+      387 |     }
+
+      at loadConfig (lib/configLoader.js:384:15)
+      at Object.<anonymous> (tests/configLoader.test.js:173:14)
+
+    console.warn
+      [ConfigLoader] Failed to parse project-config.psd1 ΓÇö using defaults.
+
+      377 |         );
+      378 |       } else {
+    > 379 |         console.warn(
+          |                 ^
+      380 |           "[ConfigLoader] Failed to parse project-config.psd1 ΓÇö using defaults.",
+      381 |         );
+      382 |       }
+
+      at loadConfig (lib/configLoader.js:379:17)
+      at Object.<anonymous> (tests/configLoader.test.js:203:14)
+
+    console.log
+      [ConfigLoader] Loaded project-config.psd1 (native JS parser).
+
+      at loadConfig (lib/configLoader.js:375:17)
+
+PASS tests/documentParser.test.js
+PASS tests/smartChunker.test.js
+PASS tests/vectorStore.test.js
+PASS tests/queryLogger.test.js
+PASS tests/ollamaClient.test.js
+PASS tests/healthCheck.test.js
+PASS tests/xmlLogger.test.js
+
+Test Suites: 1 failed, 1 skipped, 13 passed, 14 of 15 total
+Tests:       3 failed, 4 skipped, 141 passed, 148 total
+Snapshots:   0 total
+Time:        2.502 s
+Ran all test suites.
