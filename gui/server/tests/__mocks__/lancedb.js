@@ -49,6 +49,7 @@ const mockTable = {
   search: mockSearch,
   add: jest.fn().mockResolvedValue(true),
   delete: jest.fn().mockResolvedValue(true),
+  countRows: jest.fn().mockResolvedValue(10),
 };
 
 export const connect = jest.fn().mockResolvedValue({
