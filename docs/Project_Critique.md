@@ -34,17 +34,17 @@ Rolling a custom `.vectors.bin` flat-file and writing manual Float32Array dot-pr
 
 ---
 
-## Critique 3: The Vanilla HTML/JS/CSS Client
+## Critique 3: The Vanilla HTML/JS/CSS Client (Now React/Vite)
 
 **The Critique:**  
 Building the UI in `index.html` with vanilla JS modules, DOM query selectors, and un-scoped CSS is a severe step backward in 2026. Managing complex async streaming state, chat logs, and toast notifications without a declarative framework (React, Vue, Svelte) guarantees inevitable "spaghetti code" logic closures and DOM de-syncs.
 
-**The Justification ("Why Today"):**
+**The Justification & Evolution ("Why Today"):**
 
-1. **Ecosystem Saturation Prevention:** Adding a node-based bundler (Vite/Webpack), configuring React, building a standard design system, and maintaining dependency trees violates the principle of a hyper-lightweight local wrapper.
-2. **Web Standard Maturity:** ES6 Modules (`import/export`), CSS Grid/Variables (`--token`), and native `fetch` are infinitely more powerful today. Utilizing raw Server-Sent Events (SSE) directly onto a `div` requires <30 lines of JavaScript. React actually introduces more complexity managing rendering loops against streaming bytes.
+1. **Original Goal vs Current Reality:** Initially, adding a node-based bundler and maintaining dependency trees violated the principle of a hyper-lightweight local wrapper. However, as UI complexity grew (specifically rendering streaming AI reasoning), vanilla Javascript became a liability.
+2. **The React Migration:** We officially refactored the frontend to a React + Vite architecture. This undeniably increases the application's overall storage footprint (adding significant sets of `node_modules` and bespoke Docker client images).
 
-**Verdict:** The client scales remarkably well provided strict modular directory structures (`css/modules`, `js/utils`) are preserved. Zero build steps remain an undeniable strategic advantage for an offline utility.
+**Verdict:** The application is no longer "hyper-lightweight". We abandoned the zero-build philosophy as a necessary trade-off: accepting a heavier disk and active memory footprint in exchange for rock-solid UI reliability and component maintainability.
 
 ---
 
@@ -65,7 +65,7 @@ The client explicitly pulls the active `/api/queue` array every 3 seconds while 
 ## Critique 5: API Resilience & Context Management
 
 **The Critique:**  
-A lightweight server inherently struggles with edge cases: 1) users closing browser tabs while an LLM is mid-generation lock up the AI forever, and 2) shoving dozens of text chunks into a LLaMA system prompt can blindly exceed the 8k context window, causing a 500 error cascade.
+A basic Node.js Express server inherently struggles with edge cases: 1) users closing browser tabs while an LLM is mid-generation lock up the AI forever, and 2) shoving dozens of text chunks into a LLaMA system prompt can blindly exceed the 8k context window, causing a 500 error cascade.
 
 **The Justification ("Why Today"):**
 

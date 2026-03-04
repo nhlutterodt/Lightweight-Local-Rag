@@ -14,8 +14,8 @@ The application is strictly separated into three concerns:
 
 ### Tier 1: Client (Presentation Layer)
 
-- **Technology:** Vanilla HTML, CSS, and modular JavaScript (`type="module"`).
-- **Rationale:** Zero build-step complexity. Extremely lightweight footprint. No heavy frameworks (React/Vue) translates to instant browser rendering.
+- **Technology:** React, Vite.
+- **Rationale:** Managing complex UI states, active Server-Sent Events (SSE), and LLM reasoning processes in real-time requires a declarative framework. While this represents a departure from the original "extremely lightweight" vanilla JS philosophy and significantly increases the overall disk footprint (Docker images, node_modules), it provides vital UI stability and developer ergonomics.
 - **Responsibilities:**
   - Rendering the chat UI and streaming reasoning/response tokens.
   - Managing the ingestion queue UI and polling status.
