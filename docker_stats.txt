@@ -1,0 +1,204 @@
+REPOSITORY                        TAG           IMAGE ID       CREATED        SIZE
+local-rag-project-v2-server       latest        3cea11ddbb4d   35 hours ago   1.92GB
+<none>                            <none>        f767f82239d5   35 hours ago   1.92GB
+<none>                            <none>        aaa6c165bf46   36 hours ago   1.67GB
+<none>                            <none>        eb850653b304   36 hours ago   1.67GB
+local-rag-project-v2-client       latest        8102fa15371b   36 hours ago   62.3MB
+<none>                            <none>        761aecfdf908   37 hours ago   1.67GB
+<none>                            <none>        ff0dfdfe28a5   37 hours ago   1.67GB
+<none>                            <none>        ee33cfc05f6e   38 hours ago   1.72GB
+<none>                            <none>        4d0cce0980e9   38 hours ago   62.3MB
+ollama/ollama                     latest        8c0563143ff7   2 days ago     5.66GB
+node                              20-bookworm   c8a14e7e1d58   2 months ago   1.1GB
+local-rag-project-demo-api        latest        db6031397f73   3 months ago   2.61GB
+<none>                            <none>        6c1832794a1b   3 months ago   2.61GB
+ollama-local-rag-api              latest        fdc01372aa91   3 months ago   1.26GB
+<none>                            <none>        fbc7ee0bc5e7   3 months ago   1.26GB
+<none>                            <none>        4aed1cfbd990   3 months ago   1.28GB
+<none>                            <none>        9331c373f79f   3 months ago   161MB
+local-rag-project-demo-mock-llm   latest        d9f885698f7d   3 months ago   161MB
+prom/prometheus                   latest        a683da769912   4 months ago   370MB
+Images space usage:
+
+REPOSITORY                        TAG           IMAGE ID       CREATED        SIZE      SHARED SIZE   UNIQUE SIZE   CONTAINERS
+local-rag-project-v2-server       latest        3cea11ddbb4d   35 hours ago   1.92GB    198.8MB       1.722GB       1
+<none>                            <none>        f767f82239d5   35 hours ago   1.92GB    210.9MB       1.71GB        0
+<none>                            <none>        aaa6c165bf46   36 hours ago   1.67GB    1.34GB        328.5MB       0
+<none>                            <none>        eb850653b304   36 hours ago   1.67GB    1.34GB        328.5MB       0
+local-rag-project-v2-client       latest        8102fa15371b   36 hours ago   62.3MB    62.12MB       217.8kB       1
+<none>                            <none>        761aecfdf908   37 hours ago   1.67GB    1.34GB        328.5MB       0
+<none>                            <none>        ff0dfdfe28a5   37 hours ago   1.67GB    1.34GB        328.5MB       0
+<none>                            <none>        ee33cfc05f6e   38 hours ago   1.72GB    1.34GB        381.3MB       0
+<none>                            <none>        4d0cce0980e9   38 hours ago   62.3MB    62.12MB       216.8kB       0
+ollama/ollama                     latest        8c0563143ff7   2 days ago     5.66GB    0B            5.66GB        2
+node                              20-bookworm   c8a14e7e1d58   2 months ago   1.1GB     0B            1.096GB       1
+local-rag-project-demo-api        latest        db6031397f73   3 months ago   2.61GB    1.262GB       1.347GB       1
+<none>                            <none>        6c1832794a1b   3 months ago   2.61GB    1.262GB       1.347GB       0
+ollama-local-rag-api              latest        fdc01372aa91   3 months ago   1.26GB    565.2MB       690.5MB       0
+<none>                            <none>        fbc7ee0bc5e7   3 months ago   1.26GB    565.2MB       690.5MB       0
+<none>                            <none>        4aed1cfbd990   3 months ago   1.28GB    124.8MB       1.16GB        0
+<none>                            <none>        9331c373f79f   3 months ago   161MB     124.8MB       36.07MB       0
+local-rag-project-demo-mock-llm   latest        d9f885698f7d   3 months ago   161MB     124.5MB       36.07MB       1
+prom/prometheus                   latest        a683da769912   4 months ago   370MB     0B            369.6MB       1
+
+Containers space usage:
+
+CONTAINER ID   IMAGE                             COMMAND                  LOCAL VOLUMES   SIZE      CREATED        STATUS                      NAMES
+72bdb96d43ad   local-rag-project-v2-server       "./entrypoint.sh"        2               55.1kB    35 hours ago   Up 35 hours                 local-rag-project-v2-server-1
+9248b60eca9b   ollama/ollama:latest              "sh -c 'sleep 5 &&  …"   0               0B        36 hours ago   Exited (0) 36 hours ago     local-rag-project-v2-ollama-init-1
+60dbb464d8ff   ollama/ollama:latest              "/bin/ollama serve"      1               0B        36 hours ago   Up 36 hours                 local-rag-project-v2-ollama-1
+618c3e2f3b85   local-rag-project-v2-client       "/docker-entrypoint.…"   0               1.09kB    36 hours ago   Up 36 hours                 local-rag-project-v2-client-1
+693840bbc7dd   node:20-bookworm                  "docker-entrypoint.s…"   2               20MB      2 months ago   Exited (255) 2 months ago   2d-universal-stickman-lab-dev-1
+21450ac17a73   prom/prometheus:latest            "/bin/prometheus --c…"   1               0B        3 months ago   Exited (255) 2 months ago   ollama_local_rag_prometheus
+eaeba8e14be2   local-rag-project-demo-api        "uvicorn ollama_loca…"   0               1.68MB    3 months ago   Exited (255) 2 months ago   ollama_local_rag_api
+bb2a99a30fe2   local-rag-project-demo-mock-llm   "uvicorn app:app --h…"   0               0B        3 months ago   Exited (255) 2 months ago   ollama_local_rag_mock_llm
+
+Local Volumes space usage:
+
+VOLUME NAME                                                        LINKS     SIZE
+2d-universal-stickman-lab_node_modules                             1         84.54MB
+2d-universal-stickman-lab_pnpm_store                               1         0B
+5b5bcb3c3f4327bfae13ad26f40b224f20b5def099f25f97343f708c9e9480b5   1         1.491MB
+local-rag-project-v2_ollama_data                                   1         468B
+local-rag-project-v2_db_data                                       1         53.66MB
+local-rag-project-v2_ingest_data                                   1         108.6kB
+
+Build cache usage: 20.13GB
+
+CACHE ID       CACHE TYPE     SIZE      CREATED        LAST USED      USAGE     SHARED
+oquj9f73rok3   regular        0B        5 months ago   5 months ago   1         true
+giplbnejlcla   regular        0B        5 months ago   5 months ago   1         true
+wk4471v4835l   regular        0B        5 months ago   5 months ago   1         true
+dnopl4b7z47j   regular        464MB     5 months ago   5 months ago   1         false
+0wxcix71oc7m   regular        0B        5 months ago   5 months ago   1         false
+5nxgmdi9s5zn   regular        680B      5 months ago   5 months ago   1         false
+ntnoe1304zoe   regular        464MB     5 months ago   5 months ago   1         false
+oruco33i6bov   regular        680B      5 months ago   5 months ago   1         false
+rujjo3xb72gj   regular        0B        5 months ago   5 months ago   7         true
+uq2ftraqt54e   regular        0B        5 months ago   5 months ago   1         false
+ll825u5pjmgz   regular        464MB     5 months ago   5 months ago   1         false
+qvak9x4jiocz   source.local   1.49kB    5 months ago   5 months ago   4         false
+qn1wfi8aaa5u   source.local   0B        5 months ago   5 months ago   4         false
+uvias0pdgn0f   regular        0B        3 months ago   3 months ago   1         true
+qovbu732zhah   regular        0B        3 months ago   3 months ago   1         true
+noem1718w0u4   regular        0B        3 months ago   3 months ago   1         true
+wovtsvqzme5r   regular        0B        3 months ago   3 months ago   1         true
+pzbaoc2n7khg   regular        44B       3 months ago   3 months ago   1         true
+p989wgl83c0y   regular        36.1MB    3 months ago   3 months ago   1         true
+015hgd2k2gd9   regular        2.14kB    3 months ago   3 months ago   1         false
+lt44w2cxwe34   regular        0B        3 months ago   3 months ago   2         true
+5g0qxgd4xef1   regular        4.3kB     3 months ago   3 months ago   1         true
+rcc69r2flt29   regular        0B        3 months ago   3 months ago   1         true
+tfvcz35zffag   regular        470MB     3 months ago   3 months ago   1         false
+v1sk7qsiahvl   regular        689MB     3 months ago   3 months ago   1         false
+ffs95uhie4w2   regular        36.1MB    3 months ago   3 months ago   1         true
+vc92vu1xpn03   regular        0B        3 months ago   3 months ago   1         true
+p843y6r181ij   regular        44B       3 months ago   3 months ago   1         true
+pv1pzrnym7am   regular        4.3kB     3 months ago   3 months ago   1         true
+72gdks6fthex   regular        2.22kB    3 months ago   3 months ago   1         true
+x0imkb6zkoq5   regular        689MB     3 months ago   3 months ago   1         false
+lceuu653f0kl   regular        0B        3 months ago   3 months ago   1         true
+z4oh5a197fob   regular        689MB     3 months ago   3 months ago   1         true
+jb32i2x1r9na   regular        471MB     3 months ago   3 months ago   2         true
+jas7d4lol2l9   source.local   0B        3 months ago   3 months ago   5         false
+pv6tatucwghy   source.local   627B      3 months ago   3 months ago   3         false
+yh5v9481z8ew   regular        1.26kB    3 months ago   3 months ago   3         true
+qffv1b385dyg   regular        690MB     3 months ago   3 months ago   1         false
+v5gxx1nz6wlf   regular        0B        5 months ago   3 months ago   5         false
+2godvaacs3pe   regular        7.48GB    5 months ago   3 months ago   2         false
+kwk445gf8p7q   regular        7.48GB    5 months ago   3 months ago   2         false
+ttk28gdp8nvm   regular        0B        3 months ago   3 months ago   1         true
+q44gwic7mvwa   regular        0B        3 months ago   3 months ago   1         true
+xbqls6fy56l3   regular        0B        3 months ago   3 months ago   1         true
+ke34rv3y3jdj   regular        0B        3 months ago   3 months ago   1         true
+fz3mtik0vjtb   regular        0B        3 months ago   3 months ago   1         true
+7e84vl016v74   regular        0B        3 months ago   3 months ago   1         true
+otzgthkwqmyd   regular        0B        3 months ago   3 months ago   1         true
+rdzgu1e81zt5   regular        0B        3 months ago   3 months ago   1         true
+hsnocokaljnt   regular        0B        3 months ago   3 months ago   1         true
+v374iexwrqhc   regular        0B        3 months ago   3 months ago   1         true
+8proeewmvdgi   regular        0B        3 months ago   3 months ago   1         true
+ifeqlob2rxih   regular        0B        3 months ago   3 months ago   1         true
+ljysvmm0nnff   regular        223B      3 months ago   3 months ago   1         true
+v4tkvmw4kswl   regular        471MB     3 months ago   3 months ago   1         true
+60mgzwcxrb09   regular        691MB     3 months ago   3 months ago   1         true
+ryn2czmt2lac   regular        0B        3 months ago   3 months ago   2         true
+s528s4zi1uxt   regular        0B        3 months ago   3 months ago   1         true
+pd19bx3vuam2   regular        691MB     3 months ago   3 months ago   1         true
+j1fzqhnjxavp   regular        1.35GB    3 months ago   3 months ago   1         true
+khdtw4zfhozs   regular        2.26kB    3 months ago   3 months ago   1         true
+orcqju2ov9dg   source.local   301B      3 months ago   3 months ago   6         false
+peahbh28fcmq   source.local   0B        3 months ago   3 months ago   6         false
+sz808zoz59fc   regular        1.26kB    3 months ago   3 months ago   3         true
+xhs76yo2vgob   source.local   1.26kB    3 months ago   3 months ago   6         false
+4ybvgnbqqs88   source.local   627B      3 months ago   3 months ago   13        false
+l894zkkpfm5a   source.local   689MB     3 months ago   3 months ago   8         false
+6jc0e846311f   source.local   0B        3 months ago   3 months ago   10        false
+eclny6fcnk6f   regular        1.14GB    3 months ago   3 months ago   2         true
+pik1n9ms4ufc   regular        1.35GB    3 months ago   3 months ago   1         true
+fwkcz288lszl   regular        0B        38 hours ago   38 hours ago   1         true
+4pwyqx5lstou   regular        0B        38 hours ago   38 hours ago   1         true
+8wf3lsnuzm4g   regular        0B        38 hours ago   38 hours ago   1         true
+px7sr1y2ii7g   regular        0B        38 hours ago   38 hours ago   1         true
+agk1lvz0ucem   regular        0B        38 hours ago   38 hours ago   1         true
+5arqrd8g0ytt   regular        0B        38 hours ago   38 hours ago   1         true
+wkdgk2ls4wi1   regular        0B        38 hours ago   38 hours ago   1         true
+zf5cnhxzgbec   regular        0B        38 hours ago   38 hours ago   1         true
+bm1dq5ll2vmg   regular        0B        38 hours ago   38 hours ago   1         true
+mo97ij4ma0as   regular        0B        38 hours ago   38 hours ago   1         true
+nwgwmnl39c3x   regular        0B        38 hours ago   38 hours ago   1         true
+iws4kz1i7gmf   regular        82.3MB    38 hours ago   38 hours ago   1         false
+n44im6abbou0   regular        100kB     38 hours ago   38 hours ago   1         false
+yb43n69vwcqb   regular        61kB      38 hours ago   38 hours ago   1         false
+xley8ourwf1e   regular        100kB     38 hours ago   38 hours ago   1         false
+ltw4bux239wd   regular        0B        38 hours ago   38 hours ago   2         false
+th1ovxn4ukrk   regular        217kB     38 hours ago   38 hours ago   1         false
+502b995j1q62   regular        61kB      38 hours ago   38 hours ago   1         false
+hyfh302vf7gr   regular        246kB     38 hours ago   38 hours ago   1         true
+heimugr4iecy   regular        0B        38 hours ago   38 hours ago   1         true
+t7iy9xdwt24h   regular        344B      38 hours ago   38 hours ago   1         true
+qv78pvvm7a33   regular        12.1MB    38 hours ago   38 hours ago   1         true
+vxwn3m34pnzo   regular        381MB     38 hours ago   38 hours ago   1         true
+q6646gccdph9   regular        0B        37 hours ago   37 hours ago   1         true
+db41pkn61bcm   regular        328MB     37 hours ago   37 hours ago   1         true
+le312818uus6   regular        344B      37 hours ago   37 hours ago   1         true
+mx64ce7qcvn0   regular        217kB     38 hours ago   37 hours ago   3         true
+jkm0h8zc6g5e   regular        328MB     37 hours ago   37 hours ago   1         true
+bwz64t4s4v46   regular        344B      37 hours ago   37 hours ago   1         true
+393a3af0benu   regular        0B        37 hours ago   37 hours ago   1         true
+5uz0mc4phyrp   regular        0B        38 hours ago   36 hours ago   3         true
+5841jtaey60i   regular        82.3MB    38 hours ago   36 hours ago   2         false
+qg17s7cyaspy   regular        102kB     36 hours ago   36 hours ago   1         false
+uo100drzqqim   regular        218kB     36 hours ago   36 hours ago   1         false
+mxddx880hflc   regular        328MB     36 hours ago   36 hours ago   1         true
+b993dc49bj7y   regular        0B        36 hours ago   36 hours ago   1         true
+zi73d86hsep1   regular        344B      36 hours ago   36 hours ago   1         true
+jxyg1fwlmk5e   source.local   242B      38 hours ago   36 hours ago   6         false
+ws7q9dmoqqk4   regular        218kB     36 hours ago   36 hours ago   2         true
+vpwc5pvfasob   source.local   100kB     38 hours ago   36 hours ago   6         false
+ties24rg21jm   source.local   29B       38 hours ago   36 hours ago   6         false
+nhyo63leqri6   regular        1.13GB    38 hours ago   36 hours ago   5         true
+j3ne8lic4d75   regular        328MB     36 hours ago   36 hours ago   1         true
+y9femy8s65m4   regular        0B        36 hours ago   36 hours ago   1         true
+xl5uskwyn5qq   regular        344B      36 hours ago   36 hours ago   1         true
+pcwe95p51usd   regular        0B        35 hours ago   35 hours ago   1         true
+a0bwzhq331y8   regular        253kB     35 hours ago   35 hours ago   1         true
+xdrbjdur770w   regular        423MB     35 hours ago   35 hours ago   1         true
+ytxjj9ucv9dk   regular        0B        38 hours ago   35 hours ago   2         true
+bjl8iy6i8x3l   regular        1.29GB    35 hours ago   35 hours ago   1         true
+nzf9umaqwf74   regular        344B      35 hours ago   35 hours ago   1         true
+2acua4vjayao   regular        0B        38 hours ago   35 hours ago   3         true
+gljqebjiwox9   regular        423MB     35 hours ago   35 hours ago   1         true
+k36dzddm9t2n   regular        344B      35 hours ago   35 hours ago   1         true
+9iiozbc63g4i   source.local   381MB     38 hours ago   35 hours ago   7         false
+1vi5dqkberrf   regular        1.29GB    35 hours ago   35 hours ago   1         true
+bd6rrff3luwe   regular        0B        35 hours ago   35 hours ago   1         true
+bycteybax8v4   source.local   679B      38 hours ago   35 hours ago   8         false
+2gu7uo8px2dj   source.local   54B       38 hours ago   35 hours ago   8         false
+tbqxiiahlbh6   regular        253kB     35 hours ago   35 hours ago   1         true
+phff82lws4ry   regular        12.1MB    35 hours ago   35 hours ago   1         true
+tb5dkh5877sg   regular        0B        35 hours ago   35 hours ago   1         true
+CONTAINER ID   IMAGE                         COMMAND                  CREATED        STATUS        PORTS                                         NAMES                           SIZE
+72bdb96d43ad   local-rag-project-v2-server   "./entrypoint.sh"        35 hours ago   Up 35 hours   0.0.0.0:3001->3001/tcp, [::]:3001->3001/tcp   local-rag-project-v2-server-1   55.1kB (virtual 1.92GB)
+60dbb464d8ff   ollama/ollama:latest          "/bin/ollama serve"      36 hours ago   Up 36 hours   11434/tcp                                     local-rag-project-v2-ollama-1   0B (virtual 5.66GB)
+618c3e2f3b85   local-rag-project-v2-client   "/docker-entrypoint.…"   36 hours ago   Up 36 hours   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp       local-rag-project-v2-client-1   1.09kB (virtual 62.3MB)
