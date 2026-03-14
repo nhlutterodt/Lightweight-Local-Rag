@@ -46,11 +46,16 @@ describe("SmartTextChunker", () => {
   });
 
   describe("File-Type Dispatching", () => {
-    it("should route powershell and js files to splitCode", () => {
-      const spy = jest.spyOn(chunker, "splitCode").mockReturnValue([]);
+    it("should route powershell files to splitPowerShell", () => {
+      const spy = jest.spyOn(chunker, "splitPowerShell").mockReturnValue([]);
       chunker.dispatchByExtension("test.ps1", "function a() {}");
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it("should route js files to splitJavaScript", () => {
+      const spy = jest.spyOn(chunker, "splitJavaScript").mockReturnValue([]);
       chunker.dispatchByExtension("test.js", "function a() {}");
-      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveBeenCalledTimes(1);
     });
 
     it("should route xml files to splitXml", () => {
@@ -73,7 +78,7 @@ describe("SmartTextChunker", () => {
     });
   });
 
-  describe("Code Chunker", () => {
+  describe("JavaScript Chunker", () => {
     it("should split code by function boundaries", () => {
       const code = `
 // Preamble comments
@@ -86,37 +91,78 @@ class World {
 }
       `.trim();
 
-      const chunks = chunker.splitCode(code, "test.js");
+      const chunks = chunker.splitJavaScript(code, "test.js");
       expect(chunks.length).toBe(4);
       expect(chunks[0].headerContext).toBe("test.js > Preamble");
       expect(chunks[1].headerContext).toBe("test.js > a");
       expect(chunks[2].headerContext).toBe("test.js > hello");
       expect(chunks[3].headerContext).toBe("test.js > World");
+      expect(chunks[1].chunkType).toBe("javascript-block");
+      expect(chunks[1].fileType).toBe("javascript");
     });
 
     it("should fallback to plain text if no code boundaries exist", () => {
       const code = `window.alert("Hello"); console.log("Test");`;
       const spy = jest.spyOn(chunker, "splitPlainText");
-      chunker.splitCode(code, "test.js");
+      chunker.splitJavaScript(code, "test.js");
       expect(spy).toHaveBeenCalled();
     });
 
     it("should handle empty or whitespace-only code", () => {
-      expect(chunker.splitCode("", "test.js")).toEqual([]);
-      expect(chunker.splitCode("   \n", "test.js")).toEqual([]);
+      expect(chunker.splitJavaScript("", "test.js")).toEqual([]);
+      expect(chunker.splitJavaScript("   \n", "test.js")).toEqual([]);
+    });
+  });
+
+  describe("PowerShell Chunker", () => {
+    it("should split powershell scripts by param/function/class/filter boundaries", () => {
+      const ps = `
+param(
+  [string]$Name
+)
+
+function Get-Thing {
+  param([string]$Input)
+  return $Input
+}
+
+class Worker {
+  [string] Run() { return "ok" }
+}
+
+filter Normalize-Value {
+  $_.Trim()
+}
+      `.trim();
+
+      const chunks = chunker.splitPowerShell(ps, "test.ps1");
+      const contexts = chunks.map((c) => c.headerContext);
+
+      expect(contexts).toContain("test.ps1 > param");
+      expect(contexts).toContain("test.ps1 > function:Get-Thing");
+      expect(contexts).toContain("test.ps1 > class:Worker");
+      expect(contexts).toContain("test.ps1 > filter:Normalize-Value");
+      expect(chunks.every((c) => c.fileType === "powershell")).toBe(true);
+    });
+
+    it("should fallback to plain text when no declaration boundaries are found", () => {
+      const ps = `$value = "hello"`;
+      const spy = jest.spyOn(chunker, "splitPlainText");
+      chunker.splitPowerShell(ps, "test.ps1");
+      expect(spy).toHaveBeenCalled();
     });
   });
 
   describe("XML Chunker", () => {
-    it("should split XML by closing tags", () => {
-      const xml = `<root>\n<item>1</item>\n<item>2</item>\n</root>`;
+    it("should split PowerShell log XML by LogEntry blocks", () => {
+      const xml = `<PowerShellLog><LogEntry timestamp="1"><Message>A</Message></LogEntry><LogEntry timestamp="2"><Message>B</Message></LogEntry></PowerShellLog>`;
 
       const chunks = chunker.splitXml(xml, "test.xml");
 
-      expect(chunks.length).toBe(3);
-      expect(chunks[0].headerContext).toBe("test.xml > <item>");
-      expect(chunks[1].headerContext).toBe("test.xml > <item>");
-      expect(chunks[2].headerContext).toBe("test.xml > <root>");
+      expect(chunks.length).toBe(2);
+      expect(chunks[0].headerContext).toBe("test.xml > LogEntry:0");
+      expect(chunks[1].headerContext).toBe("test.xml > LogEntry:1");
+      expect(chunks[0].chunkType).toBe("xml-logentry");
     });
 
     it("should chunk remaining text as trailing context", () => {
@@ -143,6 +189,8 @@ class World {
       expect(chunks.length).toBe(1);
       expect(chunks[0].headerContext).toBe("test.txt");
       expect(chunks[0].text).toBe("Hello world");
+      expect(chunks[0].fileType).toBe("text");
+      expect(chunks[0].chunkType).toBe("text-block");
     });
 
     it("should handle empty text", () => {
@@ -175,6 +223,32 @@ Body 3
       const chunks = chunker.splitMarkdown(md);
       expect(chunks.length).toBe(1);
       expect(chunks[0].headerContext).toBe("Markdown Document");
+    });
+
+    it("should keep fenced code blocks cohesive when splitting sections", () => {
+      const smallChunker = new SmartTextChunker(80, 10);
+      const md = `
+# Intro
+
+Paragraph before code.
+
+    \`\`\`powershell
+Get-Process
+
+Get-Service
+    \`\`\`
+
+Paragraph after code.
+      `.trim();
+
+      const chunks = smallChunker.splitMarkdown(md);
+      const codeChunk = chunks.find((chunk) => chunk.text.includes("```powershell"));
+
+      expect(codeChunk).toBeDefined();
+      expect(codeChunk.text).toContain("Get-Process");
+      expect(codeChunk.text).toContain("Get-Service");
+      expect(codeChunk.chunkType).toBe("markdown-section");
+      expect(codeChunk.fileType).toBe("markdown");
     });
 
     it("should handle empty text", () => {

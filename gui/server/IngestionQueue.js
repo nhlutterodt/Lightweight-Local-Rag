@@ -251,6 +251,13 @@ class IngestionQueue extends EventEmitter {
             ChunkIndex: i,
             Text: smartChunk.text,
             HeaderContext: smartChunk.headerContext || "None",
+            FileType:
+              smartChunk.fileType ||
+              path.extname(fileName).replace(".", "") ||
+              "text",
+            ChunkType: smartChunk.chunkType || "content",
+            StructuralPath:
+              smartChunk.structuralPath || smartChunk.headerContext || "None",
             EmbeddingModel: model,
           };
 

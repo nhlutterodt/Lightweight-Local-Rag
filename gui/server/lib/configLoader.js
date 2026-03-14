@@ -83,8 +83,10 @@ const DEFAULTS = {
     ChunkSize: 1000,
     ChunkOverlap: 200,
     TopK: 5,
-    MinScore: 0.5,
+    MinScore: 0.003,
     MaxContextTokens: 2048,
+    RetrievalMode: "vector",
+    FilteredVectorOverfetch: 4,
   },
   Metadata: {
     ConfigVersion: "1.0.0",

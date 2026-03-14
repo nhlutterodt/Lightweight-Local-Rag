@@ -109,7 +109,7 @@ RAG = @{
     ChunkSize        = 1000
     ChunkOverlap     = 200
     TopK             = 5
-    MinScore         = 0.5
+    MinScore         = 0.003
     MaxContextTokens = 2048
 }
 ```
@@ -129,7 +129,7 @@ Every `/api/chat` request appends one JSONL entry. Schema:
   "embeddingModel": "nomic-embed-text",
   "chatModel": "llama3.1:8b",
   "topK": 5,
-  "minScore": 0.5,
+  "minScore": 0.003,
   "resultCount": 3,
   "lowConfidence": false,
   "results": [
@@ -144,6 +144,8 @@ Every `/api/chat` request appends one JSONL entry. Schema:
 }
 ```
 
+`score` is a normalized higher-is-better relevance value derived from LanceDB distance.
+`resultCount` counts the results that survive thresholding and context-budget enforcement.
 `lowConfidence: true` when `resultCount === 0` or top score < `MinScore + 0.1`.
 Log writes are fire-and-forget — never awaited in the request path.
 

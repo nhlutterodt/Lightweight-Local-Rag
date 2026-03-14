@@ -11,6 +11,11 @@ import IngestionQueue from "./IngestionQueue.js";
 import { VectorStore } from "./lib/vectorStore.js";
 import { embed, chatStream } from "./lib/ollamaClient.js";
 import { QueryLogger } from "./lib/queryLogger.js";
+import {
+  RETRIEVAL_MODES,
+  buildRetrievalPlan,
+  normalizeRetrievalMode,
+} from "./lib/retrievalModes.js";
 import { getSystemHealth } from "./lib/healthCheck.js";
 import { bridgeLogger } from "./lib/xmlLogger.js";
 import * as lancedb from "@lancedb/lancedb";
@@ -428,6 +433,8 @@ app.post("/api/chat", async (req, res) => {
     messages,
     collection = "TestIngest",
     model = config?.RAG?.ChatModel || "llama3.1:8b",
+    retrievalMode = config?.RAG?.RetrievalMode || RETRIEVAL_MODES.VECTOR,
+    retrievalConstraints = null,
   } = req.body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -438,7 +445,33 @@ app.post("/api/chat", async (req, res) => {
     return res.status(400).json({ error: "Invalid collection name" });
   }
 
+  const requestedRetrievalMode =
+    typeof retrievalMode === "string" ? retrievalMode.trim().toLowerCase() : "";
+
+  const resolvedRetrievalMode = normalizeRetrievalMode(
+    requestedRetrievalMode || retrievalMode,
+    config?.RAG?.RetrievalMode || RETRIEVAL_MODES.VECTOR,
+  );
+
+  if (
+    requestedRetrievalMode &&
+    ![RETRIEVAL_MODES.VECTOR, RETRIEVAL_MODES.FILTERED_VECTOR].includes(
+      requestedRetrievalMode,
+    )
+  ) {
+    return res.status(400).json({
+      error:
+        "Invalid retrievalMode. Allowed values: vector, filtered-vector.",
+    });
+  }
+
   const lastUserMessage = messages[messages.length - 1].content;
+  const retrievalPlan = buildRetrievalPlan({
+    mode: resolvedRetrievalMode,
+    query: lastUserMessage,
+    constraints: retrievalConstraints,
+    overfetchFactor: config?.RAG?.FilteredVectorOverfetch || 4,
+  });
 
   try {
     console.log(
@@ -486,13 +519,16 @@ app.post("/api/chat", async (req, res) => {
       queryVector,
       config.RAG.TopK,
       config.RAG.MinScore,
+      retrievalPlan.vectorOptions,
     );
     const searchMs = performance.now() - tSearchStart;
 
-    // 2. Build Context with Pre-flight Token Budget Enforcement
+    // 2. Build Context with pre-flight token budget enforcement
     // Rough estimate: 1 word ≈ 1.3 tokens.
-    // We aim to keep total context well under an 8k limit (e.g. 4000 max context tokens)
-    const MAX_CONTEXT_TOKENS = 4000;
+    const maxContextTokens = Math.max(
+      1,
+      config?.RAG?.MaxContextTokens || 2048,
+    );
     let currentTokenEstimate = 0;
     const approvedResults = [];
 
@@ -500,7 +536,7 @@ app.post("/api/chat", async (req, res) => {
       const chunkWords = (r.ChunkText || r.TextPreview || "").split(" ").length;
       const chunkTokens = Math.ceil(chunkWords * 1.3);
 
-      if (currentTokenEstimate + chunkTokens > MAX_CONTEXT_TOKENS) {
+      if (currentTokenEstimate + chunkTokens > maxContextTokens) {
         console.warn(
           `[RAG Context] Dropped citation ${r.FileName} to enforce token budget limit.`,
         );
@@ -536,10 +572,11 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     // 3. Compute Logging Data
-    const topScore = results.length > 0 ? results[0].score : 0;
+    const topScore = approvedResults.length > 0 ? approvedResults[0].score : 0;
     const minScoreThresh = config?.RAG?.MinScore || 0.5;
     const lowConfidence =
-      results.length === 0 || topScore < minScoreThresh + 0.1;
+      approvedResults.length === 0 ||
+      topScore < Math.min(1, minScoreThresh + 0.1);
 
     const logEntry = {
       timestamp: new Date().toISOString(),
@@ -548,7 +585,10 @@ app.post("/api/chat", async (req, res) => {
       chatModel: model,
       topK: config?.RAG?.TopK || 5,
       minScore: minScoreThresh,
-      resultCount: results.length,
+      retrievalMode: resolvedRetrievalMode,
+      constraintsActive: retrievalPlan.constraintsActive,
+      retrievalOverfetchFactor: retrievalPlan.appliedOverfetchFactor || 1,
+      resultCount: approvedResults.length,
       results: logResults,
       lowConfidence: lowConfidence,
     };

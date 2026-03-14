@@ -56,7 +56,7 @@ All `data:` payloads **must** be valid JSON. The client parses every line with `
 | `citations`                 | `array`      | Retrieved document chunks             |
 | `citations[].fileName`      | `string`     | **Must be `fileName`, not `file`**    |
 | `citations[].headerContext` | `string`     | Breadcrumb path from SmartTextChunker |
-| `citations[].score`         | `number`     | Cosine similarity (0–1)               |
+| `citations[].score`         | `number`     | Normalized relevance score (0–1], higher is better |
 | `citations[].preview`       | `string`     | First ~100 chars of chunk text        |
 
 ### 3. Token Event (repeated)

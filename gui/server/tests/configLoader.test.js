@@ -160,6 +160,8 @@ describe("loadConfig() — file found", () => {
     expect(typeof config.RAG.OllamaUrl).toBe("string");
     expect(typeof config.RAG.MinScore).toBe("number");
     expect(typeof config.RAG.MaxContextTokens).toBe("number");
+    expect(typeof config.RAG.RetrievalMode).toBe("string");
+    expect(typeof config.RAG.FilteredVectorOverfetch).toBe("number");
   });
 });
 

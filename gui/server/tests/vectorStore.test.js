@@ -18,30 +18,39 @@ function buildMockResults() {
     {
       _distance: 0.1, // LanceDB returns distance, not score directly
       FileName: "doc1.md",
+      FileType: "markdown",
       ChunkIndex: 0,
       ChunkText: "Full text of chunk one with complete content.",
       TextPreview: "Full text of chunk one...",
       HeaderContext: "Doc1 > Introduction",
+      ChunkType: "paragraph",
+      StructuralPath: "Doc1 > Introduction",
       EmbeddingModel: EMBEDDING_MODEL,
       vector: [1, 1, 1, 1],
     },
     {
       _distance: 0.5,
       FileName: "doc2.md",
+      FileType: "markdown",
       ChunkIndex: 0,
       ChunkText: "Full text of chunk two with complete content.",
       TextPreview: "Full text of chunk two...",
       HeaderContext: "Doc2 > Overview",
+      ChunkType: "paragraph",
+      StructuralPath: "Doc2 > Overview",
       EmbeddingModel: EMBEDDING_MODEL,
       vector: [0.5, 0.5, 0.5, 0.5],
     },
     {
       _distance: 0.9,
-      FileName: "doc3.md",
+      FileName: "script.ps1",
+      FileType: "powershell",
       ChunkIndex: 1,
       ChunkText: "Full text of chunk three with complete content.",
       TextPreview: "Full text of chunk three...",
       HeaderContext: "Doc3 > Details",
+      ChunkType: "declaration",
+      StructuralPath: "Script > Function",
       EmbeddingModel: EMBEDDING_MODEL,
       vector: [0.1, 0.1, 0.1, 0.1],
     },
@@ -89,11 +98,29 @@ describe("VectorStore (LanceDB Wrapper)", () => {
       expect(Array.isArray(results)).toBe(true);
     });
 
-    it("results should have score mapped from LanceDB _distance", () => {
+    it("results should have normalized higher-is-better relevance scores", () => {
       for (const r of results) {
         expect(typeof r.score).toBe("number");
         expect(r.score).toBeGreaterThanOrEqual(0);
+        expect(r.score).toBeLessThanOrEqual(1);
       }
+
+      expect(results[0].score).toBeCloseTo(1 / 1.1, 5);
+      expect(results[1].score).toBeCloseTo(1 / 1.5, 5);
+      expect(results[2].score).toBeCloseTo(1 / 1.9, 5);
+    });
+
+    it("should keep results sorted by descending relevance score", () => {
+      expect(results[0].score).toBeGreaterThan(results[1].score);
+      expect(results[1].score).toBeGreaterThan(results[2].score);
+    });
+
+    it("should apply MinScore against the normalized relevance score", async () => {
+      const queryVec = new Float32Array(DIMS);
+      const filteredResults = await store.findNearest(queryVec, 5, 0.7);
+
+      expect(filteredResults).toHaveLength(1);
+      expect(filteredResults[0].FileName).toBe("doc1.md");
     });
 
     it("results should have ChunkText (string)", () => {
@@ -128,6 +155,28 @@ describe("VectorStore (LanceDB Wrapper)", () => {
       for (const r of results) {
         expect(typeof r.HeaderContext).toBe("string");
       }
+    });
+
+    it("results should include ingestion metadata fields for retrieval modes", () => {
+      for (const r of results) {
+        expect(typeof r.FileType).toBe("string");
+        expect(typeof r.ChunkType).toBe("string");
+        expect(typeof r.StructuralPath).toBe("string");
+      }
+    });
+
+    it("supports strict metadata filtering in filtered-vector mode", async () => {
+      const queryVec = new Float32Array(DIMS);
+      const filteredResults = await store.findNearest(queryVec, 5, 0, {
+        overfetchFactor: 4,
+        strictFilter: true,
+        metadataFilters: {
+          fileTypeEquals: "powershell",
+        },
+      });
+
+      expect(filteredResults).toHaveLength(1);
+      expect(filteredResults[0].FileName).toBe("script.ps1");
     });
   });
 

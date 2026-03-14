@@ -5,12 +5,104 @@ import * as lancedb from "@lancedb/lancedb";
  * Replaces the legacy `.vectors.bin` flat-file architecture.
  */
 export class VectorStore {
+  static distanceToScore(distance) {
+    const numericDistance = Number(distance);
+
+    if (!Number.isFinite(numericDistance)) {
+      return 0;
+    }
+
+    // Normalize LanceDB distance into a stable higher-is-better relevance score.
+    return 1 / (1 + Math.max(0, numericDistance));
+  }
+
   constructor() {
     this.db = null;
     this.table = null;
     this.dims = 0;
     this.model = null;
     this.isReady = false;
+  }
+
+  static normalizeString(value) {
+    if (typeof value !== "string") {
+      return "";
+    }
+
+    return value.trim().toLowerCase();
+  }
+
+  static hasFilters(filters) {
+    if (!filters || typeof filters !== "object") {
+      return false;
+    }
+
+    return Boolean(
+      filters.fileNameContains || filters.fileTypeEquals || filters.headerContains,
+    );
+  }
+
+  static matchMetadataFilters(row, filters) {
+    if (!VectorStore.hasFilters(filters)) {
+      return { matched: true, matchedFields: [] };
+    }
+
+    const fileName = VectorStore.normalizeString(row.FileName);
+    const fileType = VectorStore.normalizeString(row.FileType);
+    const headerContext = VectorStore.normalizeString(row.HeaderContext);
+    const matchedFields = [];
+
+    if (filters.fileNameContains) {
+      const target = VectorStore.normalizeString(filters.fileNameContains);
+      if (!fileName.includes(target)) {
+        return { matched: false, matchedFields: matchedFields };
+      }
+      matchedFields.push("fileName");
+    }
+
+    if (filters.fileTypeEquals) {
+      const target = VectorStore.normalizeString(filters.fileTypeEquals);
+      if (fileType !== target) {
+        return { matched: false, matchedFields: matchedFields };
+      }
+      matchedFields.push("fileType");
+    }
+
+    if (filters.headerContains) {
+      const target = VectorStore.normalizeString(filters.headerContains);
+      if (!headerContext.includes(target)) {
+        return { matched: false, matchedFields: matchedFields };
+      }
+      matchedFields.push("headerContext");
+    }
+
+    return {
+      matched: true,
+      matchedFields,
+    };
+  }
+
+  static computeBoost(matchedFields, boosts) {
+    if (!Array.isArray(matchedFields) || matchedFields.length === 0 || !boosts) {
+      return 0;
+    }
+
+    let totalBoost = 0;
+    for (const field of matchedFields) {
+      if (field === "fileName") {
+        totalBoost += Number.isFinite(boosts.fileName) ? boosts.fileName : 0;
+      }
+      if (field === "fileType") {
+        totalBoost += Number.isFinite(boosts.fileType) ? boosts.fileType : 0;
+      }
+      if (field === "headerContext") {
+        totalBoost += Number.isFinite(boosts.headerContext)
+          ? boosts.headerContext
+          : 0;
+      }
+    }
+
+    return totalBoost;
   }
 
   /**
@@ -70,9 +162,9 @@ export class VectorStore {
    * Searches the LanceDB table using optimized IVF-PQ / Flat search.
    * @param {Float32Array|Array<number>} queryVec - The query vector
    * @param {number} topK - Maximum results to return
-   * @param {number} minScore - Optional cutoff score (Note: LanceDB uses distance, typically L2 or Cosine via its index)
+    * @param {number} minScore - Optional normalized relevance cutoff where higher is better
    */
-  async findNearest(queryVec, topK, minScore) {
+  async findNearest(queryVec, topK, minScore, options = {}) {
     if (!this.isReady || !this.table) {
       return [];
     }
@@ -84,28 +176,66 @@ export class VectorStore {
     }
 
     try {
+      const minRelevance = Number.isFinite(minScore) ? Math.max(0, minScore) : 0;
+      const requestedTopK = Number.isFinite(topK) ? Math.max(1, topK) : 5;
+      const overfetchFactor = Number.isFinite(options.overfetchFactor)
+        ? Math.min(10, Math.max(1, Math.floor(options.overfetchFactor)))
+        : 1;
+      const candidateLimit = requestedTopK * overfetchFactor;
+      const strictFilter = options.strictFilter === true;
+      const metadataFilters = options.metadataFilters || null;
+      const hasMetadataFilters = VectorStore.hasFilters(metadataFilters);
+      const boosts = options.boosts || null;
+      const shouldEvaluateMetadata = hasMetadataFilters || boosts !== null;
+
       // LanceDB native search array collapse
       const rawResults = await this.table
         .search(Array.from(queryVec))
-        .limit(topK)
+        .limit(candidateLimit)
         .toArray();
 
       const results = [];
 
       for (const r of rawResults) {
+        const score = VectorStore.distanceToScore(r._distance);
+        if (score < minRelevance) {
+          continue;
+        }
+
+        let rankingScore = score;
+        if (shouldEvaluateMetadata) {
+          const { matched, matchedFields } = VectorStore.matchMetadataFilters(
+            r,
+            metadataFilters,
+          );
+
+          if (strictFilter && hasMetadataFilters && !matched) {
+            continue;
+          }
+
+          rankingScore += VectorStore.computeBoost(matchedFields, boosts);
+        }
+
         // Map LanceDB generic response into the strict format expected by server.js / main.js
         results.push({
-          score: r._distance, // For now, pass distance down. Real cosine score mapping requires knowing the distance metric used during table creation.
+          score,
+          rankingScore,
           ChunkText: r.Text || r.ChunkText,
           TextPreview:
             r.TextPreview || (r.Text ? r.Text.substring(0, 150) + "..." : ""),
           FileName: r.FileName,
           ChunkIndex: r.ChunkIndex,
           HeaderContext: r.HeaderContext,
+          FileType: r.FileType,
+          ChunkType: r.ChunkType,
+          StructuralPath: r.StructuralPath,
         });
       }
 
-      return results;
+      return results
+        .sort((left, right) => right.rankingScore - left.rankingScore)
+        .slice(0, requestedTopK)
+        .map(({ rankingScore, ...result }) => result);
     } catch (err) {
       console.error("[VectorStore] Search Error:", err);
       return [];

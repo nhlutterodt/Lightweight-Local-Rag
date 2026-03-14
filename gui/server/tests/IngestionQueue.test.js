@@ -233,6 +233,14 @@ describe("IngestionQueue", () => {
         expect.stringContaining("file1.md"),
       );
       expect(mockTable.add).toHaveBeenCalled();
+      expect(mockTable.add).toHaveBeenCalledWith([
+        expect.objectContaining({
+          FileName: "file1.md",
+          FileType: "md",
+          ChunkType: "content",
+          StructuralPath: "Ctx",
+        }),
+      ]);
       expect(job.progress).toBe("Complete");
     });
 

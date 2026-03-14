@@ -139,7 +139,34 @@ Connects natively (via Node.js) to the local LanceDB directory to calculate logi
 
 ### POST `/api/chat` (SSE)
 
-The primary RAG inference capability. It embeds the message natively, retrieves chunks from LanceDB, enforces a pre-flight Context Token Budget (capped at ~4000 tokens) to protect Ollama's VRAM constraints, and streams the inference response.
+The primary RAG inference capability. It embeds the message natively, retrieves chunks from LanceDB, enforces a pre-flight Context Token Budget using `config.RAG.MaxContextTokens`, and streams the inference response.
+
+**Request (minimum):**
+
+```json
+{
+  "messages": [{ "role": "user", "content": "How does retrieval work?" }],
+  "collection": "TestIngestNodeFinal"
+}
+```
+
+**Request (Phase 3 retrieval mode controls):**
+
+```json
+{
+  "messages": [{ "role": "user", "content": "Show PowerShell chunking in Chat-Rag.ps1" }],
+  "collection": "TestIngestNodeFinal",
+  "retrievalMode": "filtered-vector",
+  "retrievalConstraints": {
+    "fileType": "powershell",
+    "fileName": "Chat-Rag.ps1",
+    "headerContext": "Chunking",
+    "strict": true
+  }
+}
+```
+
+`retrievalMode` accepts `vector` (default) and `filtered-vector`.
 
 **Recent Upgrades:**
 

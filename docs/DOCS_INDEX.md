@@ -26,6 +26,7 @@ audience: contributors
 - docs/active-drafts/Phase9_Chat_Design.md
 - docs/active-drafts/Phase10_WebUI_Design.md
 - docs/active-drafts/RAG_Pipeline_Backend_Assessment.md
+- docs/active-drafts/RAG_Retrieval_Redesign_Execution_Plan.md
 
 ## Historical (Authoritative Locations)
 - docs/historical/Project_Critique.md

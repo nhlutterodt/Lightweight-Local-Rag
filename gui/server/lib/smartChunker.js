@@ -1,10 +1,20 @@
 import path from "path";
 
 class SmartChunk {
-  constructor(text, headerContext, level = 0) {
+  constructor(
+    text,
+    headerContext,
+    level = 0,
+    chunkType = "content",
+    fileType = "unknown",
+    structuralPath = null,
+  ) {
     this.text = text;
     this.headerContext = headerContext;
     this.level = level;
+    this.chunkType = chunkType;
+    this.fileType = fileType;
+    this.structuralPath = structuralPath || headerContext;
   }
 }
 
@@ -18,6 +28,24 @@ class SmartTextChunker {
   static estimateTokens(text) {
     if (!text) return 0;
     return Math.floor(text.length / 4);
+  }
+
+  static deriveFileType(ext) {
+    switch (ext) {
+      case ".md":
+        return "markdown";
+      case ".ps1":
+      case ".psm1":
+        return "powershell";
+      case ".js":
+        return "javascript";
+      case ".xml":
+        return "xml";
+      case ".txt":
+        return "text";
+      default:
+        return "text";
+    }
   }
 
   // --- Sentence Boundary Detection ---
@@ -48,32 +76,34 @@ class SmartTextChunker {
   dispatchByExtension(filePath, content) {
     const ext = path.extname(filePath).toLowerCase();
     const fileName = path.basename(filePath);
+    const fileType = SmartTextChunker.deriveFileType(ext);
 
     switch (ext) {
       case ".ps1":
       case ".psm1":
+        return this.splitPowerShell(content, fileName);
       case ".js":
-        return this.splitCode(content, fileName);
+        return this.splitJavaScript(content, fileName);
       case ".xml":
         return this.splitXml(content, fileName);
       case ".md":
         return this.splitMarkdown(content);
       default:
         // .txt and all others — paragraph-split
-        return this.splitPlainText(content, fileName);
+        return this.splitPlainText(content, fileName, fileType);
     }
   }
 
-  // --- Code Chunker (JS/PS1) ---
+  // --- Code Chunker (JS) ---
   // Splits on top-level function/class keyword boundaries.
-  splitCode(content, fileName) {
+  splitJavaScript(content, fileName) {
     if (!content || !content.trim()) return [];
     content = content.replace(/\r\n/g, "\n");
 
     const chunks = [];
 
     // Match top-level function/class/const/let declarations
-    const pattern = /^(?:function|class|const|let)\s+/gm;
+    const pattern = /^\s*(?:function|class|const|let)\s+/gm;
     let match;
     const matches = [];
     while ((match = pattern.exec(content)) !== null) {
@@ -82,14 +112,18 @@ class SmartTextChunker {
 
     if (matches.length === 0) {
       // No function boundaries found — fall back to plain text
-      return this.splitPlainText(content, fileName);
+      return this.splitPlainText(content, fileName, "javascript");
     }
 
     // Capture any content before the first function (imports, comments, etc.)
     if (matches[0].index > 0) {
       const preamble = content.substring(0, matches[0].index).trim();
       if (preamble.length > 0) {
-        this.processSection(preamble, `${fileName} > Preamble`, chunks);
+        this.processSection(preamble, `${fileName} > Preamble`, chunks, {
+          fileType: "javascript",
+          chunkType: "javascript-preamble",
+          structuralPath: `${fileName} > Preamble`,
+        });
       }
     }
 
@@ -107,7 +141,88 @@ class SmartTextChunker {
       const name = nameMatch ? nameMatch[1] : `Block_${i}`;
       const context = `${fileName} > ${name}`;
 
-      this.processSection(section, context, chunks);
+      this.processSection(section, context, chunks, {
+        fileType: "javascript",
+        chunkType: "javascript-block",
+        structuralPath: context,
+      });
+    }
+
+    return chunks;
+  }
+
+  // --- PowerShell Chunker ---
+  // Splits on param/function/class/filter boundaries and attempts to keep
+  // comment-based help attached to the following declaration.
+  splitPowerShell(content, fileName) {
+    if (!content || !content.trim()) return [];
+    content = content.replace(/\r\n/g, "\n");
+
+    const chunks = [];
+    const boundaries = [];
+
+    const paramMatch = /^(?:\s*#.*\n|\s*<#[\s\S]*?#>\s*)*\s*param\s*\(/i.exec(
+      content,
+    );
+    if (paramMatch && paramMatch.index === 0) {
+      const paramOffset = paramMatch[0].toLowerCase().lastIndexOf("param");
+      boundaries.push({ index: Math.max(0, paramOffset), kind: "param", name: "param" });
+    }
+
+    const declRegex = /^\s*(function|class|filter)\s+([^\s{(]+)/gim;
+    let declMatch;
+    while ((declMatch = declRegex.exec(content)) !== null) {
+      boundaries.push({
+        index: declMatch.index,
+        kind: declMatch[1].toLowerCase(),
+        name: declMatch[2],
+      });
+    }
+
+    if (boundaries.length === 0) {
+      return this.splitPlainText(content, fileName, "powershell");
+    }
+
+    boundaries.sort((left, right) => left.index - right.index);
+
+    if (boundaries[0].index > 0) {
+      const preamble = content.substring(0, boundaries[0].index).trim();
+      if (preamble.length > 0) {
+        this.processSection(preamble, `${fileName} > Preamble`, chunks, {
+          fileType: "powershell",
+          chunkType: "powershell-preamble",
+          structuralPath: `${fileName} > Preamble`,
+        });
+      }
+    }
+
+    for (let i = 0; i < boundaries.length; i++) {
+      let start = boundaries[i].index;
+      const end =
+        i + 1 < boundaries.length ? boundaries[i + 1].index : content.length;
+
+      // Pull in a trailing comment-based help block if it sits directly above the declaration.
+      const prior = content.substring(0, start);
+      const helpMatch = prior.match(/<#[\s\S]*?#>\s*$/);
+      if (helpMatch) {
+        start = Math.max(0, prior.length - helpMatch[0].length);
+      }
+
+      const section = content.substring(start, end).trim();
+      if (!section) continue;
+
+      const item = boundaries[i];
+      const label = item.kind === "param" ? "param" : `${item.kind}:${item.name}`;
+      const context = `${fileName} > ${label}`;
+
+      this.processSection(section, context, chunks, {
+        fileType: "powershell",
+        chunkType:
+          item.kind === "param"
+            ? "powershell-param-block"
+            : `powershell-${item.kind}`,
+        structuralPath: context,
+      });
     }
 
     return chunks;
@@ -120,6 +235,30 @@ class SmartTextChunker {
     content = content.replace(/\r\n/g, "\n");
 
     const chunks = [];
+
+    // PowerShell log schema: preserve each LogEntry as its own chunk.
+    if (/<PowerShellLog\b/i.test(content) && /<LogEntry\b/i.test(content)) {
+      const entryRegex = /<LogEntry\b[\s\S]*?<\/LogEntry>/gi;
+      let entryMatch;
+      let index = 0;
+
+      while ((entryMatch = entryRegex.exec(content)) !== null) {
+        const entry = entryMatch[0].trim();
+        if (!entry) continue;
+
+        const context = `${fileName} > LogEntry:${index}`;
+        this.processSection(entry, context, chunks, {
+          fileType: "xml",
+          chunkType: "xml-logentry",
+          structuralPath: "PowerShellLog > LogEntry",
+        });
+        index += 1;
+      }
+
+      if (chunks.length > 0) {
+        return chunks;
+      }
+    }
 
     // Match closing tags of top-level elements (simple heuristic)
     const pattern = /<\/(\w+)>/g;
@@ -135,7 +274,7 @@ class SmartTextChunker {
 
     if (matches.length <= 1) {
       // Single root element or no structure — treat as plain text
-      return this.splitPlainText(content, fileName);
+      return this.splitPlainText(content, fileName, "xml");
     }
 
     let lastEnd = 0;
@@ -145,7 +284,11 @@ class SmartTextChunker {
 
       if (section.length > 0) {
         const context = `${fileName} > <${m.tag}>`;
-        this.processSection(section, context, chunks);
+        this.processSection(section, context, chunks, {
+          fileType: "xml",
+          chunkType: "xml-element",
+          structuralPath: `<${m.tag}>`,
+        });
       }
       lastEnd = elementEnd;
     }
@@ -154,7 +297,11 @@ class SmartTextChunker {
     if (lastEnd < content.length) {
       const trailing = content.substring(lastEnd).trim();
       if (trailing.length > 0) {
-        this.processSection(trailing, `${fileName} > Trailing`, chunks);
+        this.processSection(trailing, `${fileName} > Trailing`, chunks, {
+          fileType: "xml",
+          chunkType: "xml-trailing",
+          structuralPath: `${fileName} > Trailing`,
+        });
       }
     }
 
@@ -163,12 +310,16 @@ class SmartTextChunker {
 
   // --- Plain Text Chunker ---
   // Paragraph-split for .txt and unknown file types.
-  splitPlainText(content, fileName) {
+  splitPlainText(content, fileName, fileType = "text") {
     if (!content || !content.trim()) return [];
     content = content.replace(/\r\n/g, "\n");
 
     const chunks = [];
-    this.processSection(content, fileName, chunks);
+    this.processSection(content, fileName, chunks, {
+      fileType,
+      chunkType: "text-block",
+      structuralPath: fileName,
+    });
     return chunks;
   }
 
@@ -189,7 +340,11 @@ class SmartTextChunker {
     if (match && match.index > 0) {
       const preamble = text.substring(0, match.index).trim();
       if (preamble) {
-        this.processSection(preamble, "Introduction", chunks);
+        this.processSection(preamble, "Introduction", chunks, {
+          fileType: "markdown",
+          chunkType: "markdown-preamble",
+          structuralPath: "Introduction",
+        });
       }
     }
 
@@ -235,30 +390,85 @@ class SmartTextChunker {
       const pathStr = headerStack.map((h) => h.title).join(" > ");
 
       const finalText = `${"#".repeat(level)} ${current.title}\n${bodyText}`;
-      this.processSection(finalText, pathStr, chunks);
+      this.processSection(finalText, pathStr, chunks, {
+        level,
+        fileType: "markdown",
+        chunkType: "markdown-section",
+        structuralPath: pathStr,
+      });
     }
 
     // Fallback if no headers were found
     if (sections.length === 0) {
-      this.processSection(text, "Markdown Document", chunks);
+      this.processSection(text, "Markdown Document", chunks, {
+        fileType: "markdown",
+        chunkType: "markdown-section",
+        structuralPath: "Markdown Document",
+      });
     }
 
     return chunks;
   }
 
+  // Split by paragraph breaks while preserving fenced code blocks as single units.
+  static splitParagraphsPreservingCodeBlocks(text) {
+    const lines = text.split("\n");
+    const paragraphs = [];
+    let buffer = [];
+    let inFence = false;
+
+    const flush = () => {
+      const value = buffer.join("\n").trim();
+      if (value) paragraphs.push(value);
+      buffer = [];
+    };
+
+    for (const line of lines) {
+      if (/^```/.test(line.trim())) {
+        inFence = !inFence;
+        buffer.push(line);
+        continue;
+      }
+
+      if (!inFence && line.trim() === "") {
+        flush();
+        continue;
+      }
+
+      buffer.push(line);
+    }
+
+    flush();
+    return paragraphs;
+  }
+
   // --- Core Section Processor (with overlap + sentence-aware splitting) ---
-  processSection(text, context, chunks) {
+  processSection(text, context, chunks, metadata = {}) {
     text = text.trim();
     if (!text) return;
 
+    const level = metadata.level || 0;
+    const fileType = metadata.fileType || "unknown";
+    const chunkType = metadata.chunkType || "content";
+    const structuralPath = metadata.structuralPath || context;
+
     // Fits in one chunk — emit directly
     if (text.length <= this.maxChunkSize) {
-      chunks.push(new SmartChunk(text, context));
+      chunks.push(
+        new SmartChunk(
+          text,
+          context,
+          level,
+          chunkType,
+          fileType,
+          structuralPath,
+        ),
+      );
       return;
     }
 
     // Section exceeds maxChunkSize — split with sentence-awareness and overlap
-    const paragraphs = text.split(/\n\n+/);
+    const paragraphs = SmartTextChunker.splitParagraphsPreservingCodeBlocks(text);
     let current = "";
 
     for (let para of paragraphs) {
@@ -268,7 +478,16 @@ class SmartTextChunker {
       if (current.length + para.length + 2 > this.maxChunkSize) {
         // Emit current chunk if non-empty
         if (current.length > 0) {
-          chunks.push(new SmartChunk(current, context));
+          chunks.push(
+            new SmartChunk(
+              current,
+              context,
+              level,
+              chunkType,
+              fileType,
+              structuralPath,
+            ),
+          );
 
           let nextPrefix = "";
           // Overlap: carry forward last Overlap chars as prefix for next chunk
@@ -300,7 +519,14 @@ class SmartTextChunker {
             }
 
             chunks.push(
-              new SmartChunk(para.substring(start, splitAt), context),
+              new SmartChunk(
+                para.substring(start, splitAt),
+                context,
+                level,
+                chunkType,
+                fileType,
+                structuralPath,
+              ),
             );
 
             // Overlap for sentence-split pieces
@@ -315,7 +541,16 @@ class SmartTextChunker {
     }
 
     if (current.length > 0) {
-      chunks.push(new SmartChunk(current, context));
+      chunks.push(
+        new SmartChunk(
+          current,
+          context,
+          level,
+          chunkType,
+          fileType,
+          structuralPath,
+        ),
+      );
     }
   }
 }
