@@ -1,3 +1,10 @@
+---
+doc_state: canonical
+doc_owner: backend
+canonical_ref: docs/Technical_Component_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Technical Design Components
 
 This document deep-dives into the inner workings of the four most critical components of the RAG Pipeline: VectorStore structure, Smart Chunking, Ingestion Logic, and the SSE Streaming Contract.
@@ -123,3 +130,4 @@ Ollama returns LLM outputs character by character inside recursive blocks.
 ```
 
 The combination guarantees responsive User Experiences simulating high-latency processes in realtime.
+

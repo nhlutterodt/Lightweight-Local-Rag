@@ -1,3 +1,10 @@
+---
+doc_state: canonical
+doc_owner: maintainers
+canonical_ref: docs/Roadmap.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Local RAG Project — Roadmap
 
 This document outlines the trajectory for the Local RAG ecosystem, categorized by immediate practical feature enhancements and long-term aspirational goals.
@@ -48,3 +55,4 @@ These features structurally modify the pipeline architecture to accomplish expon
 
 - **Goal:** True "JARVIS-like" hands-free interaction.
 - **Implementation Strategy:** Integrate Whisper.cpp binaries directly onto the host environment. The GUI utilizes native browser `MediaRecorder` APIs intercepting mic data, forwarding audio streams to Node.js, compiling transcriptions, calculating vector similarities via Ollama, and synthesizing audio responses entirely on-device natively.
+

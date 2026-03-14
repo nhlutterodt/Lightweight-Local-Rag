@@ -4,6 +4,13 @@
 
 This enhanced project provides a comprehensive suite of PowerShell utilities for AI model monitoring, XML-based structured logging, and automated report generation. The architecture has been significantly improved with modular utilities and centralized schema management. It now also supports full multi-container cross-platform Docker deployment.
 
+## Documentation Entry Points
+
+- Documentation index: `docs/DOCS_INDEX.md`
+- Documentation governance: `docs/DOCS_GOVERNANCE.md`
+
+Use these two files first to identify authoritative documents and avoid stale or duplicated guidance.
+
 ## 🐳 Docker Deployment
 
 You can now run the entire RAG application (Frontend, Backend, and Ollama) using Docker Compose without needing to install Node.js or PowerShell on your host machine.

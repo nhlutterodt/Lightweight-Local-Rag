@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: maintainers
+canonical_ref: docs/Technical_Component_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Deep Assessment: Application Footprint Size
 
 This document summarizes the current footprint size of the Local RAG application across multiple dimensions. This assessment provides a baseline understanding of the system's weight and resource utilization before any potential refactoring or optimization.
@@ -62,3 +69,4 @@ When the containers are actively running, their writable layers consume minimal 
 2.  **Dependencies are Average**: The ~300 MB `node_modules` footprint is typical for modern full-stack web applications.
 3.  **Docker is the Heaviest Component**: The 1.9GB Node.js server image and the 5.6GB Ollama image dominate the disk usage. If disk optimization becomes a priority, the server Dockerfile is the prime candidate for easy wins (e.g., using Alpine Linux bases).
 4.  **Data Scalability**: The LanceDB Vector database dynamically scales. Currently, it sits at a very manageable ~53 MB, indicating efficient storage of the existing embedding vectors.
+

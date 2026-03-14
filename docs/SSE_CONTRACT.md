@@ -1,3 +1,10 @@
+---
+doc_state: reference-contract
+doc_owner: api
+canonical_ref: docs/SSE_CONTRACT.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # SSE Contract — `/api/chat`
 
 > **Authority:** This document defines the exact SSE event shapes that the server (`server.js`) must produce and the client (`main.js`) must consume. Both sides must conform to this contract. Any change requires updating **both** implementations **and** their tests.
@@ -90,3 +97,4 @@ All `data:` payloads **must** be valid JSON. The client parses every line with `
 | Token events have `message.content`       | `sse.contract.test.js` |
 | Server-Timing header present              | `sse.contract.test.js` |
 | `findNearest` returns correct field names | `vectorStore.test.js`  |
+

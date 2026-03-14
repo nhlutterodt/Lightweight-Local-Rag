@@ -1,3 +1,10 @@
+---
+doc_state: active-draft
+doc_owner: architecture
+canonical_ref: docs/Architecture_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Phase 8: RAG Feature Implementation - Design & Strategy
 
 ## Executive Summary
@@ -125,3 +132,4 @@ To ensure new RAG features do not destabilize the existing monitoring utilities,
 
 - **Scenario**: Run `Ingest-Documents` on a loop of 500 iterations.
 - **Pass Criteria**: Process memory must not grow linearly (indicating proper C# object disposal and variable cleanup).
+

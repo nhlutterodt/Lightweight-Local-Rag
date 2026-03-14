@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: backend
+canonical_ref: docs/Technical_Component_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # LanceDB Integration Assessment
 
 ## Executive Summary
@@ -86,3 +93,4 @@ If approved, the migration will follow extreme defensive programming practices t
 3. **Rewrite the Write Path:** Update `Ingest-Documents.ps1` to stop writing `.bin` files and instead export a structured JSON file per batch.
 4. **Update the Queue:** Update `IngestionQueue.js` to read those batch files and call `table.add()`.
 5. **Delete Legacy Code:** Purge `VectorStore.ps1` and the `.bin` format parsing logic securely.
+

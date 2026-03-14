@@ -1,3 +1,10 @@
+---
+doc_state: canonical
+doc_owner: maintainers
+canonical_ref: docs/RAG_Copilot_Instructions.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # RAG Pipeline — Copilot Instructions
 
 ## Project Overview
@@ -165,3 +172,4 @@ Brute-force O(n) scan is acceptable at current scale (<10K vectors).
 Revisit when `Get-VectorMetrics.ps1` reports `ChunkCount` approaching 10,000.
 At that point, add metadata-based pre-filtering in `lib/vectorStore.js` before the
 cosine similarity loop — no PowerShell changes required.
+

@@ -1,0 +1,52 @@
+---
+doc_state: canonical
+doc_owner: maintainers
+canonical_ref: docs/DOCS_GOVERNANCE.md
+last_reviewed: 2026-03-14
+audience: contributors
+---
+# Documentation Governance
+
+## Purpose
+This file defines how documentation is managed in this repository to reduce noise while preserving all historical knowledge.
+
+## Document States
+Every markdown document in the docs root must declare one state in frontmatter:
+
+1. canonical
+2. active-draft
+3. historical
+4. reference-contract
+
+## Required Frontmatter
+Use this block at the top of each document:
+
+```yaml
+---
+doc_state: canonical|active-draft|historical|reference-contract
+doc_owner: team-or-person
+canonical_ref: docs/FILE.md (or self)
+last_reviewed: YYYY-MM-DD
+audience: engineering|security|contributors|ops
+---
+```
+
+## Authoritative Sources
+Canonical and reference-contract docs are the source of truth. Active drafts and historical docs must point to a canonical counterpart.
+
+## Lifecycle Rules
+1. New docs require frontmatter and must be listed in docs index.
+2. Active drafts older than 30 days must be reviewed for promotion or historical demotion.
+3. Historical docs are preserved and never treated as current implementation truth.
+4. Contracts (API, SSE, security controls) are reviewed before release changes.
+
+## Review Cadence
+1. Weekly: stale check for active drafts.
+2. Monthly: canonical correctness review.
+3. Release gate: contract docs reviewed by maintainer.
+
+## Noise Reduction Rules
+1. One canonical file per topic.
+2. Avoid duplicate design narratives in multiple active files.
+3. Place implementation decisions in canonical docs, and keep brainstorm/proposal content in active drafts.
+4. Cross-link instead of copy/paste duplication.

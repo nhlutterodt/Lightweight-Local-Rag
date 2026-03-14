@@ -1,3 +1,10 @@
+---
+doc_state: reference-contract
+doc_owner: security
+canonical_ref: docs/SECURITY.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Security Guidelines and Posture
 
 The Local RAG Project is designed as a desktop-first, offline-capable utility. However, because it relies on web technologies (Node.js, Express, React) and system-level scripting (PowerShell), it is critical to maintain strict security boundaries to prevent local privilege escalation or cross-origin data exfiltration.
@@ -57,3 +64,4 @@ $logger = & $sb $arg1 $arg2
 - **Node.js**: The API bridge was patched to bind exclusively to `127.0.0.1` and restrict CORS to `localhost:5173`.
 - **File Access**: The `/api/browse` and `/api/queue` endpoints were restricted to a designated `RAG_Documents` folder, mitigating arbitrary file access.
 - **PowerShell**: Removed `Invoke-Expression` vulnerabilities from `ExecutionContext.ps1` to prevent command injection via manipulated operational names.
+

@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: maintainers
+canonical_ref: docs/Architecture_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Project Critique & Architecture Dissection
 
 An aggressive, honest breakdown of the Local RAG Project's core architectural decisions, identifying undeniable structural trade-offs, and explicitly justifying "why we made this choice today."
@@ -74,3 +81,4 @@ A basic Node.js Express server inherently struggles with edge cases: 1) users cl
 3. **Embedding Mutex:** A module-level Promise semaphore serializes embedding requests. Concurrent UI calls no longer attempt to force Ollama to hot-swap embedding and chat models simultaneously in VRAM.
 
 **Verdict:** The Node.js application layer has been explicitly hardened. By enforcing token budgets, sequential embedding locks, and HTTP abort signals, the project achieves production-grade local inference stability without adopting a kubernetes-level reverse proxy.
+

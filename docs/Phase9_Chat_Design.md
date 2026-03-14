@@ -1,3 +1,10 @@
+---
+doc_state: active-draft
+doc_owner: architecture
+canonical_ref: docs/Architecture_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Phase 9: Interactive RAG Chat - Design & Strategy
 
 ## Executive Summary
@@ -93,3 +100,4 @@ _Fix_: The loop must catch errors `try/catch` and allow the user to retry withou
 1.  **Step 9.1**: Update `OllamaClient` to support `/api/chat` (Chat Objects).
 2.  **Step 9.2**: Create `ChatSession` class (State Management).
 3.  **Step 9.3**: Build `Chat-Rag.ps1` (Interactive Loop).
+

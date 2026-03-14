@@ -1,3 +1,10 @@
+---
+doc_state: active-draft
+doc_owner: frontend
+canonical_ref: docs/Architecture_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Phase 10: Web Chat UI - Design & Architecture
 
 ## Executive Summary
@@ -124,3 +131,4 @@ The Node.js bridge will emit specific custom events within the SSE stream to sig
 
 - **Model Validation**: The UI will prevent users from selecting non-chat models (like embeddings) for message generation, with a clear tool-tip.
 - **Empty State Guidance**: If zero documents are found, provide deep links back to the `Ingest-Documents.ps1` workflow.
+

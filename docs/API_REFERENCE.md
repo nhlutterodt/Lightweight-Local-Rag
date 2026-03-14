@@ -1,3 +1,10 @@
+---
+doc_state: reference-contract
+doc_owner: api
+canonical_ref: docs/API_REFERENCE.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Local RAG API Reference
 
 This document outlines the available REST and Server-Sent Event (SSE) endpoints provided by the Node.js backend (`server.js`).
@@ -156,3 +163,4 @@ The server uses **RFC 7807 Problem Details** for HTTP APIs to format standard co
   "detail": "Failed to invoke PowerShell script due to restricted execution policy."
 }
 ```
+

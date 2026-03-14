@@ -1,3 +1,10 @@
+---
+doc_state: canonical
+doc_owner: maintainers
+canonical_ref: docs/DEVELOPER_ONBOARDING.md
+last_reviewed: 2026-03-14
+audience: contributors
+---
 # Junior Developer Onboarding FAQ
 
 Welcome to the Local RAG Project v2. This is an aggressive, no-nonsense onboarding document designed to answer the immediate architectural questions you probably have, explain why the "standard" ways of doing things were rejected, and set strict boundaries on how you write code here.
@@ -63,3 +70,4 @@ _Always enforce these invariants:_
 
 If you have questions, reference `docs/SECURITY.md` and `docs/Project_Critique.md`.
 Welcome to the team.
+

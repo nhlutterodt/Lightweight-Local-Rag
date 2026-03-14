@@ -1,3 +1,10 @@
+---
+doc_state: canonical
+doc_owner: architecture
+canonical_ref: docs/Architecture_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Architecture Design
 
 ## 1. System Overview
@@ -138,3 +145,4 @@ A state-tracking ledger for ingestion optimization.
 
 - Stores `SHA256` hashes of original files.
 - Prevents re-vectorizing files that haven't changed, reducing ingestion time on large directories from minutes to milliseconds.
+
