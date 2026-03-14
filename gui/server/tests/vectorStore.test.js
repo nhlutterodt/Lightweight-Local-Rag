@@ -165,11 +165,26 @@ describe("VectorStore (LanceDB Wrapper)", () => {
       }
     });
 
-    it("supports strict metadata filtering in filtered-vector mode", async () => {
+    it("supports strict metadata filtering with vector backfill in filtered-vector mode", async () => {
       const queryVec = new Float32Array(DIMS);
       const filteredResults = await store.findNearest(queryVec, 5, 0, {
         overfetchFactor: 4,
         strictFilter: true,
+        metadataFilters: {
+          fileTypeEquals: "powershell",
+        },
+      });
+
+      expect(filteredResults).toHaveLength(3);
+      expect(filteredResults[0].FileName).toBe("script.ps1");
+    });
+
+    it("allows strict-only mode by disabling strict backfill", async () => {
+      const queryVec = new Float32Array(DIMS);
+      const filteredResults = await store.findNearest(queryVec, 5, 0, {
+        overfetchFactor: 4,
+        strictFilter: true,
+        strictBackfill: false,
         metadataFilters: {
           fileTypeEquals: "powershell",
         },

@@ -105,17 +105,40 @@ Rationale:
 2. Added hybrid retrieval mode support in retrieval planning, API routing, and vector store ranking.
 3. Produced comparative report across `vector`, `filtered-vector`, and `hybrid` modes.
 
+### Post-Phase-4 Recovery Pass (2026-03-14)
+
+Implemented follow-up adjustment:
+
+1. Added strict-filter soft fallback backfill for filtered/hybrid flows so strict matches are prioritized and remaining slots are filled from vector candidates.
+2. Preserved strict-only behavior behind an explicit `strictBackfill: false` option for tests and debugging.
+
+Recovery comparative artifacts:
+
+1. `TestResults/retrieval-eval/retrieval-mode-compare-2026-03-14T06-03-53-142Z.md`
+2. `TestResults/retrieval-eval/retrieval-mode-compare-2026-03-14T06-03-53-142Z.json`
+
+Recovery comparative summary:
+
+1. Vector: Recall@K `1.0000`, MRR `0.5400`, avg latency `204.48ms`.
+2. Filtered-vector: Recall@K `1.0000`, MRR `0.5400`, avg latency `44.99ms`.
+3. Hybrid: Recall@K `1.0000`, MRR `0.8000`, avg latency `55.26ms`.
+
+Interpretation:
+
+1. Filtered-vector recovered recall and rank quality to vector baseline with materially lower latency.
+2. Hybrid improved ranking quality (MRR) over both vector and filtered-vector on the targeted set while preserving large latency gains versus vector.
+
 Phase 4 comparative summary:
 
-1. Vector: Recall@K `1.0000`, MRR `0.5400`, avg latency `205.97ms`.
-2. Filtered-vector: Recall@K `0.6000`, MRR `0.2400`, avg latency `38.54ms`.
-3. Hybrid: Recall@K `0.6000`, MRR `0.5000`, avg latency `42.41ms`.
+1. Initial prototype report (pre-recovery): vector `1.0000/0.5400/205.97ms`, filtered-vector `0.6000/0.2400/38.54ms`, hybrid `0.6000/0.5000/42.41ms`.
+2. Recovery report (current): vector `1.0000/0.5400/204.48ms`, filtered-vector `1.0000/0.5400/44.99ms`, hybrid `1.0000/0.8000/55.26ms`.
 
 Phase 4 default-mode decision:
 
 1. Keep **vector** as default mode for safety on recall.
 2. Keep **filtered-vector** and **hybrid** as explicit opt-in API modes.
 3. Reserve `semantic` as a compatibility alias of `hybrid`.
+4. Re-evaluate default mode only after a larger targeted query corpus confirms the current hybrid gains are stable.
 
 ### Phase 5 Completed Work (2026-03-14)
 

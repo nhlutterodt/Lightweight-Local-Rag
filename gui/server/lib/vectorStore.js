@@ -231,6 +231,8 @@ export class VectorStore {
       const hasMetadataFilters = VectorStore.hasFilters(metadataFilters);
       const boosts = options.boosts || null;
       const shouldEvaluateMetadata = hasMetadataFilters || boosts !== null;
+      const strictBackfillEnabled =
+        strictFilter && hasMetadataFilters && options.strictBackfill !== false;
       const mode = VectorStore.normalizeString(options.mode) || "vector";
       const lexicalQueryTerms = VectorStore.tokenizeLexicalQuery(
         options.lexicalQuery,
@@ -251,6 +253,8 @@ export class VectorStore {
         .toArray();
 
       const results = [];
+      const strictMatches = [];
+      const strictBackfillPool = [];
 
       for (const r of rawResults) {
         const score = VectorStore.distanceToScore(r._distance);
@@ -259,14 +263,18 @@ export class VectorStore {
         }
 
         let rankingScore = score;
+        let isMetadataMatch = true;
         if (shouldEvaluateMetadata) {
           const { matched, matchedFields } = VectorStore.matchMetadataFilters(
             r,
             metadataFilters,
           );
+          isMetadataMatch = matched;
 
           if (strictFilter && hasMetadataFilters && !matched) {
-            continue;
+            if (!strictBackfillEnabled) {
+              continue;
+            }
           }
 
           rankingScore += VectorStore.computeBoost(matchedFields, boosts);
@@ -281,7 +289,7 @@ export class VectorStore {
         }
 
         // Map LanceDB generic response into the strict format expected by server.js / main.js
-        results.push({
+        const mappedResult = {
           score,
           rankingScore,
           ChunkText: r.Text || r.ChunkText,
@@ -293,7 +301,33 @@ export class VectorStore {
           FileType: r.FileType,
           ChunkType: r.ChunkType,
           StructuralPath: r.StructuralPath,
-        });
+        };
+
+        if (strictBackfillEnabled) {
+          if (isMetadataMatch) {
+            strictMatches.push(mappedResult);
+          } else {
+            strictBackfillPool.push(mappedResult);
+          }
+          continue;
+        }
+
+        results.push(mappedResult);
+      }
+
+      if (strictBackfillEnabled) {
+        strictMatches.sort((left, right) => right.rankingScore - left.rankingScore);
+        strictBackfillPool.sort(
+          (left, right) => right.rankingScore - left.rankingScore,
+        );
+
+        const needed = Math.max(0, requestedTopK - strictMatches.length);
+        const backfilled = needed > 0 ? strictBackfillPool.slice(0, needed) : [];
+        results.push(...strictMatches, ...backfilled);
+
+        return results
+          .slice(0, requestedTopK)
+          .map(({ rankingScore, ...result }) => result);
       }
 
       return results
