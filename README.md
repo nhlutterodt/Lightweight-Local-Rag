@@ -8,8 +8,15 @@ This enhanced project provides a comprehensive suite of PowerShell utilities for
 
 - Documentation index: `docs/DOCS_INDEX.md`
 - Documentation governance: `docs/DOCS_GOVERNANCE.md`
+- Validation script: `scripts/Validate-Docs.ps1`
 
-Use these two files first to identify authoritative documents and avoid stale or duplicated guidance.
+Use these files first to identify authoritative documents and avoid stale or duplicated guidance.
+
+Run this command before docs pull requests:
+
+```powershell
+pwsh ./scripts/Validate-Docs.ps1
+```
 
 ## 🐳 Docker Deployment
 

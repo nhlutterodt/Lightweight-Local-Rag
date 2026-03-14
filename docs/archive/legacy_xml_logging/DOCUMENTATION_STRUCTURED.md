@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: maintainers
+canonical_ref: docs/DOCS_GOVERNANCE.md
+last_reviewed: 2026-03-14
+audience: contributors
+---
 # Local-RAG-Project-v2 — Documentation Guide
 
 This document reorganizes and consolidates the implementation notes, design decisions, usage examples, and migration plan for the Local-RAG-Project-v2 utilities and tooling.

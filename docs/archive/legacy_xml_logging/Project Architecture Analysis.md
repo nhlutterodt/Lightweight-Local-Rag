@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: maintainers
+canonical_ref: docs/Architecture_Design.md
+last_reviewed: 2026-03-14
+audience: engineering
+---
 # Project Architecture Analysis
 
 ## Executive Summary

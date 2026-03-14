@@ -40,10 +40,27 @@ Canonical and reference-contract docs are the source of truth. Active drafts and
 3. Historical docs are preserved and never treated as current implementation truth.
 4. Contracts (API, SSE, security controls) are reviewed before release changes.
 
+## Folder Conventions
+1. Active drafts are stored under `docs/active-drafts/`.
+2. Historical documents are stored under `docs/historical/` or `docs/archive/`.
+3. If a file is moved from docs root, keep a compatibility stub at the original path with a relocation link.
+
 ## Review Cadence
 1. Weekly: stale check for active drafts.
 2. Monthly: canonical correctness review.
 3. Release gate: contract docs reviewed by maintainer.
+
+## Validation Workflow
+1. Run `pwsh ./scripts/Validate-Docs.ps1` before every docs-focused pull request.
+2. Treat validator failures as hard blockers for merge.
+3. Do not bypass missing index entries; every markdown file under docs must be indexed.
+4. Keep compatibility stubs indexed and current when files are relocated.
+
+## Deterministic Pruning Routine
+1. Classify each candidate file as canonical, active-draft, historical, or reference-contract.
+2. Relocate active-draft and historical docs to dedicated folders, then keep a root compatibility stub.
+3. Update docs index in the same change as relocation.
+4. Re-run validator and require a clean pass.
 
 ## Noise Reduction Rules
 1. One canonical file per topic.

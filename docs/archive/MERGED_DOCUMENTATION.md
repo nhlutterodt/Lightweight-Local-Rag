@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: maintainers
+canonical_ref: docs/DOCS_GOVERNANCE.md
+last_reviewed: 2026-03-14
+audience: contributors
+---
 # Enhanced Log Naming System - Implementation Summary
 
 ## Overview
