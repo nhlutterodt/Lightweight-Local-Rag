@@ -166,7 +166,12 @@ The primary RAG inference capability. It embeds the message natively, retrieves 
 }
 ```
 
-`retrievalMode` accepts `vector` (default) and `filtered-vector`.
+`retrievalMode` accepts:
+
+1. `vector` (default): pure embedding relevance ranking.
+2. `filtered-vector`: embedding ranking with optional metadata constraints and boosts.
+3. `hybrid`: weighted fusion of embedding relevance and lightweight lexical evidence.
+4. `semantic`: alias of `hybrid` for API compatibility.
 
 **Recent Upgrades:**
 

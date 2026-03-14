@@ -7,61 +7,70 @@ audience: engineering
 ---
 # Technical Design Components
 
-This document deep-dives into the inner workings of the four most critical components of the RAG Pipeline: VectorStore structure, Smart Chunking, Ingestion Logic, and the SSE Streaming Contract.
+This document deep-dives into the current RAG runtime: LanceDB retrieval, corpus-aware chunking, ingestion queue behavior, and SSE contracts.
 
 ---
 
-## 1. VectorStore: Custom Binary Serialization
+## 1. VectorStore: LanceDB Retrieval Runtime
 
-The project actively shuns SQLite or vector databases (like Chroma or Milvus) in favor of extremely tight raw binary memory mapped into `Float32Array`.
+The current query hot path uses LanceDB tables as the local embedded vector store.
 
-### `CollectionName.vectors.bin`
+### Retrieval Modes
 
-#### File Structure
+1. Vector: embedding relevance only.
+2. Filtered Vector: vector relevance with metadata constraints and metadata boosts.
+3. Hybrid: weighted fusion of vector relevance and lexical evidence.
+4. Semantic: API alias of Hybrid.
 
-1.  **Count (4 Bytes / Int32):** The total number of vectors in the file.
-2.  **Dimensions (4 Bytes / Int32):** The length of each vector (e.g., 768 for `nomic-embed-text`).
-3.  **Model Name Length (2 Bytes / UInt16):** Length of the embedding model name.
-4.  **Model Name (N Bytes / UTF-8):** The string name of the model that created these vectors. (This acts as a strict guardrail to instantly fault if the user switches their config to `bge-m3` using a `nomic` store).
-5.  **Payload (N _ D _ 4 Bytes / Float32Array):** Sequential floating-point representations of the chunks.
+### Score Contract
 
-#### Mathematical Operations
+LanceDB returns distance values. Runtime converts distance to normalized relevance before thresholding and emission:
 
-Cosine similarity is computed natively within the V8 engine using simple subarray iterations. At standard prompt thresholds (<10k vectors), Node.js executes this linear scan in < 5ms. Wait times on IO and external processes are entirely bypassed.
+$$relevance = \frac{1}{1 + max(0, distance)}$$
 
-$$Cosine Similarity(A, B) = \frac{A \cdot B}{||A|| \times ||B||}$$
+This value is the citation `score`, query log `score`, and threshold input (`MinScore`) to keep behavior deterministic.
 
-For the embedded arrays, magnitude is already normalized by Ollama (length = 1), so cosine similarity reduces to simple dot product linear equations mapped against the `Buffer` object directly.
+### Metadata Signals Used at Query-Time
+
+1. `FileName`
+2. `FileType`
+3. `HeaderContext`
+4. `ChunkType`
+5. `StructuralPath`
+
+Filtered-vector mode uses these for constraints and boosts. Hybrid mode additionally evaluates lexical overlap over text and metadata fields.
 
 ---
 
-## 2. Smart Formatting (The `SmartTextChunker`)
+## 2. Smart Chunking
 
-Historically, splitting documents by uniform character counts caused mid-sentence or mid-code block ruptures leading to hallucination.
-
-The `SmartTextChunker` resolves this through an aggressive `DispatchByExtension` protocol in PowerShell:
+Historically, uniform character splits caused noisy context and boundary breakage. The current chunker dispatches by file type and emits metadata-rich chunks.
 
 ### Markdown (`.md`)
 
-- Splits on H1/H2 header tags (`#` / `##`).
-- Keeps header paths in memory and assigns them to the `HeaderContext` metadata field of the node chunk.
-- When querying, the LLM not only reads the paragraph but can see the document location (e.g., `HeaderContext`: `# Technical Guide > ## Troubleshooting`).
+1. Splits by heading sections while preserving fenced code blocks.
+2. Emits section path in `HeaderContext` and `StructuralPath`.
 
 ### PowerShell Scripts (`.ps1`)
 
-- Scans line-by-line using Regex.
-- Fragments specifically exclusively around `function`, `class`, and `filter` brackets, ensuring total operational closures within the vector embeddings.
+1. Splits around `param`, `function`, `class`, and `filter` boundaries.
+2. Attaches declaration context for retrieval targeting.
+
+### XML Logs (`.xml`)
+
+1. Chunks repeated `PowerShellLog` / `LogEntry` units as first-class boundaries.
+2. Falls back to element segmentation when schema-specific boundaries are unavailable.
 
 ### Sentence Fallbacks
 
-- If a chunk exceeds maximum tokens, it falls back to `$text.LastIndexOf('.')` rather than splitting mid-word.
-- Incorporates a 15% sliding over-lap window to ensure context transitions seamlessly across neighboring binary segments.
+1. If a chunk exceeds limits, it uses sentence-aware and paragraph-aware fallback boundaries.
+2. Overlap preserves continuity across adjacent chunks.
 
 ---
 
 ## 3. Ingestion Queue Subsystem
 
-The Node.js server acts as an orchestrater managing asynchronous ingestion across local processors. Since vectorization with local AI is profoundly CPU/GPU heavy, the subsystem protects the machine via a File-Backed FIFO Queue.
+The Node.js server orchestrates asynchronous ingestion through a file-backed FIFO queue. This protects local compute resources during embedding and keeps ingestion crash-resilient.
 
 ### `queue.json` Checkpointing
 
@@ -79,22 +88,21 @@ Instead of keeping arrays in memory (which disappear instantly on Node crashes),
 ]
 ```
 
-The Queue manager invokes `ChildProcess.spawn('pwsh', ['Ingest-Documents.ps1', ...])`. Node traps standard output from PowerShell.
-If Node restarts abruptly, it loads `queue.json` on boot, identifies orphaned `pending` states, and resets them, ensuring zero data/job loss during heavy vectorization workloads.
+The queue manager processes jobs sequentially and persists state updates to disk. On restart, interrupted jobs are recovered from persisted state.
 
 ---
 
 ## 4. Server-Sent Events (SSE) Interface Contract
 
-Due to the sequential LLM generation characteristics, typical REST POST requests induce severe timeouts. The connection pathway forces a rigid structured un-directional JSON interface utilizing `text/event-stream`.
+Streaming responses are emitted over `text/event-stream` to keep UI updates responsive during retrieval and generation.
 
 ### Event Types
 
-The client strictly parses strings adhering to `data: ${JSON}` containing one of three explicit types.
+The client parses `data: <json>` events containing explicit payload types.
 
 #### 1: Initializing (`status`)
 
-Sent immediately post-request while Node.js runs native cosine queries.
+Sent immediately while retrieval starts.
 
 ```json
 // data:
@@ -103,21 +111,21 @@ Sent immediately post-request while Node.js runs native cosine queries.
 
 #### 2: Routing (`metadata`)
 
-Transmits the top K nearest match arrays directly to the GUI component BEFORE the LLM generates a response. This populates the "Citations" list instantly in the UI.
+Transmits top retrieved citations before response token streaming begins.
 
 ```json
 // data:
 {
   "type": "metadata",
   "citations": [
-    { "fileName": "manual.md", "score": 0.8123, "textPreview": "..." }
+    { "fileName": "manual.md", "score": 0.8123, "preview": "..." }
   ]
 }
 ```
 
 #### 3: Transmitting (`message`)
 
-Ollama returns LLM outputs character by character inside recursive blocks.
+Ollama token chunks stream as incremental message events.
 
 ```json
 // data:
@@ -129,5 +137,5 @@ Ollama returns LLM outputs character by character inside recursive blocks.
 { "message": { "content": " answer" } }
 ```
 
-The combination guarantees responsive User Experiences simulating high-latency processes in realtime.
+See the canonical contract in `docs/SSE_CONTRACT.md` for authoritative wire details.
 

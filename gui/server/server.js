@@ -455,13 +455,18 @@ app.post("/api/chat", async (req, res) => {
 
   if (
     requestedRetrievalMode &&
-    ![RETRIEVAL_MODES.VECTOR, RETRIEVAL_MODES.FILTERED_VECTOR].includes(
+    ![
+      RETRIEVAL_MODES.VECTOR,
+      RETRIEVAL_MODES.FILTERED_VECTOR,
+      RETRIEVAL_MODES.HYBRID,
+      "semantic",
+    ].includes(
       requestedRetrievalMode,
     )
   ) {
     return res.status(400).json({
       error:
-        "Invalid retrievalMode. Allowed values: vector, filtered-vector.",
+        "Invalid retrievalMode. Allowed values: vector, filtered-vector, hybrid, semantic.",
     });
   }
 
@@ -471,6 +476,8 @@ app.post("/api/chat", async (req, res) => {
     query: lastUserMessage,
     constraints: retrievalConstraints,
     overfetchFactor: config?.RAG?.FilteredVectorOverfetch || 4,
+    hybridOverfetch: config?.RAG?.HybridOverfetch || 6,
+    hybridLexicalWeight: config?.RAG?.HybridLexicalWeight || 0.35,
   });
 
   try {

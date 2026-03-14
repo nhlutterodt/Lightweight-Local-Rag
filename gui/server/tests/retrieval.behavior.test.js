@@ -153,7 +153,7 @@ describe("Retrieval behavior — /api/chat", () => {
       .send({
         messages: [{ role: "user", content: "test question" }],
         collection: "TestIngest",
-        retrievalMode: "hybrid",
+        retrievalMode: "unknown-mode",
       });
 
     expect(response.status).toBe(400);

@@ -105,6 +105,50 @@ export class VectorStore {
     return totalBoost;
   }
 
+  static tokenizeLexicalQuery(query) {
+    if (typeof query !== "string") {
+      return [];
+    }
+
+    const terms = query
+      .toLowerCase()
+      .split(/[^a-z0-9_.\-]+/)
+      .filter((token) => token.length >= 3);
+
+    return [...new Set(terms)];
+  }
+
+  static computeLexicalScore(row, queryTerms) {
+    if (!Array.isArray(queryTerms) || queryTerms.length === 0) {
+      return 0;
+    }
+
+    const haystack = [
+      row.ChunkText,
+      row.Text,
+      row.TextPreview,
+      row.HeaderContext,
+      row.FileName,
+      row.StructuralPath,
+    ]
+      .filter((value) => typeof value === "string")
+      .join("\n")
+      .toLowerCase();
+
+    if (!haystack) {
+      return 0;
+    }
+
+    let matches = 0;
+    for (const term of queryTerms) {
+      if (haystack.includes(term)) {
+        matches += 1;
+      }
+    }
+
+    return matches / queryTerms.length;
+  }
+
   /**
    * Connects to LanceDB and opens the collection table.
    * Note: LanceDB natively persists both vectors and metadata in the same table.
@@ -187,6 +231,18 @@ export class VectorStore {
       const hasMetadataFilters = VectorStore.hasFilters(metadataFilters);
       const boosts = options.boosts || null;
       const shouldEvaluateMetadata = hasMetadataFilters || boosts !== null;
+      const mode = VectorStore.normalizeString(options.mode) || "vector";
+      const lexicalQueryTerms = VectorStore.tokenizeLexicalQuery(
+        options.lexicalQuery,
+      );
+      const isHybridMode = mode === "hybrid";
+      const fusionWeights = options.fusionWeights || { vector: 0.65, lexical: 0.35 };
+      const vectorWeight = Number.isFinite(fusionWeights.vector)
+        ? fusionWeights.vector
+        : 0.65;
+      const lexicalWeight = Number.isFinite(fusionWeights.lexical)
+        ? fusionWeights.lexical
+        : 0.35;
 
       // LanceDB native search array collapse
       const rawResults = await this.table
@@ -214,6 +270,14 @@ export class VectorStore {
           }
 
           rankingScore += VectorStore.computeBoost(matchedFields, boosts);
+        }
+
+        if (isHybridMode) {
+          const lexicalScore = VectorStore.computeLexicalScore(
+            r,
+            lexicalQueryTerms,
+          );
+          rankingScore = vectorWeight * rankingScore + lexicalWeight * lexicalScore;
         }
 
         // Map LanceDB generic response into the strict format expected by server.js / main.js

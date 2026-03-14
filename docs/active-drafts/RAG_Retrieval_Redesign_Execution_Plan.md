@@ -13,7 +13,9 @@ audience: engineering
 
 1. Phase 1 Retrieval Correctness Hardening: completed in runtime and tests.
 2. Phase 2 Corpus-Aware Chunking Redesign: completed for current scope.
-3. Phase 3 Lightweight Hybrid Retrieval: started.
+3. Phase 3 Lightweight Hybrid Retrieval: completed with formal A/B evidence.
+4. Phase 4 Full Hybrid Retrieval Evaluation: completed for first prototype cycle.
+5. Phase 5 Documentation and Contract Realignment: completed for this cycle.
 
 ### Phase 3 Started Work
 
@@ -69,6 +71,58 @@ Decision:
 
 1. Keep adaptive overfetch enabled as default behavior for filtered-vector mode.
 
+### Phase 3 Formal Closure (2026-03-14)
+
+Targeted-query A/B artifacts:
+
+1. `TestResults/retrieval-eval/retrieval-mode-compare-2026-03-14T05-57-13-478Z.md`
+2. `TestResults/retrieval-eval/retrieval-mode-compare-2026-03-14T05-57-13-478Z.json`
+
+Constraint-heavy A/B outcomes (vector vs filtered-vector):
+
+1. `Recall@K`: `1.0000` → `0.6000` (`-0.4000`)
+2. `MRR`: `0.5400` → `0.2400` (`-0.3000`)
+3. `avgLatencyMs`: `205.97` → `38.54` (`-167.44ms`)
+
+Interpretation:
+
+1. Filtered-vector constraints materially reduced latency.
+2. Strict constraint behavior on this query set reduced recall and rank quality versus vector baseline.
+3. Phase 3 is considered complete because explicit mode abstraction, filtered-vector behavior, and A/B evidence now exist.
+
+### Phase 3 Decision Gate Outcome
+
+Decision: **proceed to full hybrid evaluation**.
+
+Rationale:
+
+1. Filtered-vector alone did not resolve precision/quality issues on constraint-heavy queries.
+2. Phase 4 evaluation was required to determine whether lexical fusion improves ranking quality without unacceptable latency tradeoffs.
+
+### Phase 4 Completed Work (2026-03-14)
+
+1. Prototyped lightweight lexical evidence scoring and fusion in hybrid mode.
+2. Added hybrid retrieval mode support in retrieval planning, API routing, and vector store ranking.
+3. Produced comparative report across `vector`, `filtered-vector`, and `hybrid` modes.
+
+Phase 4 comparative summary:
+
+1. Vector: Recall@K `1.0000`, MRR `0.5400`, avg latency `205.97ms`.
+2. Filtered-vector: Recall@K `0.6000`, MRR `0.2400`, avg latency `38.54ms`.
+3. Hybrid: Recall@K `0.6000`, MRR `0.5000`, avg latency `42.41ms`.
+
+Phase 4 default-mode decision:
+
+1. Keep **vector** as default mode for safety on recall.
+2. Keep **filtered-vector** and **hybrid** as explicit opt-in API modes.
+3. Reserve `semantic` as a compatibility alias of `hybrid`.
+
+### Phase 5 Completed Work (2026-03-14)
+
+1. Aligned canonical terminology for `vector`, `filtered-vector`, `hybrid`, and `semantic` across API and engineering docs.
+2. Updated reference contracts to reflect implemented retrieval-mode behavior.
+3. Removed stale draft guidance that no longer matched execution state.
+
 ### Phase 2 Completed Work
 
 1. Reworked JavaScript ingestion chunking routes to treat PowerShell, JavaScript, markdown, and XML as distinct chunking paths.
@@ -78,11 +132,11 @@ Decision:
 5. Added richer chunk metadata on ingestion records: `FileType`, `ChunkType`, and `StructuralPath`.
 6. Added or updated regression tests for chunking behavior and ingestion metadata persistence.
 
-### Phase 2 Remaining Work
+### Phase 2 Follow-Up Notes
 
-1. Build and run a golden-query evaluation focused on noisy-context reduction.
-2. Decide whether additional PowerShell comment-help attachment rules are needed beyond current declaration-focused chunking.
-3. Decide whether XML chunking should include additional schema-specific boundaries beyond `LogEntry` for this repository.
+1. Golden-query evaluation was completed and frozen baseline artifacts were generated.
+2. Additional PowerShell comment-help attachment rules are deferred as optional refinement, not a phase blocker.
+3. Additional XML schema-specific boundaries beyond `LogEntry` are deferred pending corpus growth.
 
 ### Phase 2 Evaluation Wiring
 
@@ -418,4 +472,9 @@ These questions should be reviewed before implementation starts on each phase:
 
 Proceed with the redesign as a staged program rather than a one-pass rewrite.
 
-The first implementation slice should be Phase 0 plus Phase 1 only. That keeps the initial iteration focused on retrieval correctness and gives the later chunking and hybrid decisions a trustworthy baseline.
+Current recommendation after Phase 5 cycle:
+
+1. Keep `vector` as the default retrieval mode.
+2. Keep `filtered-vector` and `hybrid` as explicit selectable modes for targeted workflows.
+3. Use `semantic` only as a compatibility alias for `hybrid` in API requests.
+4. Revisit default-mode selection only after a larger targeted query set demonstrates stable hybrid gains without recall regressions.

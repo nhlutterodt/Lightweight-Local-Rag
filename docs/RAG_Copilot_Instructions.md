@@ -10,9 +10,16 @@ audience: engineering
 ## Project Overview
 
 A PowerShell + Node.js RAG (Retrieval-Augmented Generation) pipeline.
-Core flow: Ingest → Embed (Ollama) → Store (binary VectorStore) → Query → Augment → Generate.
-All P0, P1, and P2 findings from the 2026-02-27 backend audit are resolved.
-Finding #3 (vector index pre-filtering) is intentionally deferred — revisit at >10K vectors.
+Core flow: Ingest → Embed (Ollama) → Store (LanceDB + metadata) → Query → Augment → Generate.
+
+Current retrieval runtime is Node.js + LanceDB with explicit retrieval modes:
+
+1. `vector`: pure embedding retrieval.
+2. `filtered-vector`: embedding retrieval with metadata constraints and boosts.
+3. `hybrid`: embedding + lexical fusion.
+4. `semantic`: alias of `hybrid`.
+
+Use this terminology consistently in all docs and API contracts.
 
 ## Tech Stack
 
@@ -21,7 +28,7 @@ Finding #3 (vector index pre-filtering) is intentionally deferred — revisit at
 - **C# (Add-Type inline):** `VectorMath.ps1` accelerator — cosine similarity, TopK sort
   (used by PowerShell ingestion path only — not in the Node.js hot path)
 - **Ollama:** local LLM and embedding model server (`config.RAG.OllamaUrl`)
-- **Binary format:** `.vectors.bin` + `.metadata.json` — no SQLite, no external vector DB
+- **Vector store:** LanceDB local embedded table files with metadata columns
 
 ## Key Files
 
@@ -30,7 +37,7 @@ Finding #3 (vector index pre-filtering) is intentionally deferred — revisit at
 | File                  | Responsibility                                                   |
 | --------------------- | ---------------------------------------------------------------- |
 | `server.js`           | Express HTTP API, VectorStore boot, QueryLogger, SSE streaming   |
-| `lib/vectorStore.js`  | Binary `.vectors.bin` reader, in-memory cosine similarity, TopK  |
+| `lib/vectorStore.js`  | LanceDB retrieval wrapper with normalized score contract and retrieval modes |
 | `lib/ollamaClient.js` | Native fetch wrappers for Ollama embed + chat stream APIs        |
 | `lib/queryLogger.js`  | JSONL append logger, fire-and-forget, graceful flush on shutdown |
 | `IngestionQueue.js`   | FIFO queue with persistence and interrupted-job recovery         |
@@ -57,7 +64,7 @@ Finding #3 (vector index pre-filtering) is intentionally deferred — revisit at
 ```
 POST /api/chat
   → lib/ollamaClient.embed()        # native fetch → Ollama /api/embeddings
-  → lib/vectorStore.findNearest()   # Float32Array cosine similarity, in-memory
+  → lib/vectorStore.findNearest()   # LanceDB vector retrieval (+ filtered/hybrid options)
   → context from ChunkText          # full chunk content, not TextPreview
   → event: citations SSE            # TextPreview + score + source metadata to client
   → lib/ollamaClient.chatStream()   # native fetch, SSE token stream to client
@@ -75,17 +82,14 @@ POST /api/ingest
   → server.js hot-reloads store on completion
 ```
 
-## Binary Format — `.vectors.bin`
+## Retrieval Terminology Contract
 
-Both `VectorStore.ps1` and `lib/vectorStore.js` implement this layout and must stay in sync:
+This project uses the following canonical retrieval terms:
 
-```
-[int32 count][int32 dims][int32 modelNameByteLength][utf8 bytes × modelNameByteLength][float32 × count × dims]
-```
-
-Legacy detection: if `modelNameByteLength` is outside `1–256`, treat as legacy format
-(no model header), seek back 4 bytes, set model = null, emit a warning.
-**Any change to this layout requires coordinated updates to both readers.**
+1. Vector search: nearest-neighbor retrieval from embeddings only.
+2. Filtered-vector search: vector search constrained and reranked by metadata fields (`FileName`, `FileType`, `HeaderContext`).
+3. Hybrid search: vector relevance fused with lexical match evidence over retrieved chunk text and metadata.
+4. Semantic search: reserved alias of `hybrid`; do not use as a synonym for pure vector search.
 
 ## Metadata Format — `.metadata.json`
 

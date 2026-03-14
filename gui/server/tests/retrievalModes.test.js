@@ -10,10 +10,12 @@ describe("retrievalModes", () => {
     expect(normalizeRetrievalMode("filtered-vector")).toBe(
       RETRIEVAL_MODES.FILTERED_VECTOR,
     );
+    expect(normalizeRetrievalMode("hybrid")).toBe(RETRIEVAL_MODES.HYBRID);
   });
 
-  it("falls back to vector mode for invalid values", () => {
-    expect(normalizeRetrievalMode("hybrid")).toBe(RETRIEVAL_MODES.VECTOR);
+  it("maps semantic alias and falls back for invalid values", () => {
+    expect(normalizeRetrievalMode("semantic")).toBe(RETRIEVAL_MODES.HYBRID);
+    expect(normalizeRetrievalMode("unknown")).toBe(RETRIEVAL_MODES.VECTOR);
   });
 
   it("builds plain vector plan without constraints", () => {
@@ -83,5 +85,27 @@ describe("retrievalModes", () => {
     expect(plan.constraintsActive).toBe(true);
     expect(plan.vectorOptions.overfetchFactor).toBe(7);
     expect(plan.appliedOverfetchFactor).toBe(7);
+  });
+
+  it("builds hybrid plan with lexical fusion options", () => {
+    const plan = buildRetrievalPlan({
+      mode: RETRIEVAL_MODES.HYBRID,
+      query: "What does citation score mean in SSE_CONTRACT.md",
+      constraints: {
+        fileType: "markdown",
+      },
+      hybridOverfetch: 8,
+      hybridLexicalWeight: 0.4,
+    });
+
+    expect(plan.mode).toBe(RETRIEVAL_MODES.HYBRID);
+    expect(plan.vectorOptions.overfetchFactor).toBe(8);
+    expect(plan.vectorOptions.lexicalQuery).toContain("citation score");
+    expect(plan.vectorOptions.fusionWeights).toEqual(
+      expect.objectContaining({
+        vector: 0.6,
+        lexical: 0.4,
+      }),
+    );
   });
 });

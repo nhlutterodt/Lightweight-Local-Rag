@@ -87,6 +87,8 @@ const DEFAULTS = {
     MaxContextTokens: 2048,
     RetrievalMode: "vector",
     FilteredVectorOverfetch: 4,
+    HybridOverfetch: 6,
+    HybridLexicalWeight: 0.35,
   },
   Metadata: {
     ConfigVersion: "1.0.0",

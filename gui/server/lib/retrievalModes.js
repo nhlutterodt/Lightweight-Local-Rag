@@ -1,6 +1,7 @@
 export const RETRIEVAL_MODES = {
   VECTOR: "vector",
   FILTERED_VECTOR: "filtered-vector",
+  HYBRID: "hybrid",
 };
 
 function normalizeText(value) {
@@ -24,9 +25,14 @@ function firstMatch(source, patterns) {
 
 export function normalizeRetrievalMode(mode, fallback = RETRIEVAL_MODES.VECTOR) {
   const normalized = normalizeText(mode);
+  if (normalized === "semantic") {
+    return RETRIEVAL_MODES.HYBRID;
+  }
+
   if (
     normalized === RETRIEVAL_MODES.VECTOR ||
-    normalized === RETRIEVAL_MODES.FILTERED_VECTOR
+    normalized === RETRIEVAL_MODES.FILTERED_VECTOR ||
+    normalized === RETRIEVAL_MODES.HYBRID
   ) {
     return normalized;
   }
@@ -112,6 +118,8 @@ export function buildRetrievalPlan({
   query,
   constraints,
   overfetchFactor = 4,
+  hybridOverfetch = 6,
+  hybridLexicalWeight = 0.35,
 }) {
   const normalizedMode = normalizeRetrievalMode(mode);
   if (normalizedMode === RETRIEVAL_MODES.VECTOR) {
@@ -136,6 +144,39 @@ export function buildRetrievalPlan({
   const constraintsActive = hasActiveSignal(metadataFilters);
   const configuredOverfetch = normalizeOverfetchFactor(overfetchFactor, 4);
   const adaptiveOverfetch = constraintsActive ? configuredOverfetch : 1;
+
+  if (normalizedMode === RETRIEVAL_MODES.HYBRID) {
+    const hybridOverfetchFactor = normalizeOverfetchFactor(hybridOverfetch, 6);
+    const normalizedLexicalWeight = Number.isFinite(hybridLexicalWeight)
+      ? Math.min(0.8, Math.max(0.05, hybridLexicalWeight))
+      : 0.35;
+    const vectorWeight = 1 - normalizedLexicalWeight;
+
+    return {
+      mode: normalizedMode,
+      vectorOptions: {
+        mode: normalizedMode,
+        overfetchFactor: hybridOverfetchFactor,
+        metadataFilters,
+        strictFilter: explicit.strictFilter,
+        boosts: constraintsActive
+          ? {
+              fileName: 0.1,
+              fileType: 0.08,
+              headerContext: 0.1,
+            }
+          : null,
+        lexicalQuery: query,
+        fusionWeights: {
+          vector: vectorWeight,
+          lexical: normalizedLexicalWeight,
+        },
+      },
+      constraintsActive,
+      appliedOverfetchFactor: hybridOverfetchFactor,
+      metadataFilters,
+    };
+  }
 
   return {
     mode: normalizedMode,
