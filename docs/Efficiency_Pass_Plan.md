@@ -82,8 +82,8 @@ Reduce high-frequency queue stream updates while preserving eventual and final s
 
 ### Validation Gate
 1. Queue stream remains functionally correct.
-2. Emission count under burst is reduced versus baseline.
-3. No stale queue state in client UI.
+2. Under a 100-update synthetic burst, emitted stream messages are less than or equal to 2.
+3. SSE initial snapshot remains immediate and accurate for newly connected clients.
 
 ## Milestone E2: Persistence Coalescing Metrics and Tunables
 ### Objective
@@ -109,7 +109,7 @@ Measure write coalescing quality and provide deterministic tuning knobs.
 3. Shutdown flush path persists final state reliably.
 
 ### Validation Gate
-1. Coalescing ratio is measurable and improved.
+1. Under a 100-update synthetic burst, persistence writes are less than or equal to 2.
 2. No persistence data loss in stress scenarios.
 3. Existing queue durability tests remain green.
 
@@ -135,9 +135,17 @@ Reduce unnecessary rerenders and state churn in queue consumers.
 1. Component tests verify unchanged payloads do not trigger queue state updates.
 2. Existing modal keyboard and sidebar persistence tests remain green.
 3. Manual burst run confirms responsive UI with stable status updates.
+4. Equality guard behavior is verified for identical payloads and changed payloads.
+5. Canonicalization edge case is validated: payload field-order-only differences are either normalized before comparison or explicitly treated as distinct by contract.
+
+### Explicit Test Task: Canonicalization Contract
+1. Task: Add a dedicated test that emits semantically equivalent queue payloads with different object key order and asserts the declared equality contract.
+2. Owner: Frontend maintainers.
+3. Due Milestone: E3.
+4. Acceptance: Test `treats field-order-only payload differences as distinct by contract` in `gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx` is committed, green in CI, and referenced from this section.
 
 ### Validation Gate
-1. Rerender count under burst is reduced.
+1. Under 100 identical SSE queue payloads, queue state updates are exactly 1.
 2. UI behavior is unchanged from user perspective.
 3. Client build remains successful.
 
@@ -172,6 +180,23 @@ Keep runtime behavior and docs synchronized after efficiency tuning.
 2. Run milestone-specific tests plus full regression after each merge-ready patch.
 3. Record measured before and after metrics for event count, write count, and client rerenders.
 4. Do not proceed to next milestone until current validation gate passes.
+5. Re-run efficiency metric tests at least weekly (or per release) to detect drift trends.
+
+## Required Acceptance Metrics
+These metrics are merge-gate requirements, not informational targets.
+
+Single source of truth policy: This section is authoritative for metric thresholds and verification commands. Any metric threshold change must be applied here first.
+
+1. Server stream messages for 100 queue save requests: less than or equal to 2.
+- Test reference: `gui/server/tests/IngestionQueue.test.js` (`captures before/after metrics for 100 queue updates`)
+- Verification command: `Set-Location gui/server; npm test -- IngestionQueue.test.js -- -t "captures before/after metrics for 100 queue updates"`
+2. Queue persistence writes for 100 queue save requests: less than or equal to 2.
+- Test reference: `gui/server/tests/IngestionQueue.test.js` (`captures before/after metrics for 100 queue updates`)
+- Verification command: `Set-Location gui/server; npm test -- IngestionQueue.test.js -- -t "captures before/after metrics for 100 queue updates"`
+3. Client queue state updates for 100 identical SSE payloads: exactly 1.
+- Test reference: `gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx` (`captures before/after render metrics for 100 identical queue messages`)
+- Verification command: `Set-Location gui/client/react-client; npm test -- src/hooks/__tests__/useRagApi.test.jsx -t "captures before/after render metrics for 100 identical queue messages"`
+- Canonicalization contract reference: `gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx` (`treats field-order-only payload differences as distinct by contract`)
 
 ## Done Criteria
 1. Queue update emissions are bounded under burst conditions.
@@ -180,17 +205,18 @@ Keep runtime behavior and docs synchronized after efficiency tuning.
 4. Documentation and index remain synchronized with implementation.
 
 ## Measured Metrics Snapshot
-Baseline and optimized values below are captured by automated tests using a 100-update synthetic burst.
+This section is evidence-only and must not redefine acceptance thresholds. Thresholds and commands are defined in Required Acceptance Metrics.
 
-1. Server stream messages (100 queue save requests):
-- Baseline: 100
-- Optimized: 1
-- Source: `gui/server/tests/IngestionQueue.test.js` (`captures before/after metrics for 100 queue updates`)
-2. Queue persistence writes (100 queue save requests):
-- Baseline: 100
-- Optimized: 2
-- Source: `gui/server/tests/IngestionQueue.test.js` (`captures before/after metrics for 100 queue updates`)
-3. Client queue state updates/rerenders (100 identical SSE payloads):
-- Baseline: 100
-- Optimized: 1
-- Source: `gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx` (`captures before/after render metrics for 100 identical queue messages`)
+Last verified run date: 2026-03-15.
+
+1. Server stream messages (100 queue save requests): baseline 100, observed optimized 1.
+2. Queue persistence writes (100 queue save requests): baseline 100, observed optimized 2.
+3. Client queue state updates/rerenders (100 identical SSE payloads): baseline 100, observed optimized 1.
+
+Evidence sources:
+1. `gui/server/tests/IngestionQueue.test.js` (`captures before/after metrics for 100 queue updates`).
+2. `gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx` (`captures before/after render metrics for 100 identical queue messages`).
+
+Update rule:
+1. When new measurements are collected, update only observed values and Last verified run date in this section.
+2. If acceptance criteria change, update Required Acceptance Metrics only.

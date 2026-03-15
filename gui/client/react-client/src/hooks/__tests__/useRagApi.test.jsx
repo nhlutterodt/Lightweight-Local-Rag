@@ -158,4 +158,44 @@ describe("useRagApi queue equality guard", () => {
       optimizedQueueStateUpdates,
     });
   });
+
+  it("treats field-order-only payload differences as distinct by contract", async () => {
+    const renderSnapshots = [];
+
+    const { result } = renderHook(() => {
+      const hookState = useRagApi();
+      renderSnapshots.push(hookState.queue);
+      return hookState;
+    });
+
+    await waitFor(() => {
+      expect(MockEventSource.instances.length).toBe(1);
+    });
+
+    const stream = MockEventSource.instances[0];
+    const firstPayload = [{ id: "job-1", status: "pending" }];
+    const sameSemanticsDifferentOrder = [{ status: "pending", id: "job-1" }];
+
+    await act(async () => {
+      stream.emitJson(firstPayload);
+    });
+
+    await waitFor(() => {
+      expect(result.current.queue).toEqual(firstPayload);
+    });
+
+    const afterFirstRef = result.current.queue;
+    const rendersBeforeSecond = renderSnapshots.length;
+
+    await act(async () => {
+      stream.emitJson(sameSemanticsDifferentOrder);
+    });
+
+    await waitFor(() => {
+      expect(result.current.queue).toEqual(sameSemanticsDifferentOrder);
+    });
+
+    expect(result.current.queue).not.toBe(afterFirstRef);
+    expect(renderSnapshots.length).toBeGreaterThan(rendersBeforeSecond);
+  });
 });
