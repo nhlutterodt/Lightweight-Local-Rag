@@ -1,26 +1,34 @@
-name: Validate Docs
+name: Validate Governance
 
 on:
   pull_request:
     paths:
+      - '.gitignore'
+      - 'scripts/Validate-GitIgnore.ps1'
       - 'docs/**'
       - 'scripts/Validate-Docs.ps1'
   push:
     branches:
       - main
     paths:
+      - '.gitignore'
+      - 'scripts/Validate-GitIgnore.ps1'
       - 'docs/**'
       - 'scripts/Validate-Docs.ps1'
   workflow_dispatch:
 
 jobs:
   validate:
-    name: Docs Governance Check
+    name: Repository Governance Check
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Run gitignore validator
+        shell: pwsh
+        run: pwsh ./scripts/Validate-GitIgnore.ps1
 
       - name: Run docs validator
         shell: pwsh
@@ -30,6 +38,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: docs-validation-failure
-          path: docs/
+          name: governance-validation-failure
+          path: |
+            .gitignore
+            docs/
+            scripts/Validate-GitIgnore.ps1
+            scripts/Validate-Docs.ps1
           retention-days: 7

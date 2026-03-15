@@ -140,6 +140,32 @@ Phase 4 default-mode decision:
 3. Reserve `semantic` as a compatibility alias of `hybrid`.
 4. Re-evaluate default mode only after a larger targeted query corpus confirms the current hybrid gains are stable.
 
+### Default-Mode Gate Closure (25-Query Stability Run, 2026-03-14)
+
+Expanded stability artifacts:
+
+1. `TestResults/retrieval-eval/retrieval-mode-compare-2026-03-14T06-10-02-590Z.md`
+2. `TestResults/retrieval-eval/retrieval-mode-compare-2026-03-14T06-10-02-590Z.json`
+3. Targeted set: `gui/server/tests/data/targeted_retrieval_queries.json` (`25` queries)
+
+Stability summary across 25 targeted queries:
+
+1. Vector: Recall@K `0.4800`, MRR `0.2713`, avg latency `78.84ms`.
+2. Filtered-vector: Recall@K `0.4800`, MRR `0.2913`, avg latency `42.37ms`.
+3. Hybrid: Recall@K `0.4800`, MRR `0.3733`, avg latency `51.62ms`.
+
+Formal default-mode gate decision:
+
+1. **Keep `vector` as default mode**.
+2. Keep `filtered-vector` and `hybrid` as opt-in modes for targeted workflows.
+3. Keep `semantic` mapped to `hybrid` for compatibility.
+
+Decision rationale:
+
+1. Hybrid now shows the best ranking quality (highest MRR) and strong latency profile.
+2. Absolute recall on the expanded targeted set is below production default standards for all modes.
+3. Until recall floor is improved on a validated corpus, default behavior remains the safest baseline mode.
+
 ### Phase 5 Completed Work (2026-03-14)
 
 1. Aligned canonical terminology for `vector`, `filtered-vector`, `hybrid`, and `semantic` across API and engineering docs.

@@ -1,0 +1,87 @@
+[
+  {
+    "id": "markdown-architecture-flow",
+    "query": "What is the read path flow for chat and retrieval?",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "expectedAnyFileNames": [
+      "Architecture_Design.md",
+      "RAG_Copilot_Instructions.md",
+      "Technical_Component_Design.md"
+    ],
+    "expectedAnyHeaderContains": [
+      "Read Path",
+      "Hot Path",
+      "Retrieval"
+    ]
+  },
+  {
+    "id": "powershell-chunker-boundaries",
+    "query": "How does the smart chunker split PowerShell scripts?",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "expectedAnyFileNames": [
+      "smartChunker.js",
+      "TextChunker.ps1",
+      "RAG_Copilot_Instructions.md"
+    ],
+    "expectedAnyHeaderContains": [
+      "SmartTextChunker",
+      "Chunker",
+      "PowerShell"
+    ]
+  },
+  {
+    "id": "xml-log-schema",
+    "query": "What schema does the XML logging system use for PowerShell logs?",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "expectedAnyFileNames": [
+      "Technical_Component_Design.md",
+      "RAG_Copilot_Instructions.md",
+      "XMLLogger.ps1"
+    ],
+    "expectedAnyHeaderContains": [
+      "XML",
+      "LogEntry",
+      "PowerShellLog"
+    ]
+  },
+  {
+    "id": "retrieval-score-contract",
+    "query": "What does citation score represent in the current retrieval contract?",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "expectedAnyFileNames": [
+      "SSE_CONTRACT.md",
+      "RAG_Copilot_Instructions.md",
+      "API_REFERENCE.md"
+    ],
+    "expectedAnyHeaderContains": [
+      "score",
+      "metadata",
+      "contract"
+    ]
+  },
+  {
+    "id": "context-budget-configuration",
+    "query": "Where is the max context token budget configured?",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "expectedAnyFileNames": [
+      "project-config.psd1",
+      "RAG_Copilot_Instructions.md",
+      "server.js"
+    ],
+    "expectedAnyHeaderContains": [
+      "MaxContextTokens",
+      "RAG",
+      "config"
+    ]
+  }
+]

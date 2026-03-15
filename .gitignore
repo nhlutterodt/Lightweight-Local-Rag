@@ -2,6 +2,7 @@
 node_modules/
 npm-debug.log
 yarn-error.log
+pnpm-debug.log*
 
 # PowerShell
 *.log
@@ -17,14 +18,38 @@ full-scan-test.xml
 debug-test
 regression*.txt
 final_regression*.txt
-*.csv
-*.json
 !config/project-config.psd1
+docker_stats.txt
+
+# Generated structured output (path-based)
+PowerShell Scripts/Data/**/*.json
+PowerShell Scripts/Data/**/*.csv
+Logs/**/*.json
+Logs/**/*.csv
+TestResults/**/*.json
+TestResults/**/*.csv
+
+# Guardrails: always keep critical source/config JSON trackable
+!req.json
+!gui/**/package.json
+!gui/**/package-lock.json
+!gui/**/tsconfig.json
+!gui/server/tests/data/**/*.json
 
 # Directories
 Logs/
 TestResults/
 config/*.local.psd1
+coverage/
+Coverage/
+gui/server/coverage/
+tmp/
+.tmp/
+
+# Local environment files
+.env
+.env.*
+!.env.docker
 
 # OS
 .DS_Store
@@ -37,3 +62,5 @@ Thumbs.db
 *.lance/
 queue.json
 test_lance.js
+PowerShell Scripts/Data/
+.ollama/

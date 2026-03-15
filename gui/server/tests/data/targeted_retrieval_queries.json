@@ -1,0 +1,320 @@
+[
+  {
+    "id": "q01-ps-specific-file",
+    "query": "Show chunking behavior in Chat-Rag.ps1",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "powershell",
+      "fileName": "Chat-Rag.ps1",
+      "strict": true
+    },
+    "expectedAnyFileNames": ["Chat-Rag.ps1", "smartChunker.js", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["PowerShell", "Chunk", "Function"]
+  },
+  {
+    "id": "q02-xml-schema-target",
+    "query": "What schema is used for PowerShellLog entries in XMLLogger.ps1",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "xml",
+      "headerContext": "LogEntry"
+    },
+    "expectedAnyFileNames": ["XMLLogger.ps1", "Technical_Component_Design.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["LogEntry", "PowerShellLog", "XML"]
+  },
+  {
+    "id": "q03-markdown-contract-target",
+    "query": "In SSE_CONTRACT.md what does citation score mean",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "SSE_CONTRACT.md",
+      "strict": true
+    },
+    "expectedAnyFileNames": ["SSE_CONTRACT.md", "API_REFERENCE.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["score", "contract", "metadata"]
+  },
+  {
+    "id": "q04-architecture-read-path-target",
+    "query": "Find read path architecture details in Architecture_Design.md",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "Architecture_Design.md"
+    },
+    "expectedAnyFileNames": ["Architecture_Design.md", "Technical_Component_Design.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["Read Path", "Retrieval", "Architecture"]
+  },
+  {
+    "id": "q05-config-minscore-target",
+    "query": "Where is MinScore configured in project-config.psd1",
+    "collection": "TestIngestNodeFinal",
+    "topK": 5,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "project-config.psd1"
+    },
+    "expectedAnyFileNames": ["project-config.psd1", "RAG_Copilot_Instructions.md", "API_REFERENCE.md"],
+    "expectedAnyHeaderContains": ["MinScore", "RAG", "config"]
+  },
+  {
+    "id": "q06-smartchunker-ps",
+    "query": "How does smartChunker split param function class and filter",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "javascript",
+      "fileName": "smartChunker.js"
+    },
+    "expectedAnyFileNames": ["smartChunker.js", "RAG_Retrieval_Redesign_Execution_Plan.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["PowerShell", "splitPowerShell", "chunk"]
+  },
+  {
+    "id": "q07-vectorstore-score-contract",
+    "query": "Where is distance converted to normalized relevance score",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "vectorStore.js"
+    },
+    "expectedAnyFileNames": ["vectorStore.js", "SSE_CONTRACT.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["distanceToScore", "score", "normalized"]
+  },
+  {
+    "id": "q08-server-retrievalmode",
+    "query": "Where does server validate retrievalMode values",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "server.js"
+    },
+    "expectedAnyFileNames": ["server.js", "API_REFERENCE.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["retrievalMode", "filtered-vector", "hybrid"]
+  },
+  {
+    "id": "q09-api-retrieval-modes",
+    "query": "What retrieval modes are accepted by the chat API",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "API_REFERENCE.md"
+    },
+    "expectedAnyFileNames": ["API_REFERENCE.md", "SSE_CONTRACT.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["retrievalMode", "vector", "hybrid"]
+  },
+  {
+    "id": "q10-sse-citations-score",
+    "query": "In SSE contract what does citations score mean",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "SSE_CONTRACT.md"
+    },
+    "expectedAnyFileNames": ["SSE_CONTRACT.md", "API_REFERENCE.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["citations", "score", "metadata"]
+  },
+  {
+    "id": "q11-configloader-rag-defaults",
+    "query": "What are the default RAG retrieval configuration keys",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "configLoader.js"
+    },
+    "expectedAnyFileNames": ["configLoader.js", "project-config.psd1", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["RAG", "RetrievalMode", "HybridLexicalWeight"]
+  },
+  {
+    "id": "q12-plan-phase3-gate",
+    "query": "What is the phase 3 decision gate outcome in execution plan",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "RAG_Retrieval_Redesign_Execution_Plan.md"
+    },
+    "expectedAnyFileNames": ["RAG_Retrieval_Redesign_Execution_Plan.md", "Roadmap.md", "API_REFERENCE.md"],
+    "expectedAnyHeaderContains": ["Decision Gate", "Phase 3", "Phase 4"]
+  },
+  {
+    "id": "q13-plan-default-mode",
+    "query": "What is the default mode decision after phase 4",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "RAG_Retrieval_Redesign_Execution_Plan.md",
+      "headerContext": "default-mode"
+    },
+    "expectedAnyFileNames": ["RAG_Retrieval_Redesign_Execution_Plan.md", "API_REFERENCE.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["default", "vector", "hybrid"]
+  },
+  {
+    "id": "q14-techdesign-retrieval-modes",
+    "query": "In technical component design list vector filtered and hybrid modes",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "Technical_Component_Design.md"
+    },
+    "expectedAnyFileNames": ["Technical_Component_Design.md", "RAG_Copilot_Instructions.md", "API_REFERENCE.md"],
+    "expectedAnyHeaderContains": ["Vector", "Filtered", "Hybrid"]
+  },
+  {
+    "id": "q15-rag-instructions-terminology",
+    "query": "What is semantic search defined as in rag copilot instructions",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "RAG_Copilot_Instructions.md"
+    },
+    "expectedAnyFileNames": ["RAG_Copilot_Instructions.md", "API_REFERENCE.md", "Technical_Component_Design.md"],
+    "expectedAnyHeaderContains": ["Semantic", "hybrid", "alias"]
+  },
+  {
+    "id": "q16-targeted-query-eval-runner",
+    "query": "How do we run retrieval mode comparative evaluation",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "run-retrieval-mode-eval.js"
+    },
+    "expectedAnyFileNames": ["run-retrieval-mode-eval.js", "package.json", "RAG_Retrieval_Redesign_Execution_Plan.md"],
+    "expectedAnyHeaderContains": ["retrieval", "mode", "compare"]
+  },
+  {
+    "id": "q17-golden-eval-runner",
+    "query": "How does run-golden-eval baseline compare work",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "run-golden-eval.js"
+    },
+    "expectedAnyFileNames": ["run-golden-eval.js", "RAG_Retrieval_Redesign_Execution_Plan.md", "package.json"],
+    "expectedAnyHeaderContains": ["baseline", "compare", "Recall@K"]
+  },
+  {
+    "id": "q18-project-config-hybrid",
+    "query": "Where are HybridOverfetch and HybridLexicalWeight configured",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "project-config.psd1"
+    },
+    "expectedAnyFileNames": ["project-config.psd1", "configLoader.js", "API_REFERENCE.md"],
+    "expectedAnyHeaderContains": ["HybridOverfetch", "HybridLexicalWeight", "RAG"]
+  },
+  {
+    "id": "q19-backfill-behavior",
+    "query": "How does strict backfill work in vectorStore strict filtering",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "vectorStore.js",
+      "headerContext": "strict"
+    },
+    "expectedAnyFileNames": ["vectorStore.js", "vectorStore.test.js", "RAG_Retrieval_Redesign_Execution_Plan.md"],
+    "expectedAnyHeaderContains": ["strictBackfill", "strictFilter", "backfill"]
+  },
+  {
+    "id": "q20-retrieval-plan-builder",
+    "query": "How buildRetrievalPlan handles vector filtered-vector and hybrid",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "retrievalModes.js"
+    },
+    "expectedAnyFileNames": ["retrievalModes.js", "server.js", "retrievalModes.test.js"],
+    "expectedAnyHeaderContains": ["buildRetrievalPlan", "filtered-vector", "hybrid"]
+  },
+  {
+    "id": "q21-docs-validation-flow",
+    "query": "What process validates docs index and frontmatter",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "headerContext": "docs"
+    },
+    "expectedAnyFileNames": ["DOCS_GOVERNANCE.md", "DOCS_INDEX.md", "RAG_Retrieval_Redesign_Execution_Plan.md"],
+    "expectedAnyHeaderContains": ["validation", "index", "frontmatter"]
+  },
+  {
+    "id": "q22-ingestion-metadata-fields",
+    "query": "Which ingestion metadata fields support filtered retrieval",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "IngestionQueue.js"
+    },
+    "expectedAnyFileNames": ["IngestionQueue.js", "smartChunker.js", "RAG_Retrieval_Redesign_Execution_Plan.md"],
+    "expectedAnyHeaderContains": ["FileType", "ChunkType", "StructuralPath"]
+  },
+  {
+    "id": "q23-sse-metadata-citations",
+    "query": "What citation fields are emitted in metadata SSE event",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "server.js",
+      "headerContext": "metadata"
+    },
+    "expectedAnyFileNames": ["server.js", "SSE_CONTRACT.md", "API_REFERENCE.md"],
+    "expectedAnyHeaderContains": ["citations", "fileName", "score"]
+  },
+  {
+    "id": "q24-phase2-baseline-artifacts",
+    "query": "Where is frozen phase 2 baseline artifact defined",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileName": "RAG_Retrieval_Redesign_Execution_Plan.md",
+      "headerContext": "Frozen Phase 2 Baseline"
+    },
+    "expectedAnyFileNames": ["RAG_Retrieval_Redesign_Execution_Plan.md", "run-golden-eval.js", "API_REFERENCE.md"],
+    "expectedAnyHeaderContains": ["baseline", "golden_baseline.json", "Phase 2"]
+  },
+  {
+    "id": "q25-default-mode-gate",
+    "query": "What is needed to formally decide default retrieval mode gate",
+    "collection": "TestIngestNodeFinal",
+    "topK": 6,
+    "minScore": 0.003,
+    "retrievalConstraints": {
+      "fileType": "markdown",
+      "fileName": "RAG_Retrieval_Redesign_Execution_Plan.md"
+    },
+    "expectedAnyFileNames": ["RAG_Retrieval_Redesign_Execution_Plan.md", "API_REFERENCE.md", "RAG_Copilot_Instructions.md"],
+    "expectedAnyHeaderContains": ["default", "gate", "targeted query"]
+  }
+]

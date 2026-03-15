@@ -3,6 +3,13 @@ node_modules
 .vscode
 tests/
 Coverage/
+coverage/
 tmp/
 PowerShell Scripts/Data/
 .ollama
+docs/
+Logs/
+html_pages/
+TestResults/
+docker_stats.txt
+*.log
