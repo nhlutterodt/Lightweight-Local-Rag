@@ -112,6 +112,18 @@ describe("IngestionQueue", () => {
       if (fs.existsSync(queue.persistencePath)) {
         fs.unlinkSync(queue.persistencePath);
       }
+
+      const tempQueueFile = `${queue.persistencePath}.tmp`;
+      if (fs.existsSync(tempQueueFile)) {
+        fs.unlinkSync(tempQueueFile);
+      }
+
+      const corruptBackups = fs
+        .readdirSync(tempDir)
+        .filter((name) => name.startsWith("queue.json.corrupt-"));
+      for (const backup of corruptBackups) {
+        fs.unlinkSync(path.join(tempDir, backup));
+      }
     } catch (e) {}
   });
 
@@ -135,9 +147,12 @@ describe("IngestionQueue", () => {
       jest.useRealTimers();
 
       expect(newQueue.jobs.length).toBe(2);
-      expect(newQueue.jobs[0].status).toBe("completed");
-      expect(newQueue.jobs[1].status).toBe("failed");
-      expect(newQueue.jobs[1].progress).toContain("Interrupted");
+      const completedJob = newQueue.jobs.find((job) => job.id === "1");
+      const interruptedJob = newQueue.jobs.find((job) => job.id === "2");
+
+      expect(completedJob.status).toBe("completed");
+      expect(interruptedJob.status).toBe("failed");
+      expect(interruptedJob.progress).toContain("Interrupted");
     });
 
     it("should emit an update event on save", (done) => {
@@ -146,6 +161,48 @@ describe("IngestionQueue", () => {
         done();
       });
       queue.saveState();
+    });
+
+    it("should persist queue state as a versioned envelope", () => {
+      queue.jobs = [{ id: "1", status: "pending" }];
+      queue.saveState();
+
+      const persisted = JSON.parse(fs.readFileSync(queue.persistencePath, "utf8"));
+      expect(persisted).toHaveProperty("schemaVersion", 1);
+      expect(persisted).toHaveProperty("updatedAt");
+      expect(Array.isArray(persisted.jobs)).toBe(true);
+      expect(persisted.jobs[0].id).toBe("1");
+    });
+
+    it("should prune terminal jobs based on retention limit", () => {
+      queue.maxTerminalJobs = 2;
+      queue.jobs = [
+        { id: "pending-1", status: "pending", addedAt: "2026-01-01T00:00:00.000Z" },
+        { id: "done-1", status: "completed", completedAt: "2026-01-01T00:00:00.000Z" },
+        { id: "done-2", status: "failed", completedAt: "2026-01-02T00:00:00.000Z" },
+        { id: "done-3", status: "cancelled", completedAt: "2026-01-03T00:00:00.000Z" },
+      ];
+
+      queue.saveState();
+
+      const ids = queue.jobs.map((job) => job.id);
+      expect(ids).toContain("pending-1");
+      expect(ids).toContain("done-3");
+      expect(ids).toContain("done-2");
+      expect(ids).not.toContain("done-1");
+    });
+
+    it("should fallback safely when queue state is corrupt", () => {
+      fs.writeFileSync(queue.persistencePath, "{ this is not valid json", "utf8");
+
+      const newQueue = new IngestionQueue();
+      newQueue.setConfig({ Paths: { DataDir: tempDir } });
+
+      expect(newQueue.jobs).toEqual([]);
+      const backups = fs
+        .readdirSync(tempDir)
+        .filter((name) => name.startsWith("queue.json.corrupt-"));
+      expect(backups.length).toBeGreaterThan(0);
     });
   });
 

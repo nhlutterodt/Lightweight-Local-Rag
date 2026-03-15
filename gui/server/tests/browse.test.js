@@ -33,6 +33,13 @@ const appModule = await import("../server.js");
 const app = appModule.default;
 
 describe("GET /api/browse API", () => {
+  it("should default to first allowed root when path query is omitted", async () => {
+    const res = await request(app).get("/api/browse");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.currentPath).toBe(TEST_ALLOWED_ROOT);
+  });
+
   it("should return the contents of the requested directory", async () => {
     const res = await request(app).get(
       `/api/browse?path=${encodeURIComponent(TEST_ALLOWED_ROOT)}`,
@@ -68,16 +75,55 @@ describe("GET /api/browse API", () => {
     );
 
     expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("BROWSE_PATH_RESTRICTED");
     expect(res.body.message).toMatch(/restricted/i);
   });
 
-  it("should return 500 if directory does not exist (but is within allowed root)", async () => {
+  it("should reject sibling-prefix path escapes", async () => {
+    const siblingPrefix = `${TEST_ALLOWED_ROOT}_evil`;
+    fs.mkdirSync(siblingPrefix, { recursive: true });
+
+    const res = await request(app).get(
+      `/api/browse?path=${encodeURIComponent(siblingPrefix)}`,
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("BROWSE_PATH_RESTRICTED");
+
+    fs.rmSync(siblingPrefix, { recursive: true, force: true });
+  });
+
+  it("should reject symlink or junction paths inside allowed roots", async () => {
+    const sourceDir = path.join(TEST_ALLOWED_ROOT, "Folder A");
+    const linkedDir = path.join(TEST_ALLOWED_ROOT, "Linked Folder");
+
+    try {
+      if (process.platform === "win32") {
+        fs.symlinkSync(sourceDir, linkedDir, "junction");
+      } else {
+        fs.symlinkSync(sourceDir, linkedDir, "dir");
+      }
+    } catch {
+      // Some CI environments do not permit symlink creation.
+      return;
+    }
+
+    const res = await request(app).get(
+      `/api/browse?path=${encodeURIComponent(linkedDir)}`,
+    );
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("BROWSE_PATH_RESTRICTED");
+
+    fs.rmSync(linkedDir, { recursive: true, force: true });
+  });
+
+  it("should reject non-existent directories with restricted-path response", async () => {
     const nonExistent = path.join(TEST_ALLOWED_ROOT, "does-not-exist");
     const res = await request(app).get(
       `/api/browse?path=${encodeURIComponent(nonExistent)}`,
     );
 
-    expect(res.statusCode).toBe(500);
-    expect(res.body.message).toMatch(/Failed to read directory/i);
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("BROWSE_PATH_RESTRICTED");
   });
 });

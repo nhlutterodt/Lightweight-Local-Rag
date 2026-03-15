@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+
 function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [parentPath, setParentPath] = useState(null);
   const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -17,7 +20,7 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL('http://localhost:3001/api/browse');
+      const url = new URL('/api/browse', API_BASE);
       if (pathStr) url.searchParams.append('path', pathStr);
       
       const res = await fetch(url.toString());
@@ -30,12 +33,53 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
       setCurrentPath(data.currentPath);
       setParentPath(data.parentPath);
       setContents(data.contents);
+      setActiveIndex(0);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen || loading || error) return;
+
+    const rows = [
+      ...(parentPath ? [{ isParent: true, path: parentPath }] : []),
+      ...contents.map((item) => ({ ...item, isParent: false }))
+    ];
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+
+      if (!rows.length) return;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActiveIndex((prev) => Math.min(prev + 1, rows.length - 1));
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveIndex((prev) => Math.max(prev - 1, 0));
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const selected = rows[activeIndex];
+        if (!selected) return;
+        if (selected.isParent || selected.isDirectory) {
+          fetchDirectory(selected.path);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeIndex, contents, error, isOpen, loading, onClose, parentPath]);
 
   if (!isOpen) return null;
 
@@ -58,6 +102,27 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
           <strong>Path:</strong> {currentPath || "Loading default..."}
         </div>
 
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          {currentPath.split(/[/\\]+/).filter(Boolean).map((segment, index, segments) => {
+            const prefix = currentPath.startsWith('\\\\') ? '\\\\' : (currentPath.includes(':') ? `${segments[0]}\\` : '/');
+            const pathParts = segments.slice(0, index + 1);
+            const crumbPath = currentPath.includes(':')
+              ? `${segments[0]}\\${pathParts.slice(1).join('\\')}`
+              : `${prefix}${pathParts.join('/')}`;
+
+            return (
+              <button
+                key={`${segment}-${index}`}
+                className="btn-secondary"
+                style={{ marginTop: 0, padding: '2px 8px', fontSize: '0.75rem' }}
+                onClick={() => fetchDirectory(crumbPath)}
+              >
+                {segment}
+              </button>
+            );
+          })}
+        </div>
+
         {error && (
           <div style={{ color: 'var(--color-error)', marginBottom: '10px', fontSize: '0.9rem' }}>
             {error}
@@ -74,16 +139,26 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {parentPath && (
                 <li 
-                  onClick={() => fetchDirectory(parentPath)}
-                  style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid var(--glass-border)' }}
+                  onClick={() => setActiveIndex(0)}
+                  onDoubleClick={() => fetchDirectory(parentPath)}
+                  style={{
+                    padding: '8px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid var(--glass-border)',
+                    backgroundColor: activeIndex === 0 ? 'rgba(255,255,255,0.08)' : 'transparent'
+                  }}
                 >
                   📁 <strong>..</strong>
                 </li>
               )}
-              {contents.map(item => (
+              {contents.map((item, idx) => {
+                const itemIndex = parentPath ? idx + 1 : idx;
+
+                return (
                 <li 
                   key={item.path}
-                  onClick={() => item.isDirectory ? fetchDirectory(item.path) : null}
+                  onClick={() => setActiveIndex(itemIndex)}
+                  onDoubleClick={() => item.isDirectory ? fetchDirectory(item.path) : null}
                   style={{
                     padding: '8px',
                     cursor: item.isDirectory ? 'pointer' : 'default',
@@ -91,12 +166,16 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
                     opacity: item.isDirectory ? 1 : 0.5,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    backgroundColor: activeIndex === itemIndex
+                      ? 'rgba(255,255,255,0.08)'
+                      : 'transparent'
                   }}
                 >
                   {item.isDirectory ? '📁' : '📄'} {item.name}
                 </li>
-              ))}
+                );
+              })}
               {contents.length === 0 && !parentPath && (
                 <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>Empty directory</div>
               )}

@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 import request from "supertest";
 import path from "path";
 import os from "os";
+import fs from "fs";
 
 // Define an explicit allowed root for testing BEFORE importing server.js
 const TEST_ALLOWED_ROOT = path.join(os.tmpdir(), "rag-allowed-root");
@@ -49,7 +50,17 @@ describe("Security Controls", () => {
           collection: "test",
         });
       expect(res.statusCode).toBe(403);
-      expect(res.body.error).toMatch(/Unsafe or restricted input path/);
+      expect(res.body.error).toMatch(/unavailable or restricted/i);
+    });
+
+    it("should reject sibling-prefix bypass attempts", async () => {
+      const siblingPrefix = `${TEST_ALLOWED_ROOT}_evil`;
+      const res = await request(app).post("/api/queue").send({
+        path: siblingPrefix,
+        collection: "test",
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.body.code).toBe("PATH_OUTSIDE_ALLOWED_ROOTS");
     });
 
     it("should reject absolute paths matching old blocked roots natively", async () => {
@@ -69,10 +80,13 @@ describe("Security Controls", () => {
     });
 
     it("should accept paths within ALLOWED_BROWSE_ROOTS", async () => {
+      const allowedPath = path.join(TEST_ALLOWED_ROOT, "my-documents");
+      fs.mkdirSync(allowedPath, { recursive: true });
+
       const res = await request(app)
         .post("/api/queue")
         .send({
-          path: path.join(TEST_ALLOWED_ROOT, "my-documents"),
+          path: allowedPath,
           collection: "test",
         });
       // 201 Created because queue mocking intercepts it, or 400 if other validation fails.

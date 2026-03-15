@@ -126,44 +126,165 @@ const ALLOWED_BROWSE_ROOTS = (
   process.env.ALLOWED_BROWSE_ROOTS || defaultBrowseRoot
 )
   .split(";")
-  .map((r) => path.normalize(r).toLowerCase());
+  .map((r) => r.trim())
+  .filter(Boolean)
+  .map((r) => path.resolve(r));
+
+const BROWSE_ROOT_POLICY = {
+  rejectSymlinks: true,
+};
+
+const normalizePathForCompare = (candidatePath) => {
+  const resolved = path.resolve(candidatePath);
+  const normalized = path.normalize(resolved);
+  const noTrailing = normalized.endsWith(path.sep)
+    ? normalized.slice(0, -1)
+    : normalized;
+
+  return process.platform === "win32" ? noTrailing.toLowerCase() : noTrailing;
+};
+
+const NORMALIZED_ALLOWED_BROWSE_ROOTS = ALLOWED_BROWSE_ROOTS.map((root) =>
+  normalizePathForCompare(root),
+);
+
+const canonicalizePath = async (candidatePath) => {
+  const resolved = path.resolve(candidatePath);
+  try {
+    const real = await fs.promises.realpath(resolved);
+    return normalizePathForCompare(real);
+  } catch {
+    // Keep lexical resolution for non-existent paths; endpoint-specific checks may still reject.
+    return normalizePathForCompare(resolved);
+  }
+};
+
+const isPathWithinRoot = (candidatePath, rootPath) =>
+  candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${path.sep}`);
+
+const hasSymlinkInChain = async (rootPath, targetPath) => {
+  if (!isPathWithinRoot(targetPath, rootPath)) {
+    return false;
+  }
+
+  const relative = path.relative(rootPath, targetPath);
+  if (!relative) {
+    return false;
+  }
+
+  let current = rootPath;
+  const parts = relative.split(path.sep).filter(Boolean);
+  for (const segment of parts) {
+    current = path.join(current, segment);
+    try {
+      const stats = await fs.promises.lstat(current);
+      if (stats.isSymbolicLink()) {
+        return true;
+      }
+    } catch {
+      // If a segment is unreadable/missing, let the caller return a controlled path error.
+      return false;
+    }
+  }
+
+  return false;
+};
+
+const getCanonicalAllowedRoots = async () => {
+  const canonicalRoots = [];
+  for (const root of ALLOWED_BROWSE_ROOTS) {
+    canonicalRoots.push(await canonicalizePath(root));
+  }
+  return canonicalRoots;
+};
+
+const makeErrorId = () =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+async function validateInputPath(inputPath, options = {}) {
+  const { mustExist = true, requireDirectory = true, rejectSymlinks = true } = options;
+
+  if (!inputPath || typeof inputPath !== "string") {
+    return { ok: false, code: "INVALID_PATH" };
+  }
+
+  if (!path.isAbsolute(inputPath)) {
+    return { ok: false, code: "PATH_NOT_ABSOLUTE" };
+  }
+
+  const resolved = path.resolve(inputPath);
+  const normalizedInput = normalizePathForCompare(resolved);
+
+  const matchedLexicalRoot = NORMALIZED_ALLOWED_BROWSE_ROOTS.find((root) =>
+    isPathWithinRoot(normalizedInput, root),
+  );
+  if (!matchedLexicalRoot) {
+    return { ok: false, code: "PATH_OUTSIDE_ALLOWED_ROOTS" };
+  }
+
+  const canonicalInput = await canonicalizePath(resolved);
+  const canonicalRoots = await getCanonicalAllowedRoots();
+  const matchedRoot = canonicalRoots.find((root) =>
+    isPathWithinRoot(canonicalInput, root),
+  );
+
+  if (!matchedRoot) {
+    return { ok: false, code: "PATH_OUTSIDE_ALLOWED_ROOTS" };
+  }
+
+  let stats = null;
+  try {
+    stats = await fs.promises.stat(resolved);
+  } catch {
+    if (mustExist) {
+      return { ok: false, code: "PATH_NOT_FOUND" };
+    }
+  }
+
+  if (requireDirectory && stats && !stats.isDirectory()) {
+    return { ok: false, code: "PATH_NOT_DIRECTORY" };
+  }
+
+  if (rejectSymlinks && stats) {
+    const hasSymlink = await hasSymlinkInChain(matchedLexicalRoot, normalizedInput);
+    if (hasSymlink) {
+      return { ok: false, code: "SYMLINK_PATH_REJECTED" };
+    }
+  }
+
+  return {
+    ok: true,
+    resolvedPath: resolved,
+    canonicalPath: canonicalInput,
+    rootPath: matchedRoot,
+  };
+}
 
 function isValidCollection(name) {
   return /^[a-zA-Z0-9_\-]+$/.test(name);
 }
 
-function isSafePath(inputPath) {
-  if (!inputPath || typeof inputPath !== "string") return false;
-
-  // 1. Must be absolute
-  if (!path.isAbsolute(inputPath)) return false;
-
-  // 2. Prevent directory traversal
-  const normalized = path.normalize(inputPath);
-  if (normalized.includes("..")) return false;
-
-  // 3. Must be within an allowed root
-  const normalizedLower = normalized.toLowerCase();
-  const isAllowed = ALLOWED_BROWSE_ROOTS.some((root) =>
-    normalizedLower.startsWith(root),
-  );
-
-  return isAllowed;
-}
-
 // --- Cross-Platform Folder Selection API ---
 app.get("/api/browse", async (req, res) => {
-  const targetPath = req.query.path || os.homedir();
+  const defaultTargetPath = ALLOWED_BROWSE_ROOTS[0] || defaultBrowseRoot;
+  const targetPath = req.query.path || defaultTargetPath;
 
-  if (!isSafePath(targetPath)) {
+  const validation = await validateInputPath(targetPath, {
+    mustExist: true,
+    requireDirectory: true,
+    rejectSymlinks: BROWSE_ROOT_POLICY.rejectSymlinks,
+  });
+
+  if (!validation.ok) {
     return res.status(403).json({
       status: "error",
-      message: "Access to this path is restricted.",
+      code: "BROWSE_PATH_RESTRICTED",
+      message: "Access to the requested path is restricted.",
     });
   }
 
   try {
-    const entries = await fs.promises.readdir(targetPath, {
+    const entries = await fs.promises.readdir(validation.resolvedPath, {
       withFileTypes: true,
     });
 
@@ -173,7 +294,7 @@ app.get("/api/browse", async (req, res) => {
       .map((entry) => ({
         name: entry.name,
         isDirectory: entry.isDirectory(),
-        path: path.join(targetPath, entry.name),
+        path: path.join(validation.resolvedPath, entry.name),
       }))
       // Sort: Directories first, then alphabetically
       .sort((a, b) => {
@@ -182,19 +303,38 @@ app.get("/api/browse", async (req, res) => {
         return a.name.localeCompare(b.name);
       });
 
+    const parentCandidate = path.dirname(validation.resolvedPath);
+    const parentAllowed = await validateInputPath(parentCandidate, {
+      mustExist: true,
+      requireDirectory: true,
+      rejectSymlinks: BROWSE_ROOT_POLICY.rejectSymlinks,
+    });
+
     res.json({
-      currentPath: path.normalize(targetPath),
+      currentPath: path.normalize(validation.resolvedPath),
       parentPath:
-        path.dirname(targetPath) !== targetPath
-          ? path.dirname(targetPath)
+        parentCandidate !== validation.resolvedPath && parentAllowed.ok
+          ? parentCandidate
           : null,
       contents,
     });
   } catch (e) {
-    res.status(500).json({
+    const errorId = makeErrorId();
+    const isNotFound = e?.code === "ENOENT";
+    const statusCode = isNotFound ? 404 : 500;
+    console.error(`[Browse Error:${errorId}]`, {
+      path: targetPath,
+      code: e?.code,
+      message: e?.message,
+    });
+
+    res.status(statusCode).json({
       status: "error",
-      message: "Failed to read directory",
-      error: e.message,
+      code: isNotFound ? "BROWSE_PATH_NOT_FOUND" : "BROWSE_READ_FAILED",
+      message: isNotFound
+        ? "The selected folder no longer exists."
+        : "Unable to read the selected folder.",
+      errorId,
     });
   }
 });
@@ -229,7 +369,7 @@ app.get("/api/queue/stream", (req, res) => {
 });
 
 // Enqueue a new ingestion task
-app.post("/api/queue", (req, res) => {
+app.post("/api/queue", async (req, res) => {
   const { path: folderPath, collection } = req.body;
   if (!folderPath || !collection) {
     return res.status(400).json({ error: "path and collection are required" });
@@ -241,11 +381,21 @@ app.post("/api/queue", (req, res) => {
       .status(400)
       .json({ error: "Invalid collection name (alphanumeric only)" });
   }
-  if (!isSafePath(folderPath)) {
-    return res.status(403).json({ error: "Unsafe or restricted input path" });
+
+  const validation = await validateInputPath(folderPath, {
+    mustExist: true,
+    requireDirectory: true,
+    rejectSymlinks: BROWSE_ROOT_POLICY.rejectSymlinks,
+  });
+
+  if (!validation.ok) {
+    return res.status(403).json({
+      error: "Selected folder is unavailable or restricted",
+      code: validation.code,
+    });
   }
 
-  const job = ingestQueue.enqueue(folderPath, collection);
+  const job = ingestQueue.enqueue(validation.resolvedPath, collection);
   res.status(201).json(job);
 });
 

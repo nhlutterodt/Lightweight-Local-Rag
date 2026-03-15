@@ -13,6 +13,8 @@ import PDFParser from "pdf2json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const QUEUE_STATE_VERSION = 1;
+const DEFAULT_MAX_TERMINAL_JOBS = 200;
 
 class IngestionQueue extends EventEmitter {
   constructor() {
@@ -24,6 +26,9 @@ class IngestionQueue extends EventEmitter {
     this.config = null;
     this.dataDir = null;
     this.persistencePath = null;
+    this.maxTerminalJobs = Number(
+      process.env.QUEUE_MAX_TERMINAL_JOBS || DEFAULT_MAX_TERMINAL_JOBS,
+    );
   }
 
   // Allow server.js to pass down the config cleanly
@@ -335,12 +340,81 @@ class IngestionQueue extends EventEmitter {
     this.saveState();
   }
 
+  _pruneJobs() {
+    const activeStatuses = new Set(["pending", "processing"]);
+    const activeJobs = [];
+    const terminalJobs = [];
+
+    for (const job of this.jobs) {
+      if (activeStatuses.has(job.status)) {
+        activeJobs.push(job);
+      } else {
+        terminalJobs.push(job);
+      }
+    }
+
+    const sortedTerminal = terminalJobs.sort((a, b) => {
+      const aTime = Date.parse(a.completedAt || a.startedAt || a.addedAt || 0);
+      const bTime = Date.parse(b.completedAt || b.startedAt || b.addedAt || 0);
+      return bTime - aTime;
+    });
+
+    const retainedTerminal = sortedTerminal.slice(
+      0,
+      Math.max(0, this.maxTerminalJobs),
+    );
+    this.jobs = [...activeJobs, ...retainedTerminal];
+  }
+
+  _serializeState() {
+    return {
+      schemaVersion: QUEUE_STATE_VERSION,
+      updatedAt: new Date().toISOString(),
+      jobs: this.jobs,
+    };
+  }
+
+  _atomicWriteJson(filePath, payload) {
+    const tempPath = `${filePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), "utf8");
+    fs.renameSync(tempPath, filePath);
+  }
+
+  _backupCorruptState() {
+    if (!this.persistencePath || !fs.existsSync(this.persistencePath)) {
+      return;
+    }
+
+    const backupPath = `${this.persistencePath}.corrupt-${Date.now()}`;
+    try {
+      fs.renameSync(this.persistencePath, backupPath);
+      console.warn(`[Queue Load Warning] Backed up corrupt queue state to ${backupPath}`);
+    } catch (backupErr) {
+      console.warn("[Queue Load Warning] Failed to backup corrupt queue state", backupErr.message);
+    }
+  }
+
+  _hydrateJobs(raw) {
+    if (Array.isArray(raw)) {
+      return raw;
+    }
+
+    if (raw && typeof raw === "object" && Array.isArray(raw.jobs)) {
+      return raw.jobs;
+    }
+
+    return [];
+  }
+
   saveState() {
     try {
-      fs.writeFileSync(
-        this.persistencePath,
-        JSON.stringify(this.jobs, null, 2),
-      );
+      if (!this.persistencePath) {
+        return;
+      }
+
+      this._pruneJobs();
+      const payload = this._serializeState();
+      this._atomicWriteJson(this.persistencePath, payload);
       this.emit("update", this.jobs);
     } catch (err) {
       console.error("[Queue Persistence Error]", err.message);
@@ -349,9 +423,12 @@ class IngestionQueue extends EventEmitter {
 
   loadState() {
     try {
-      if (fs.existsSync(this.persistencePath)) {
+      if (this.persistencePath && fs.existsSync(this.persistencePath)) {
         const data = fs.readFileSync(this.persistencePath, "utf8");
-        this.jobs = JSON.parse(data);
+        const parsed = JSON.parse(data);
+        this.jobs = this._hydrateJobs(parsed);
+
+        this._pruneJobs();
         // Reset any "processing" jobs to "failed" on startup (interrupted)
         this.jobs.forEach((j) => {
           if (j.status === "processing") {
@@ -365,6 +442,7 @@ class IngestionQueue extends EventEmitter {
       }
     } catch (err) {
       console.warn("[Queue Load Warning]", err.message);
+      this._backupCorruptState();
       this.jobs = [];
     }
   }

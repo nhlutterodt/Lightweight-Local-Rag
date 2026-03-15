@@ -69,15 +69,35 @@ Writes an application log using the native `Append-LogEntry.ps1` script.
 
 ### GET `/api/browse`
 
-Spawns a native Windows OS folder selection dialog (`Select-Folder.ps1`) and returns the parsed path.
+Returns a server-side directory listing for the requested absolute path within configured allowed roots (`ALLOWED_BROWSE_ROOTS`).
+
+If `path` is omitted, the endpoint defaults to the first allowed root. Hidden dotfiles are filtered from the listing.
+
+**Query Parameters:**
+
+- `path` (optional): Absolute directory path.
 
 **Response (200 OK):**
 
 ```json
 {
-  "path": "C:\\Users\\Example\\Documents"
+  "currentPath": "C:\\Users\\Example\\RAG_Documents",
+  "parentPath": "C:\\Users\\Example",
+  "contents": [
+    {
+      "name": "ProjectDocs",
+      "isDirectory": true,
+      "path": "C:\\Users\\Example\\RAG_Documents\\ProjectDocs"
+    }
+  ]
 }
 ```
+
+**Error Contract:**
+
+- `403` with `code: "BROWSE_PATH_RESTRICTED"` when path is outside policy boundaries.
+- `404` with `code: "BROWSE_PATH_NOT_FOUND"` when path is missing between validation and read.
+- `500` with `code: "BROWSE_READ_FAILED"` for unexpected read failures.
 
 ### POST `/api/queue`
 
