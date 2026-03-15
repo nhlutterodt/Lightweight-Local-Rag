@@ -354,6 +354,7 @@ app.get("/api/queue/stream", (req, res) => {
   res.setHeader("Connection", "keep-alive");
 
   // Send initial state
+  ingestQueue.flushUpdateEmit();
   res.write(`data: ${JSON.stringify(ingestQueue.getJobs())}\n\n`);
 
   // Push updates natively when the queue saves state

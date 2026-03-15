@@ -16,6 +16,7 @@ const __dirname = path.dirname(__filename);
 const QUEUE_STATE_VERSION = 1;
 const DEFAULT_MAX_TERMINAL_JOBS = 200;
 const DEFAULT_PERSIST_DEBOUNCE_MS = 200;
+const DEFAULT_UPDATE_EMIT_DEBOUNCE_MS = 120;
 
 class IngestionQueue extends EventEmitter {
   constructor() {
@@ -33,9 +34,22 @@ class IngestionQueue extends EventEmitter {
     this.persistDebounceMs = Number(
       process.env.QUEUE_PERSIST_DEBOUNCE_MS || DEFAULT_PERSIST_DEBOUNCE_MS,
     );
+    this.updateEmitDebounceMs = Number(
+      process.env.QUEUE_UPDATE_EMIT_DEBOUNCE_MS ||
+        DEFAULT_UPDATE_EMIT_DEBOUNCE_MS,
+    );
     this._persistTimer = null;
     this._pendingPersist = false;
     this._isPersisting = false;
+    this._emitTimer = null;
+    this._pendingEmit = false;
+    this._lastEmitSignature = null;
+    this._metrics = {
+      saveRequests: 0,
+      persistenceWrites: 0,
+      updateEventsEmitted: 0,
+      updateEventsDeduped: 0,
+    };
   }
 
   // Allow server.js to pass down the config cleanly
@@ -381,6 +395,11 @@ class IngestionQueue extends EventEmitter {
     };
   }
 
+  _jobsSignature() {
+    // Use full JSON state to ensure dedup correctness over partial status changes.
+    return JSON.stringify(this.jobs);
+  }
+
   async _atomicWriteJson(filePath, payload) {
     const tempPath = `${filePath}.tmp`;
     await fs.promises.writeFile(tempPath, JSON.stringify(payload, null, 2), "utf8");
@@ -438,6 +457,7 @@ class IngestionQueue extends EventEmitter {
         this._pruneJobs();
         const payload = this._serializeState();
         await this._atomicWriteJson(this.persistencePath, payload);
+        this._metrics.persistenceWrites += 1;
       }
     } catch (err) {
       console.error("[Queue Persistence Error]", err.message);
@@ -465,6 +485,69 @@ class IngestionQueue extends EventEmitter {
     await this._runPersistLoop();
   }
 
+  _emitUpdateNow() {
+    const signature = this._jobsSignature();
+    if (signature === this._lastEmitSignature) {
+      this._metrics.updateEventsDeduped += 1;
+      return;
+    }
+
+    this._lastEmitSignature = signature;
+    this._metrics.updateEventsEmitted += 1;
+    this.emit("update", this.jobs);
+  }
+
+  _scheduleUpdateEmit() {
+    this._pendingEmit = true;
+
+    if (this._emitTimer) {
+      return;
+    }
+
+    this._emitTimer = setTimeout(() => {
+      this._emitTimer = null;
+      if (!this._pendingEmit) {
+        return;
+      }
+
+      this._pendingEmit = false;
+      this._emitUpdateNow();
+
+      if (this._pendingEmit) {
+        this._scheduleUpdateEmit();
+      }
+    }, Math.max(0, this.updateEmitDebounceMs));
+  }
+
+  flushUpdateEmit() {
+    if (this._emitTimer) {
+      clearTimeout(this._emitTimer);
+      this._emitTimer = null;
+    }
+
+    if (!this._pendingEmit) {
+      return;
+    }
+
+    this._pendingEmit = false;
+    this._emitUpdateNow();
+  }
+
+  getDebugMetrics() {
+    return {
+      ...this._metrics,
+    };
+  }
+
+  resetDebugMetrics() {
+    this._metrics = {
+      saveRequests: 0,
+      persistenceWrites: 0,
+      updateEventsEmitted: 0,
+      updateEventsDeduped: 0,
+    };
+  }
+
   async shutdown() {
     if (this._persistTimer) {
       clearTimeout(this._persistTimer);
@@ -472,6 +555,7 @@ class IngestionQueue extends EventEmitter {
     }
 
     this._pendingPersist = false;
+    this.flushUpdateEmit();
     await this.flushPersistence();
   }
 
@@ -480,8 +564,9 @@ class IngestionQueue extends EventEmitter {
       return;
     }
 
+    this._metrics.saveRequests += 1;
     this._schedulePersist();
-    this.emit("update", this.jobs);
+    this._scheduleUpdateEmit();
   }
 
   loadState() {

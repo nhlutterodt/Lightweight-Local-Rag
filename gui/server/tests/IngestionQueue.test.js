@@ -171,6 +171,7 @@ describe("IngestionQueue", () => {
         done();
       });
       queue.saveState();
+      queue.flushUpdateEmit();
     });
 
     it("should persist queue state as a versioned envelope", async () => {
@@ -195,7 +196,7 @@ describe("IngestionQueue", () => {
       ];
 
       queue.saveState();
-        await queue.flushPersistence();
+      await queue.flushPersistence();
 
       const ids = queue.jobs.map((job) => job.id);
       expect(ids).toContain("pending-1");
@@ -261,6 +262,100 @@ describe("IngestionQueue", () => {
       expect(queue.jobs.some((j) => j.id === "late")).toBe(true);
 
       atomicSpy.mockRestore();
+    });
+
+    it("should coalesce burst queue updates into bounded stream events", async () => {
+      queue.persistDebounceMs = 40;
+      queue.updateEmitDebounceMs = 40;
+      queue.resetDebugMetrics();
+
+      const streamEvents = [];
+      queue.on("update", (jobs) => {
+        streamEvents.push(jobs.map((j) => `${j.id}:${j.status}`).join("|"));
+      });
+
+      for (let i = 0; i < 100; i += 1) {
+        queue.jobs = [{ id: `job-${i}`, status: "pending" }];
+        queue.saveState();
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 130));
+      queue.flushUpdateEmit();
+      await queue.flushPersistence();
+
+      const metrics = queue.getDebugMetrics();
+      expect(metrics.saveRequests).toBe(100);
+      expect(metrics.updateEventsEmitted).toBe(streamEvents.length);
+      expect(metrics.updateEventsEmitted).toBeGreaterThanOrEqual(1);
+      expect(metrics.updateEventsEmitted).toBeLessThanOrEqual(2);
+      expect(metrics.persistenceWrites).toBeLessThanOrEqual(2);
+    });
+
+    it("captures before/after metrics for 100 queue updates", async () => {
+      const runBurst = async ({ flushEverySave }) => {
+        queue.jobs = [];
+        queue.resetDebugMetrics();
+        queue._lastEmitSignature = null;
+
+        const eventLog = [];
+        const onUpdate = (jobs) => {
+          eventLog.push(jobs.length);
+        };
+        queue.on("update", onUpdate);
+
+        for (let i = 0; i < 100; i += 1) {
+          queue.jobs = [
+            {
+              id: "burst-job",
+              status: "processing",
+              progress: `step-${i}`,
+            },
+          ];
+          queue.saveState();
+          if (flushEverySave) {
+            queue.flushUpdateEmit();
+            await queue.flushPersistence();
+          }
+        }
+
+        if (!flushEverySave) {
+          await new Promise((resolve) => setTimeout(resolve, 130));
+          queue.flushUpdateEmit();
+          await queue.flushPersistence();
+        }
+
+        queue.removeListener("update", onUpdate);
+        return {
+          ...queue.getDebugMetrics(),
+          streamMessages: eventLog.length,
+        };
+      };
+
+      queue.persistDebounceMs = 0;
+      queue.updateEmitDebounceMs = 0;
+      const baseline = await runBurst({ flushEverySave: true });
+
+      queue.persistDebounceMs = 40;
+      queue.updateEmitDebounceMs = 40;
+      const optimized = await runBurst({ flushEverySave: false });
+
+      expect(baseline.saveRequests).toBe(100);
+      expect(optimized.saveRequests).toBe(100);
+      expect(baseline.streamMessages).toBe(100);
+      expect(optimized.streamMessages).toBeGreaterThanOrEqual(1);
+      expect(optimized.streamMessages).toBeLessThanOrEqual(2);
+      expect(baseline.persistenceWrites).toBe(100);
+      expect(optimized.persistenceWrites).toBeLessThanOrEqual(2);
+      expect(optimized.streamMessages).toBeLessThan(baseline.streamMessages);
+      expect(optimized.persistenceWrites).toBeLessThan(baseline.persistenceWrites);
+
+      console.log("[Queue Burst Metrics]", {
+        saveRequests: baseline.saveRequests,
+        streamMessagesBaseline: baseline.streamMessages,
+        streamMessagesOptimized: optimized.streamMessages,
+        persistenceWritesBaseline: baseline.persistenceWrites,
+        persistenceWritesOptimized: optimized.persistenceWrites,
+      });
     });
   });
 

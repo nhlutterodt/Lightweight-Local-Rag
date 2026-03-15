@@ -10,6 +10,7 @@ export function useRagApi() {
   const [metrics, setMetrics] = useState([]);
   const [queue, setQueue] = useState([]);
   const eventSourceRef = useRef(null);
+  const queueSignatureRef = useRef("[]");
 
   // Initialize Models and Connection
   const checkConnection = useCallback(async () => {
@@ -115,6 +116,11 @@ export function useRagApi() {
     eventSourceRef.current.onmessage = (event) => {
       try {
         const jobs = JSON.parse(event.data);
+        const nextSignature = JSON.stringify(jobs);
+        if (nextSignature === queueSignatureRef.current) {
+          return;
+        }
+        queueSignatureRef.current = nextSignature;
         setQueue(jobs);
       } catch (e) {
         console.error("Queue SSE Parse", e);

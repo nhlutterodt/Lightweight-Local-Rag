@@ -15,6 +15,7 @@ audience: contributors
 - docs/RAG_Copilot_Instructions.md
 - docs/DOCS_GOVERNANCE.md
 - docs/DOCS_INDEX.md
+- docs/Efficiency_Pass_Plan.md
 
 ## Reference Contracts
 - docs/API_REFERENCE.md
