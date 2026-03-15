@@ -42,7 +42,22 @@ Restrict CORS strictly to the known local frontend URL.
 **Prohibited:** Defaulting file exploration or ingestion roots to `os.homedir()` or `C:\`.
 This turns a simple directory listing feature into a dangerous arbitrary file-read vulnerability if the API is ever exposed.
 
-**Required:** Define strict, constrained folders for RAG operations (e.g., `~/RAG_Documents`) and validate all incoming paths against this root to prevent path traversal (`../`).
+**Required:** Define strict, constrained folders for RAG operations (e.g., `~/RAG_Documents`) and validate all incoming paths against this root with canonical, boundary-safe checks.
+
+Validation contract for `/api/browse` and `/api/queue`:
+
+- Canonicalize candidate and root paths (`resolve` + `realpath`) before authorization.
+- Enforce separator-aware containment: candidate must be the root itself or a child of root.
+- Reject sibling-prefix escapes (for example `C:\data_evil` when root is `C:\data`).
+- Reject paths containing symbolic links/junctions in the traversed chain by default.
+
+Standardized browse error codes:
+
+- `BROWSE_PATH_RESTRICTED`: candidate path is outside allowed policy boundaries.
+- `BROWSE_PATH_NOT_FOUND`: path disappeared between validation and read.
+- `BROWSE_READ_FAILED`: generic server-side folder read failure.
+
+Do not return raw filesystem exceptions to the browser. Return a safe user-facing message plus a correlation `errorId`, and log full details server-side.
 
 ### 4. Dynamic Code Evaluation in PowerShell
 
@@ -62,6 +77,6 @@ $logger = & $sb $arg1 $arg2
 ## Recent Security Remediations (March 2026)
 
 - **Node.js**: The API bridge was patched to bind exclusively to `127.0.0.1` and restrict CORS to `localhost:5173`.
-- **File Access**: The `/api/browse` and `/api/queue` endpoints were restricted to a designated `RAG_Documents` folder, mitigating arbitrary file access.
+- **File Access**: The `/api/browse` and `/api/queue` endpoints were restricted to designated allowed roots with canonical boundary checks and symlink/junction rejection policy.
 - **PowerShell**: Removed `Invoke-Expression` vulnerabilities from `ExecutionContext.ps1` to prevent command injection via manipulated operational names.
 

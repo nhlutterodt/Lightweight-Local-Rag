@@ -85,6 +85,7 @@ const logger = new QueryLogger(
 
 const shutdown = async () => {
   console.log("Shutting down gracefully...");
+  await ingestQueue.flushPersistence();
   await logger.flush();
   process.exit();
 };

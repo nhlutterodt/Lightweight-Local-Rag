@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const QUEUE_STATE_VERSION = 1;
 const DEFAULT_MAX_TERMINAL_JOBS = 200;
+const DEFAULT_PERSIST_DEBOUNCE_MS = 200;
 
 class IngestionQueue extends EventEmitter {
   constructor() {
@@ -29,6 +30,12 @@ class IngestionQueue extends EventEmitter {
     this.maxTerminalJobs = Number(
       process.env.QUEUE_MAX_TERMINAL_JOBS || DEFAULT_MAX_TERMINAL_JOBS,
     );
+    this.persistDebounceMs = Number(
+      process.env.QUEUE_PERSIST_DEBOUNCE_MS || DEFAULT_PERSIST_DEBOUNCE_MS,
+    );
+    this._persistTimer = null;
+    this._pendingPersist = false;
+    this._isPersisting = false;
   }
 
   // Allow server.js to pass down the config cleanly
@@ -374,10 +381,10 @@ class IngestionQueue extends EventEmitter {
     };
   }
 
-  _atomicWriteJson(filePath, payload) {
+  async _atomicWriteJson(filePath, payload) {
     const tempPath = `${filePath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), "utf8");
-    fs.renameSync(tempPath, filePath);
+    await fs.promises.writeFile(tempPath, JSON.stringify(payload, null, 2), "utf8");
+    await fs.promises.rename(tempPath, filePath);
   }
 
   _backupCorruptState() {
@@ -406,19 +413,75 @@ class IngestionQueue extends EventEmitter {
     return [];
   }
 
-  saveState() {
-    try {
-      if (!this.persistencePath) {
-        return;
-      }
+  _schedulePersist() {
+    this._pendingPersist = true;
 
-      this._pruneJobs();
-      const payload = this._serializeState();
-      this._atomicWriteJson(this.persistencePath, payload);
-      this.emit("update", this.jobs);
+    if (this._persistTimer || this._isPersisting) {
+      return;
+    }
+
+    this._persistTimer = setTimeout(() => {
+      this._persistTimer = null;
+      this._runPersistLoop();
+    }, Math.max(0, this.persistDebounceMs));
+  }
+
+  async _runPersistLoop() {
+    if (this._isPersisting || !this.persistencePath) {
+      return;
+    }
+
+    this._isPersisting = true;
+    try {
+      while (this._pendingPersist) {
+        this._pendingPersist = false;
+        this._pruneJobs();
+        const payload = this._serializeState();
+        await this._atomicWriteJson(this.persistencePath, payload);
+      }
     } catch (err) {
       console.error("[Queue Persistence Error]", err.message);
+    } finally {
+      this._isPersisting = false;
+
+      // If new updates arrived while we were writing, drain one more cycle.
+      if (this._pendingPersist) {
+        void this._runPersistLoop();
+      }
     }
+  }
+
+  async flushPersistence() {
+    if (!this.persistencePath) {
+      return;
+    }
+
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+
+    this._pendingPersist = true;
+    await this._runPersistLoop();
+  }
+
+  async shutdown() {
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+
+    this._pendingPersist = false;
+    await this.flushPersistence();
+  }
+
+  saveState() {
+    if (!this.persistencePath) {
+      return;
+    }
+
+    this._schedulePersist();
+    this.emit("update", this.jobs);
   }
 
   loadState() {

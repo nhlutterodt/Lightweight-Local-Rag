@@ -65,8 +65,11 @@ _Always enforce these invariants:_
 
 1. **Network Binding:** Never use `app.listen(PORT)`. It binds to `0.0.0.0` and exposes the API to the local Wi-Fi. **Always explicitly bind to `127.0.0.1`.**
 2. **CORS:** Never use wildcard `cors()`. Restrict origin headers explicitly to our frontend (`http://localhost:5173`).
-3. **File Browsing:** Never expose `os.homedir()` or `C:\` to the `/api/browse` endpoint. Confine the ingestion targets to a strictly isolated `RAG_Documents` directory. Path traversal (`../`) checks are mandatory.
-4. **Shell Execution:** Never construct objects dynamically using `Invoke-Expression` in PowerShell. Command injection via malicious file names is a massive risk. Use static parameterized `scriptblocks`.
+3. **File Browsing:** Never expose `os.homedir()` or `C:\` to the `/api/browse` endpoint. Default to the first configured allowed root and enforce canonical containment.
+4. **Path Policy:** Validation must be `resolve + realpath` with separator-aware boundary checks. Sibling-prefix escapes (for example `C:\data_evil` when root is `C:\data`) are security bugs.
+5. **Symlink/Junction Policy:** Reject paths that traverse symbolic links or junctions by default for browse and queue ingestion entry points.
+6. **API Error Contract:** Keep browse errors standardized (`BROWSE_PATH_RESTRICTED`, `BROWSE_PATH_NOT_FOUND`, `BROWSE_READ_FAILED`) and never return raw filesystem exceptions to the UI.
+7. **Shell Execution:** Never construct objects dynamically using `Invoke-Expression` in PowerShell. Command injection via malicious file names is a massive risk. Use static parameterized `scriptblocks`.
 
 If you have questions, reference `docs/SECURITY.md` and `docs/Project_Critique.md`.
 Welcome to the team.

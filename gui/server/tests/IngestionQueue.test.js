@@ -104,10 +104,19 @@ describe("IngestionQueue", () => {
     jest.spyOn(queue, "processNext").mockImplementation(async () => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Stop any pending processes
     queue.isWorking = false;
     queue.jobs = [];
+
+    try {
+      jest.useRealTimers();
+    } catch {}
+
+    try {
+      await queue.shutdown();
+    } catch {}
+
     try {
       if (fs.existsSync(queue.persistencePath)) {
         fs.unlinkSync(queue.persistencePath);
@@ -133,13 +142,14 @@ describe("IngestionQueue", () => {
       expect(queue.persistencePath).toBe(path.join(tempDir, "queue.json"));
     });
 
-    it("should save and load state correctly", () => {
+    it("should save and load state correctly", async () => {
       jest.useFakeTimers();
       queue.jobs = [
         { id: "1", status: "completed" },
         { id: "2", status: "processing" }, // Should reset to failed on load
       ];
       queue.saveState();
+      await queue.flushPersistence();
 
       const newQueue = new IngestionQueue();
       newQueue.setConfig({ Paths: { DataDir: tempDir } });
@@ -163,9 +173,10 @@ describe("IngestionQueue", () => {
       queue.saveState();
     });
 
-    it("should persist queue state as a versioned envelope", () => {
+    it("should persist queue state as a versioned envelope", async () => {
       queue.jobs = [{ id: "1", status: "pending" }];
       queue.saveState();
+      await queue.flushPersistence();
 
       const persisted = JSON.parse(fs.readFileSync(queue.persistencePath, "utf8"));
       expect(persisted).toHaveProperty("schemaVersion", 1);
@@ -174,7 +185,7 @@ describe("IngestionQueue", () => {
       expect(persisted.jobs[0].id).toBe("1");
     });
 
-    it("should prune terminal jobs based on retention limit", () => {
+    it("should prune terminal jobs based on retention limit", async () => {
       queue.maxTerminalJobs = 2;
       queue.jobs = [
         { id: "pending-1", status: "pending", addedAt: "2026-01-01T00:00:00.000Z" },
@@ -184,6 +195,7 @@ describe("IngestionQueue", () => {
       ];
 
       queue.saveState();
+        await queue.flushPersistence();
 
       const ids = queue.jobs.map((job) => job.id);
       expect(ids).toContain("pending-1");
@@ -203,6 +215,52 @@ describe("IngestionQueue", () => {
         .readdirSync(tempDir)
         .filter((name) => name.startsWith("queue.json.corrupt-"));
       expect(backups.length).toBeGreaterThan(0);
+    });
+
+    it("should debounce burst save requests and persist latest state", async () => {
+      queue.persistDebounceMs = 50;
+
+      const atomicSpy = jest.spyOn(queue, "_atomicWriteJson");
+      queue.jobs = [{ id: "seed", status: "pending" }];
+      queue.saveState();
+      queue.jobs.push({ id: "latest", status: "completed" });
+      queue.saveState();
+      queue.saveState();
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      await queue.flushPersistence();
+
+      expect(atomicSpy.mock.calls.length).toBeLessThanOrEqual(2);
+      const persisted = JSON.parse(fs.readFileSync(queue.persistencePath, "utf8"));
+      const ids = persisted.jobs.map((job) => job.id);
+      expect(ids).toContain("latest");
+
+      atomicSpy.mockRestore();
+    });
+
+    it("should perform one trailing persist when updates arrive during write", async () => {
+      const writes = [];
+      queue.persistDebounceMs = 0;
+
+      const atomicSpy = jest
+        .spyOn(queue, "_atomicWriteJson")
+        .mockImplementation(async (filePath, payload) => {
+          writes.push(payload.jobs.length);
+          if (writes.length === 1) {
+            queue.jobs.push({ id: "late", status: "pending" });
+            queue.saveState();
+          }
+          await fs.promises.writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
+        });
+
+      queue.jobs = [{ id: "initial", status: "pending" }];
+      queue.saveState();
+      await queue.flushPersistence();
+
+      expect(writes.length).toBe(2);
+      expect(queue.jobs.some((j) => j.id === "late")).toBe(true);
+
+      atomicSpy.mockRestore();
     });
   });
 
