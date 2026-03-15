@@ -68,3 +68,29 @@
   font-style: italic;
   padding: 1rem 0;
 }
+
+.monitor-state.monitor-error {
+  color: var(--color-error);
+  font-style: normal;
+}
+
+@media (forced-colors: active) {
+  .index-monitor-box,
+  .monitor-item,
+  .monitor-health {
+    background: Canvas;
+    color: CanvasText;
+    border-color: ButtonText;
+  }
+
+  .monitor-name,
+  .monitor-empty,
+  .monitor-state,
+  .monitor-health {
+    color: CanvasText;
+  }
+
+  .monitor-health.corrupt {
+    border: 1px solid Highlight;
+  }
+}

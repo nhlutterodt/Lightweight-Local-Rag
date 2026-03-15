@@ -63,6 +63,10 @@ textarea:focus {
   border-color: var(--accent-primary);
 }
 
+textarea:focus-visible {
+  border-color: var(--accent-primary);
+}
+
 #sendMessage {
   background: var(--accent-primary);
   border: none;
@@ -86,6 +90,17 @@ textarea:focus {
 
 #sendMessage:not(:disabled):hover {
   transform: scale(1.05);
+}
+
+@media (forced-colors: active) {
+  .chat-container {
+    background: Canvas;
+  }
+
+  #sendMessage {
+    background: ButtonFace;
+    color: ButtonText;
+  }
 }
 
 .input-footer {

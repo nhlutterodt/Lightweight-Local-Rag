@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/DEVELOPER_ONBOARDING.md
-last_reviewed: 2026-03-14
+last_reviewed: 2026-03-15
 audience: contributors
 ---
 # Junior Developer Onboarding FAQ
@@ -33,15 +33,15 @@ Read this before touching the codebase.
 2. For small to medium local datasets (under 100,000 vectors), holding `Float32Array` buffers in V8 Javascript RAM and computing Cosine Similarity on the CPU takes ~5 milliseconds. It is brutally fast and requires zero network overhead.
 3. _Note on LanceDB:_ We recently introduced `@lancedb/lancedb` natively in Node.js for scalability. But the architectural philosophy remains: no external daemon processes. It must run in the existing event loop.
 
-## 3. Why is the Frontend just Vanilla JS and HTML? Where is React?
+## 3. Why are we using React and Vite for the frontend?
 
-**Q: `index.html` with raw DOM manipulations? Is this 2012? Why aren't we using React, Next.js, or Vue?**
+**Q: Why are we using React here instead of keeping the UI fully vanilla?**
 
-**A:** Because complex declarative state frameworks introduce massive build steps (Webpack/Vite), thousands of `node_modules`, and strict abstraction layers.
+**A:** The current UI is React-based because the app now manages concurrent chat streaming, queue updates, health polling, vector-index status, and richer component state than the original lightweight UI.
 
-- Web Standards have matured. Native ES6 Modules, `fetch` streams, CSS Variables, and Server-Sent Events (SSE) natively handle 99% of what we need.
-- Managing an AI streaming response via raw DOM text appending is often _more_ performant than fighting React's virtual DOM diffing lifecycle.
-- _Rule:_ Build complexity is our enemy. If you can do it natively in the browser without an `npm install`, do it natively.
+- React and Vite are now part of the established stack, so do not treat them as accidental complexity.
+- The old vanilla client still exists as legacy fallback material in parts of the repo, but React is the primary frontend architecture.
+- _Rule:_ Avoid framework churn. Build within the existing React/Vite structure unless there is a strong reason to change it.
 
 ## 4. What is the "Hot Path" vs the "Cold Path"?
 
@@ -50,12 +50,31 @@ Read this before touching the codebase.
 **A:** We use a strictly decoupled **Multi-Tier Architecture**:
 
 1. **The Hot Path (Node.js):**
-   - Handles the UI HTTP requests, RAM-based Vector querying, and Ollama LLM chat streams.
-   - Node.js was chosen because it maintains instant memory access, preventing the 3-second startup penalty inherent to PowerShell. Sub-second latency is critical here.
-2. **The Cold Path (PowerShell _previously_, now migrating to Node):**
-   - Historically handles heavy directory traversing, SHA256 hashing, and text chunking (e.g., `Ingest-Documents.ps1`). Node.js triggers these as background processes via child spawn wrappers so the async event loop never blocks.
+   - Handles UI HTTP requests, queue orchestration, LanceDB retrieval, Ollama chat streams, health checks, metrics, and query telemetry.
+   - Node.js was chosen because it avoids PowerShell cold-start penalties on the live application path.
+2. **The Background Runtime Path (also Node.js):**
+   - Handles directory traversal, hashing, chunking, embedding, manifest persistence, and LanceDB writes through `IngestionQueue.js`, `DocumentParser`, and `SmartTextChunker`.
+   - The goal is to keep ingestion off the chat path, not to bounce primary runtime work through PowerShell.
+3. **The Utility Layer (PowerShell):**
+   - Supports offline diagnostics, reporting, model checks, XML logging, and maintenance workflows.
+   - It is important, but it is no longer the main request-time or ingestion-time execution engine.
 
-## 5. Security Boundaries (CRITICAL)
+## 5. How do logging, telemetry, and health checks work?
+
+**Q: If something is slow or broken, where should I look first?**
+
+**A:** Start with the local observability surfaces the runtime already exposes:
+
+1. `docs/API_REFERENCE.md` for the current endpoint contracts.
+2. `/api/health` for Ollama, vector-store, and local disk readiness.
+3. `/api/index/metrics` for collection and vector index state.
+4. `logs/query_log.jsonl` for per-query telemetry, retrieval results, and `lowConfidence` signals.
+5. `PowerShell Scripts/Data/bridge-log.xml` for bridge and UI-originated XML log entries.
+6. PowerShell XML logs in `logs/` for utility and script execution details.
+
+If you need the bigger picture, read `docs/Observability_Analysis.md` before inventing a new telemetry path.
+
+## 6. Security Boundaries (CRITICAL)
 
 **Q: This runs on `localhost`. I don't have to worry about security, right?**
 
@@ -71,6 +90,6 @@ _Always enforce these invariants:_
 6. **API Error Contract:** Keep browse errors standardized (`BROWSE_PATH_RESTRICTED`, `BROWSE_PATH_NOT_FOUND`, `BROWSE_READ_FAILED`) and never return raw filesystem exceptions to the UI.
 7. **Shell Execution:** Never construct objects dynamically using `Invoke-Expression` in PowerShell. Command injection via malicious file names is a massive risk. Use static parameterized `scriptblocks`.
 
-If you have questions, reference `docs/SECURITY.md` and `docs/Project_Critique.md`.
+If you have questions, reference `docs/SECURITY.md`, `docs/Architecture_Design.md`, and `docs/Observability_Analysis.md`.
 Welcome to the team.
 

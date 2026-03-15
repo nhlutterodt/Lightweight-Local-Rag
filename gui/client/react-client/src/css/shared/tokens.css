@@ -4,10 +4,14 @@
   --accent-primary: #3b82f6;
   --accent-secondary: #8b5cf6;
   --text-main: #f3f4f6;
-  --text-muted: #9ca3af;
+  --text-muted: #b0b7c3;
   --glass-bg: rgba(255, 255, 255, 0.05);
   --glass-border: rgba(255, 255, 255, 0.1);
   --message-user: #2563eb;
   --message-ai: rgba(31, 41, 55, 0.5);
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+  --color-focus-ring: rgba(59, 130, 246, 0.28);
   --font-family: "Inter", system-ui, -apple-system, sans-serif;
 }

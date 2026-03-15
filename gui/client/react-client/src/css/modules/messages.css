@@ -51,6 +51,16 @@
   border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
+.session-notice {
+  margin-top: 0.8rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+
 /* Thinking Status Indicator */
 .thinking-status {
   display: flex;
@@ -163,6 +173,52 @@
   margin-bottom: 5px;
 }
 
+.message-recovery {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.message-recovery.status-interrupted {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.message-recovery.status-cancelled,
+.message-recovery.status-cancelled-before-start {
+  background: rgba(59, 130, 246, 0.09);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.message-recovery-title,
+.message-recovery-detail {
+  margin: 0;
+}
+
+.message-recovery-title {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.message-recovery-detail {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.message-recovery-actions {
+  display: flex;
+}
+
+.message-recovery-button {
+  width: auto;
+  margin-top: 0;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -196,4 +252,24 @@
 
 .citation-card .icon {
   color: var(--accent-primary);
+}
+
+@media (forced-colors: active) {
+  .message,
+  .user-message,
+  .ai-message,
+  .thinking-status,
+  .thinking-disclosure,
+  .citation-card,
+  .error-badge,
+  .message-recovery {
+    border: 1px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .status-spinner {
+    border-color: ButtonText;
+    border-top-color: Highlight;
+  }
 }

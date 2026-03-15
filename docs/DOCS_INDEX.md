@@ -11,16 +11,23 @@ audience: contributors
 - docs/Architecture_Design.md
 - docs/Technical_Component_Design.md
 - docs/DEVELOPER_ONBOARDING.md
+- docs/Observability_Analysis.md
+- docs/Observability_Execution_Plan.md
 - docs/Roadmap.md
 - docs/RAG_Copilot_Instructions.md
 - docs/DOCS_GOVERNANCE.md
 - docs/DOCS_INDEX.md
 - docs/Efficiency_Pass_Plan.md
+- docs/UI_UX_Analysis.md
+- docs/UI_UX_Frontend_Implementation_Plan.md
+- docs/User_Configuration_Architecture_Analysis.md
+- docs/User_Configuration_Execution_Plan.md
 
 ## Reference Contracts
 - docs/API_REFERENCE.md
 - docs/SSE_CONTRACT.md
 - docs/SECURITY.md
+- docs/Forced_Colors_Validation_Checklist.md
 
 ## Active Drafts (Authoritative Locations)
 - docs/active-drafts/Phase8_RAG_Design.md

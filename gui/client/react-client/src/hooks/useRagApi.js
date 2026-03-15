@@ -3,14 +3,78 @@ import { useState, useEffect, useCallback, useRef } from "react";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001";
 const API_URL = `${API_BASE}/api`;
 
+async function getResponseErrorMessage(response) {
+  try {
+    const data = await response.json();
+    return data.message || data.error || `Server returned ${response.status}`;
+  } catch {
+    return `Server returned ${response.status}`;
+  }
+}
+
+function nowIsoString() {
+  return new Date().toISOString();
+}
+
+function summarizeMetricChanges(previousMetrics, nextMetrics) {
+  if (previousMetrics.length === 0 && nextMetrics.length === 0) {
+    return "No indices reported.";
+  }
+
+  if (nextMetrics.length > previousMetrics.length) {
+    return `${nextMetrics.length - previousMetrics.length} index ${nextMetrics.length - previousMetrics.length === 1 ? "added" : "added"}.`;
+  }
+
+  if (nextMetrics.length < previousMetrics.length) {
+    return `${previousMetrics.length - nextMetrics.length} index ${previousMetrics.length - nextMetrics.length === 1 ? "removed" : "removed"}.`;
+  }
+
+  const previousByName = new Map(previousMetrics.map((metric) => [metric.name, metric.health]));
+  const changedHealthCount = nextMetrics.filter((metric) => previousByName.get(metric.name) !== undefined && previousByName.get(metric.name) !== metric.health).length;
+
+  if (changedHealthCount > 0) {
+    return `${changedHealthCount} index ${changedHealthCount === 1 ? 'health change detected' : 'health changes detected'}.`;
+  }
+
+  return 'Metrics refreshed with no index changes.';
+}
+
+function summarizeQueueChanges(previousQueue, nextQueue) {
+  if (previousQueue.length === 0 && nextQueue.length === 0) {
+    return 'Queue is empty.';
+  }
+
+  if (nextQueue.length > previousQueue.length) {
+    return `${nextQueue.length - previousQueue.length} job ${nextQueue.length - previousQueue.length === 1 ? 'added to queue' : 'added to queue'}.`;
+  }
+
+  if (nextQueue.length < previousQueue.length) {
+    return `${previousQueue.length - nextQueue.length} job ${previousQueue.length - nextQueue.length === 1 ? 'removed from queue' : 'removed from queue'}.`;
+  }
+
+  const previousByPath = new Map(previousQueue.map((job) => [job.path, job.status]));
+  const changedStatusCount = nextQueue.filter((job) => previousByPath.get(job.path) !== undefined && previousByPath.get(job.path) !== job.status).length;
+
+  if (changedStatusCount > 0) {
+    return `${changedStatusCount} job ${changedStatusCount === 1 ? 'status updated' : 'statuses updated'}.`;
+  }
+
+  return 'Queue refreshed with no job changes.';
+}
+
 export function useRagApi() {
   const [isConnected, setIsConnected] = useState(false);
   const [isModelReady, setIsModelReady] = useState(false);
   const [models, setModels] = useState([]);
   const [metrics, setMetrics] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [metricsState, setMetricsState] = useState({ status: "loading", error: "", lastUpdated: "", changeSummary: "Waiting for metrics." });
+  const [queueState, setQueueState] = useState({ status: "loading", error: "", lastUpdated: "", changeSummary: "Waiting for queue updates." });
   const eventSourceRef = useRef(null);
+  const chatAbortControllerRef = useRef(null);
   const queueSignatureRef = useRef("[]");
+  const previousMetricsRef = useRef([]);
+  const previousQueueRef = useRef([]);
 
   // Initialize Models and Connection
   const checkConnection = useCallback(async () => {
@@ -38,24 +102,57 @@ export function useRagApi() {
   const fetchMetrics = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/index/metrics`);
-      if (response.ok) {
-        setMetrics(await response.json());
+      if (!response.ok) {
+        throw new Error(await getResponseErrorMessage(response));
       }
+
+      const nextMetrics = await response.json();
+      setMetrics(nextMetrics);
+      setMetricsState({
+        status: "ready",
+        error: "",
+        lastUpdated: nowIsoString(),
+        changeSummary: summarizeMetricChanges(previousMetricsRef.current, nextMetrics),
+      });
+      previousMetricsRef.current = nextMetrics;
     } catch (e) {
       console.error("[Index Monitor Error]", e);
+      setMetricsState((current) => ({
+        ...current,
+        status: "error",
+        error: e.message || "Unable to load index metrics.",
+      }));
     }
   }, []);
 
   // Submit Chat Query (Streaming)
   const streamChat = async (messages, model, collection, onUpdate) => {
+    const emit = (type, payload = {}) => {
+      onUpdate?.({ type, ...payload });
+    };
+
+    const chatAbortController = new AbortController();
+    chatAbortControllerRef.current = chatAbortController;
+
     try {
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages, model, collection }),
+        signal: chatAbortController.signal,
       });
 
-      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      if (!response.ok) {
+        emit("error", { message: await getResponseErrorMessage(response) });
+        return;
+      }
+
+      if (!response.body) {
+        emit("error", { message: "Streaming response body was empty." });
+        return;
+      }
+
+      emit("start");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -71,20 +168,56 @@ export function useRagApi() {
 
         for (const line of lines) {
           const t = line.trim();
-          if (!t.startsWith("data: ")) continue;
+          if (!t.startsWith("data:")) continue;
+
+          const payload = t.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+
           try {
-            const data = JSON.parse(t.slice(6));
-            onUpdate(data);
+            const data = JSON.parse(payload);
+
+            if (data.type === "error") {
+              emit("error", { message: data.message || "Server returned an error." });
+              return;
+            }
+
+            const token = data?.message?.content;
+            if (typeof token === "string" && token.length > 0) {
+              emit("token", { content: token, raw: data });
+            }
           } catch (e) {
-            if (t.includes('{"model":')) continue;
             console.error("[Stream Parse Error]", e);
+            emit("error", { message: "Received malformed stream data from server." });
+            return;
           }
         }
       }
+
+      emit("done");
     } catch (err) {
-      onUpdate({ error: err.message });
+      if (err?.name === "AbortError") {
+        emit("cancelled", {
+          message: "Generation cancelled.",
+        });
+        return;
+      }
+
+      emit("error", { message: err.message });
+    } finally {
+      if (chatAbortControllerRef.current === chatAbortController) {
+        chatAbortControllerRef.current = null;
+      }
     }
   };
+
+  const cancelStreamChat = useCallback(() => {
+    if (!chatAbortControllerRef.current) {
+      return false;
+    }
+
+    chatAbortControllerRef.current.abort();
+    return true;
+  }, []);
 
   // Enqueue Ingestion
   const enqueueJob = async (path, collection) => {
@@ -113,18 +246,50 @@ export function useRagApi() {
 
     // Mount SSE Queue Stream
     eventSourceRef.current = new EventSource(`${API_URL}/queue/stream`);
+    eventSourceRef.current.onopen = () => {
+      setQueueState((current) => (
+        current.status === "loading"
+          ? { ...current, status: "ready", error: "" }
+          : current
+      ));
+    };
     eventSourceRef.current.onmessage = (event) => {
       try {
         const jobs = JSON.parse(event.data);
         const nextSignature = JSON.stringify(jobs);
         if (nextSignature === queueSignatureRef.current) {
+          setQueueState((current) => (
+            current.status === "error"
+              ? { ...current, status: "ready", error: "" }
+              : current
+          ));
           return;
         }
+
+        setQueueState({
+          status: "ready",
+          error: "",
+          lastUpdated: nowIsoString(),
+          changeSummary: summarizeQueueChanges(previousQueueRef.current, jobs),
+        });
         queueSignatureRef.current = nextSignature;
+        previousQueueRef.current = jobs;
         setQueue(jobs);
       } catch (e) {
         console.error("Queue SSE Parse", e);
+        setQueueState((current) => ({
+          ...current,
+          status: "error",
+          error: "Received malformed queue data.",
+        }));
       }
+    };
+    eventSourceRef.current.onerror = () => {
+      setQueueState((current) => ({
+        ...current,
+        status: "error",
+        error: "Live queue updates are unavailable.",
+      }));
     };
 
     return () => {
@@ -132,6 +297,9 @@ export function useRagApi() {
       clearInterval(metricInterval);
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+      }
+      if (chatAbortControllerRef.current) {
+        chatAbortControllerRef.current.abort();
       }
     };
   }, [checkConnection, fetchMetrics]);
@@ -142,7 +310,10 @@ export function useRagApi() {
     models,
     metrics,
     queue,
+    metricsState,
+    queueState,
     streamChat,
+    cancelStreamChat,
     enqueueJob,
     fetchMetrics,
   };

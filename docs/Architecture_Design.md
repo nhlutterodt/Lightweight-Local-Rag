@@ -2,14 +2,14 @@
 doc_state: canonical
 doc_owner: architecture
 canonical_ref: docs/Architecture_Design.md
-last_reviewed: 2026-03-14
+last_reviewed: 2026-03-15
 audience: engineering
 ---
 # Architecture Design
 
 ## 1. System Overview
 
-The Local RAG (Retrieval-Augmented Generation) Project v2 utilizes a **Hybrid Multi-Tier Architecture**, combining the rapid, scriptable system access of PowerShell with the high-performance, asynchronous networking capabilities of Node.js.
+The Local RAG (Retrieval-Augmented Generation) Project v2 utilizes a **Hybrid Multi-Tier Architecture** built around a Node.js runtime for the live application path, a React client for the local UI, and PowerShell utilities for offline diagnostics, reporting, and operational tooling.
 
 The system is designed to run 100% locally, with zero internet dependencies, ensuring complete data privacy. It leverages Ollama as the underlying local LLM engine for both embeddings and chat generation.
 
@@ -22,29 +22,44 @@ The application is strictly separated into three concerns:
 ### Tier 1: Client (Presentation Layer)
 
 - **Technology:** React, Vite.
-- **Rationale:** Managing complex UI states, active Server-Sent Events (SSE), and LLM reasoning processes in real-time requires a declarative framework. While this represents a departure from the original "extremely lightweight" vanilla JS philosophy and significantly increases the overall disk footprint (Docker images, node_modules), it provides vital UI stability and developer ergonomics.
+- **Rationale:** Managing complex UI states, active Server-Sent Events (SSE), queue updates, health polling, and LLM reasoning processes in real-time benefits from a declarative framework and predictable component model.
 - **Responsibilities:**
   - Rendering the chat UI and streaming reasoning/response tokens.
-  - Managing the ingestion queue UI and polling status.
+  - Managing the ingestion queue UI and polling operational status.
+  - Displaying health and vector index state from the bridge server.
   - Parsing active Server-Sent Events (SSE) from the Node.js bridge.
 
 ### Tier 2: Bridge Server (Middleware & Hot Path)
 
 - **Technology:** Node.js (Express), ES Modules.
-- **Rationale:** PowerShell possesses significant cold-start latency (2-5 seconds). Node.js maintains objects in memory instantly, providing real-time UI responsiveness and managing parallel background processes seamlessly.
+- **Rationale:** PowerShell possesses significant cold-start latency for user-facing request paths. Node.js maintains application state in memory, serves HTTP/SSE traffic efficiently, and now owns the primary runtime workflow for both chat and ingestion orchestration.
 - **Responsibilities:**
-  - **Hot Path Querying:** Directly calculates cosine similarities against `Float32Array` buffers in memory and streams LLM responses via generic `fetch`.
-  - **Process Management:** Spawns and monitors background PowerShell instances for heavy, synchronous tasks (like offline folder vectorization).
-  - **Telemetry:** Asynchronously writes pipeline logging (`query_log.jsonl`) without blocking the event loop.
+  - **Hot Path Querying:** Embeds prompts, queries LanceDB, and streams LLM responses over SSE.
+  - **Ingestion Orchestration:** Manages queue state, document scanning, chunking, embedding, and LanceDB writes through the native Node ingestion pipeline.
+  - **Operational APIs:** Serves `/api/health`, `/api/index/metrics`, `/api/models`, `/api/queue`, and `/api/log`.
+  - **Observability:** Asynchronously writes query telemetry to `logs/query_log.jsonl`, emits `Server-Timing` headers for chat requests, and appends bridge XML logs for UI-originated events.
 
-### Tier 3: Core Engine (Heavy Processing Layer)
+### Tier 3: Utility and Diagnostics Layer
 
 - **Technology:** PowerShell 7+ (Object-Oriented/Class-based).
-- **Rationale:** Deep system-level access. Unrestricted file system crawling. Excellent string manipulation for smart text chunking.
+- **Rationale:** PowerShell remains valuable for local diagnostics, structured XML logging, report generation, model checks, and scriptable system-level utilities.
 - **Responsibilities:**
-  - Crawling local directories and computing `SHA256` content hashes.
-  - Semantic chunking (markdown, code elements, text windows) via `SmartTextChunker.ps1`.
-  - Writing the highly-optimized `.vectors.bin` binary store to disk.
+  - Executing offline or maintenance-focused workflows such as model checks and report generation.
+  - Producing structured XML execution logs through `XMLLogger.ps1` and `ExecutionContext.ps1`.
+  - Supporting local analysis and diagnostics without sitting on the primary request path.
+
+## 2.5. Observability Surfaces
+
+The current runtime exposes several local observability surfaces:
+
+- `logs/query_log.jsonl` for chat-query telemetry and retrieval results.
+- `PowerShell Scripts/Data/bridge-log.xml` for bridge and UI-originated XML log entries.
+- PowerShell XML execution logs under `logs/` for script-level diagnostics.
+- `/api/health` for cached local dependency and disk readiness checks.
+- `/api/index/metrics` for vector index state and coarse collection health.
+- `Server-Timing` headers on `/api/chat` for embed, search, and total request timing.
+
+See `docs/Observability_Analysis.md` for the deeper assessment of strengths, gaps, and recommended follow-up work.
 
 ---
 
@@ -56,9 +71,9 @@ _This is the "Hot Path". Note that PowerShell is entirely excluded from this flo
 
 ```mermaid
 sequenceDiagram
-    participant UI as Client (Vanilla JS)
+    participant UI as Client (React)
     participant Node as Node.js Bridge (/api/chat)
-    participant VStore as VectorStore (RAM)
+    participant VStore as VectorStore (LanceDB)
     participant Ollama as Ollama Engine
 
     UI->>Node: POST /api/chat {messages: [...]}
@@ -66,7 +81,7 @@ sequenceDiagram
     Ollama-->>Node: Float32Array[768] (Query Vector)
 
     Node->>VStore: findNearest(Query Vector, TopK=5)
-    Note over VStore: Computes Cosine Similarity<br/>against ArrayBuffer
+    Note over VStore: Executes embedded vector search<br/>and relevance scoring
     VStore-->>Node: Top 5 Relevant Chunks
 
     Node-->>UI: SSE: {type: "status", message: "Searching..."}
@@ -79,70 +94,80 @@ sequenceDiagram
         Node-->>UI: SSE: {message: {content: "token"}}
     end
 
-    Node-)Node: Async Write to query_log.jsonl (Telemetry)
+    Node-)Node: Async Write to query_log.jsonl
+    Node-->>UI: Server-Timing header (embed/search/total)
 ```
 
 ### Diagram B: The Write Path (Data Ingestion)
 
-_This is the "Cold Path". Background jobs are managed via a local JSON queue, allowing heavy synchronous operations to run without blocking the UI._
+_This is the background ingestion path. Jobs are managed through a durable local queue and processed natively in Node.js without blocking the chat path._
 
 ```mermaid
 sequenceDiagram
-    participant UI as Client (Vanilla JS)
-    participant Node as Node.js Bridge (/api/ingest)
+    participant UI as Client (React)
+    participant Node as Node.js Bridge (/api/queue)
     participant Queue as IngestionQueue.js
-    participant PS as PowerShellRunner (Child Process)
+    participant Parser as DocumentParser + SmartTextChunker
     participant Ollama as Ollama Engine
+    participant DB as LanceDB
     participant Disk as Local File System
 
-    UI->>Node: POST /api/ingest {path, collection}
+    UI->>Node: POST /api/queue {path, collection}
     Node->>Queue: Push Job
     Queue-->>Node: Return Job ID
-    Node-->>UI: 202 Accepted
+    Node-->>UI: 201 Created
 
-    Note over Queue, PS: Background Execution Loop
-    Queue->>PS: spawn('Ingest-Documents.ps1', [path, collection])
+    Note over Queue, Parser: Background Execution Loop
+    Queue->>Parser: Scan files, hash content, detect renames/orphans
 
     loop File Crawl
-        PS->>Disk: Read files, Compute SHA256
-        PS->>PS: SmartTextChunker (overlap/boundaries)
-        PS->>Ollama: Emitted Chunks -> /api/embeddings
-        Ollama-->>PS: Float32 Vectors
+        Parser->>Disk: Read files, compute SHA256
+        Parser->>Parser: Chunk by file type and structure
+        Parser->>Ollama: Emit chunks to /api/embeddings
+        Ollama-->>Parser: Float32 Vectors
     end
 
-    PS->>Disk: Write Data/Collection.vectors.bin
-    PS->>Disk: Write Data/Collection.metadata.json
+    Queue->>DB: Upsert vectors and metadata into collection table
+    Queue->>Disk: Persist collection manifest and queue.json
 
-    PS-->>Queue: Process Exit (0)
     Queue->>Queue: Mark Job Complete
-
-    Note over Node, UI: The Node.js server detects the .bin modification and hot-reloads the RAM index.
+    Node-->>UI: SSE queue update events
 ```
 
 ---
 
 ## 4. Storage Architecture
 
-To ensure speed and portability, the RAG engine avoids heavy external databases (like SQLite or PostgreSQL) in favor of a tightly optimized, dual-file architecture per collection.
+To ensure speed and portability, the RAG engine uses an embedded local storage model built around LanceDB, JSON manifests, and log artifacts rather than an external database service.
 
-### 1. `CollectionName.vectors.bin`
+### 1. `PowerShell Scripts/Data/vector_store.lance`
 
-A raw binary payload designed to map instantly into memory (`Buffer` / `Float32Array`).
+The primary vector store for the live application runtime.
 
-- **Header:** Contains Vector Count (Int32), Dimensions (Int32), and the Embedded Model Name (Length-prefixed UTF-8 string, e.g., `nomic-embed-text`) to prevent dimension-mismatch corruption.
-- **Body:** Sequential 32-bit floats. At 768 dimensions, 10,000 vectors consume only ~30MB of RAM.
+- Stores vectors and metadata together in embedded LanceDB tables.
+- Used directly by the Node.js bridge for retrieval and metrics.
+- Keeps the application fully local without introducing a separate database server.
 
-### 2. `CollectionName.metadata.json`
-
-An array of objects corresponding 1:1 with the indices in the binary file.
-
-- **Fields:** `FileName`, `ChunkIndex`, `ChunkText`, `TextPreview`, `HeaderContext`, `Source`.
-- Storing the full raw text alongside the vector allows exact 1:1 prompt reconstruction during the chat phase without needing to fetch the original documents from the filesystem.
-
-### 3. `CollectionName.manifest.json`
+### 2. `CollectionName.manifest.json`
 
 A state-tracking ledger for ingestion optimization.
 
 - Stores `SHA256` hashes of original files.
-- Prevents re-vectorizing files that haven't changed, reducing ingestion time on large directories from minutes to milliseconds.
+- Tracks source paths, file size, chunk count, and embedding model.
+- Prevents re-vectorizing files that haven't changed and supports rename/orphan detection.
+
+### 3. `queue.json`
+
+The persisted ingestion queue state.
+
+- Maintains pending, processing, completed, failed, and cancelled job snapshots.
+- Allows the UI and server to coordinate queue status over time.
+
+### 4. Log and Telemetry Artifacts
+
+The application also persists local operational data alongside the content store.
+
+- `logs/query_log.jsonl` contains per-query retrieval telemetry.
+- `bridge-log.xml` and PowerShell XML logs capture structured debugging and utility output.
+- Historical `.vectors.bin` and companion files may still exist in the workspace, but they are not the primary runtime storage model for the current Node-first path.
 

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
   const [currentPath, setCurrentPath] = useState(initialPath);
@@ -9,14 +10,18 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const previouslyFocusedElementRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
+      previouslyFocusedElementRef.current = document.activeElement;
       fetchDirectory(initialPath);
     }
   }, [isOpen, initialPath]);
 
-  const fetchDirectory = async (pathStr) => {
+  const fetchDirectory = useCallback(async (pathStr) => {
     setLoading(true);
     setError(null);
     try {
@@ -39,47 +44,88 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const restoreFocus = useCallback(() => {
+    if (previouslyFocusedElementRef.current && typeof previouslyFocusedElementRef.current.focus === 'function') {
+      previouslyFocusedElementRef.current.focus();
+    }
+  }, []);
+
+  const handleClose = useCallback(() => {
+    restoreFocus();
+    onClose();
+  }, [onClose, restoreFocus]);
+
+  const handleSelectCurrentFolder = useCallback(() => {
+    restoreFocus();
+    onSelect(currentPath);
+  }, [currentPath, onSelect, restoreFocus]);
 
   useEffect(() => {
-    if (!isOpen || loading || error) return;
+    if (!isOpen) return;
 
-    const rows = [
-      ...(parentPath ? [{ isParent: true, path: parentPath }] : []),
-      ...contents.map((item) => ({ ...item, isParent: false }))
-    ];
+    closeButtonRef.current?.focus();
+  }, [isOpen]);
 
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
+  const rows = [
+    ...(parentPath ? [{ isParent: true, path: parentPath }] : []),
+    ...contents.map((item) => ({ ...item, isParent: false })),
+  ];
+
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      handleClose();
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      const focusableElements = Array.from(
+        dialogRef.current?.querySelectorAll(FOCUSABLE_SELECTOR) || [],
+      );
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
         return;
       }
 
-      if (!rows.length) return;
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
 
-      if (event.key === 'ArrowDown') {
+      if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault();
-        setActiveIndex((prev) => Math.min(prev + 1, rows.length - 1));
-      }
-
-      if (event.key === 'ArrowUp') {
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
         event.preventDefault();
-        setActiveIndex((prev) => Math.max(prev - 1, 0));
+        firstElement.focus();
       }
+      return;
+    }
 
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        const selected = rows[activeIndex];
-        if (!selected) return;
-        if (selected.isParent || selected.isDirectory) {
-          fetchDirectory(selected.path);
-        }
+    if (loading || error || !rows.length) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((prev) => Math.min(prev + 1, rows.length - 1));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((prev) => Math.max(prev - 1, 0));
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selected = rows[activeIndex];
+      if (selected && (selected.isParent || selected.isDirectory)) {
+        fetchDirectory(selected.path);
       }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeIndex, contents, error, isOpen, loading, onClose, parentPath]);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -89,13 +135,31 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
       backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
       alignItems: 'center', justifyContent: 'center', zIndex: 1000
     }}>
-      <div className="modal-content glass" style={{
+      <div
+        id="folder-browser-dialog"
+        className="modal-content glass"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="folder-browser-title"
+        tabIndex={-1}
+        ref={dialogRef}
+        onKeyDown={handleDialogKeyDown}
+        style={{
         width: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
         backgroundColor: 'var(--bg-panel)', padding: '20px', borderRadius: '8px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-          <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Select Folder</h2>
-          <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={onClose}>✕</button>
+          <h2 id="folder-browser-title" style={{ margin: 0, fontSize: '1.2rem' }}>Select Folder</h2>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="btn-secondary"
+            style={{ padding: '4px 8px' }}
+            aria-label="Close folder browser"
+            onClick={handleClose}
+          >
+            ✕
+          </button>
         </div>
 
         <div style={{ padding: '8px', backgroundColor: 'var(--bg-main)', borderRadius: '4px', marginBottom: '10px', wordBreak: 'break-all' }}>
@@ -113,6 +177,7 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
             return (
               <button
                 key={`${segment}-${index}`}
+                type="button"
                 className="btn-secondary"
                 style={{ marginTop: 0, padding: '2px 8px', fontSize: '0.75rem' }}
                 onClick={() => fetchDirectory(crumbPath)}
@@ -184,10 +249,11 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-secondary" onClick={handleClose}>Cancel</button>
           <button 
+            type="button"
             className="btn-primary" 
-            onClick={() => onSelect(currentPath)}
+            onClick={handleSelectCurrentFolder}
             disabled={loading || error || !currentPath}
           >
             Select Current Folder

@@ -18,6 +18,35 @@
   border-left: 3px solid var(--text-muted);
 }
 
+.panel-state-summary {
+  margin-bottom: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.panel-change-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.panel-change-summary time {
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-filename {
+  color: var(--text-main);
+  margin-bottom: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.queue-status-text {
+  color: var(--accent-primary);
+}
+
 .queue-item.processing {
   border-left-color: var(--accent-primary);
   background: rgba(59, 130, 246, 0.05);
@@ -69,4 +98,37 @@
   color: var(--text-muted);
   font-style: italic;
   padding: 12px 0;
+}
+
+.queue-state.queue-loading {
+  color: var(--text-muted);
+}
+
+.queue-state.queue-error {
+  color: var(--color-error);
+  font-style: normal;
+}
+
+@media (forced-colors: active) {
+  .queue-item,
+  .queue-manager-box {
+    background: Canvas;
+    color: CanvasText;
+    border-color: ButtonText;
+  }
+
+  .queue-item.processing,
+  .queue-item.completed,
+  .queue-item.failed {
+    border-left-color: Highlight;
+  }
+
+  .queue-status-text,
+  .panel-state-summary,
+  .panel-change-summary,
+  .queue-empty,
+  .queue-path,
+  .queue-filename {
+    color: CanvasText;
+  }
 }

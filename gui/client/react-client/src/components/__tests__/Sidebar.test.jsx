@@ -1,4 +1,4 @@
-import { render, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import Sidebar from "../Sidebar";
 
@@ -7,11 +7,10 @@ function renderSidebar(overrides = {}) {
     models: [{ name: "llama3", size: 1024 }],
     activeModel: "llama3",
     setActiveModel: vi.fn(),
+    collectionName: "TestIngest",
+    setCollectionName: vi.fn(),
     isConnected: true,
     isModelReady: true,
-    metrics: [],
-    queue: [],
-    isWide: true,
     onEnqueue: vi.fn().mockResolvedValue({ id: "job-1" }),
     onClearSession: vi.fn(),
   };
@@ -21,40 +20,36 @@ function renderSidebar(overrides = {}) {
   return { ...result, props };
 }
 
-describe("Sidebar persistence", () => {
-  it("hydrates ingest path and collection from localStorage", () => {
-    window.localStorage.setItem("rag.sidebar.collection", "SavedCollection");
+describe("Sidebar", () => {
+  it("hydrates ingest path from localStorage and exposes accessible labels", () => {
     window.localStorage.setItem("rag.sidebar.ingestPath", "C:/SavedPath");
 
-    const { container } = renderSidebar();
-    const collectionInput = container.querySelector("#collectionName");
-    const ingestInput = container.querySelector("#ingestPath");
+    renderSidebar();
+    const collectionInput = screen.getByLabelText(/collection/i);
+    const ingestInput = screen.getByLabelText(/vectorize new data/i);
+    const statusRegion = screen.getByRole("status");
 
-    expect(collectionInput.value).toBe("SavedCollection");
+    expect(collectionInput).toHaveValue("TestIngest");
     expect(ingestInput.value).toBe("C:/SavedPath");
+    expect(screen.getByLabelText(/ai model/i)).toBeInTheDocument();
+    expect(statusRegion).toHaveTextContent(/system online/i);
   });
 
-  it("persists updated path and collection values", async () => {
-    const { container } = renderSidebar();
-    const collectionInput = container.querySelector("#collectionName");
-    const ingestInput = container.querySelector("#ingestPath");
+  it("calls setCollectionName when the collection input changes", () => {
+    const { props } = renderSidebar();
 
-    fireEvent.change(collectionInput, { target: { value: "NewCollection" } });
-    fireEvent.change(ingestInput, { target: { value: "C:/Docs" } });
-
-    await waitFor(() => {
-      expect(window.localStorage.getItem("rag.sidebar.collection")).toBe("NewCollection");
-      expect(window.localStorage.getItem("rag.sidebar.ingestPath")).toBe("C:/Docs");
+    fireEvent.change(screen.getByLabelText(/collection/i), {
+      target: { value: "NewCollection" },
     });
+
+    expect(props.setCollectionName).toHaveBeenCalledWith("NewCollection");
   });
 
   it("keeps path by default and stores recent history after successful enqueue", async () => {
-    const { container, props } = renderSidebar();
-    const collectionInput = container.querySelector("#collectionName");
-    const ingestInput = container.querySelector("#ingestPath");
-    const queueButton = container.querySelector("#enqueueIngest");
+    const { props } = renderSidebar({ collectionName: "PersistedCollection" });
+    const ingestInput = screen.getByLabelText(/vectorize new data/i);
+    const queueButton = screen.getByRole("button", { name: /queue/i });
 
-    fireEvent.change(collectionInput, { target: { value: "PersistedCollection" } });
     fireEvent.change(ingestInput, { target: { value: "C:/PersistedPath" } });
     fireEvent.click(queueButton);
 
@@ -62,7 +57,7 @@ describe("Sidebar persistence", () => {
       expect(props.onEnqueue).toHaveBeenCalledWith("C:/PersistedPath", "PersistedCollection");
     });
 
-    expect(container.querySelector("#ingestPath").value).toBe("C:/PersistedPath");
+    expect(screen.getByLabelText(/vectorize new data/i)).toHaveValue("C:/PersistedPath");
 
     await waitFor(() => {
       const recentPaths = JSON.parse(window.localStorage.getItem("rag.sidebar.recentPaths") || "[]");
@@ -73,17 +68,17 @@ describe("Sidebar persistence", () => {
   });
 
   it("clears path after enqueue when clear option is enabled", async () => {
-    const { container } = renderSidebar();
-    const ingestInput = container.querySelector("#ingestPath");
-    const queueButton = container.querySelector("#enqueueIngest");
-    const clearCheckbox = container.querySelector("input[type='checkbox']");
+    renderSidebar();
+    const ingestInput = screen.getByLabelText(/vectorize new data/i);
+    const queueButton = screen.getByRole("button", { name: /queue/i });
+    const clearCheckbox = screen.getByLabelText(/clear path after successful queue/i);
 
     fireEvent.change(ingestInput, { target: { value: "C:/ToClear" } });
     fireEvent.click(clearCheckbox);
     fireEvent.click(queueButton);
 
     await waitFor(() => {
-      expect(container.querySelector("#ingestPath").value).toBe("");
+      expect(screen.getByLabelText(/vectorize new data/i)).toHaveValue("");
     });
   });
 });

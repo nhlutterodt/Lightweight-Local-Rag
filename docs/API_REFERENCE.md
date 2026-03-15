@@ -2,7 +2,7 @@
 doc_state: reference-contract
 doc_owner: api
 canonical_ref: docs/API_REFERENCE.md
-last_reviewed: 2026-03-14
+last_reviewed: 2026-03-15
 audience: engineering
 ---
 # Local RAG API Reference
@@ -17,18 +17,33 @@ For the specific SSE payload contract used by the LLM inference engine, see [SSE
 
 ### GET `/api/health`
 
-Executes a native PowerShell health diagnostic (`Invoke-SystemHealth.ps1`).
+Runs a native Node.js health check that summarizes local dependency and storage readiness.
 
-**Note:** This endpoint implements a 15-second localized memory cache to prevent UI polling from spawning excessive `pwsh` subprocesses.
+**Note:** This endpoint implements a 15-second in-memory cache to keep repeated UI polling lightweight.
 
 **Response (200 OK):**
 
 ```json
 {
-  "Processors": ["Intel(R) Core(TM) i7..."],
-  "MemoryGB": 32,
-  "DiskFreeGB": 105.2,
-  "PowerShellVersion": "7.4.1"
+  "timestamp": "2026-03-15T14:13:01.887Z",
+  "status": "healthy",
+  "checks": [
+    {
+      "name": "Ollama Service",
+      "status": "OK",
+      "message": "Service reachable"
+    },
+    {
+      "name": "Vector Store",
+      "status": "OK",
+      "message": "Data directory exists at C:\\Users\\Owner\\Local-RAG-Project-v2\\Local-RAG-Project-v2\\PowerShell Scripts\\Data"
+    },
+    {
+      "name": "Local Disk",
+      "status": "OK",
+      "message": "42.7 GB free on drive"
+    }
+  ]
 }
 ```
 
@@ -51,7 +66,9 @@ Fetches the current Ollama tags and cross-references them against the required m
 
 ### POST `/api/log`
 
-Writes an application log using the native `Append-LogEntry.ps1` script.
+Writes an application log through the Node.js bridge XML logger.
+
+The log is appended to `PowerShell Scripts/Data/bridge-log.xml` using a minimal `PowerShellLog` XML structure.
 
 **Request:**
 
@@ -60,6 +77,14 @@ Writes an application log using the native `Append-LogEntry.ps1` script.
   "message": "User clicked settings",
   "level": "INFO",
   "category": "UI"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "status": "logged"
 }
 ```
 
@@ -212,7 +237,7 @@ The server uses **RFC 7807 Problem Details** for HTTP APIs to format standard co
 {
   "type": "System Health Error",
   "status": 500,
-  "detail": "Failed to invoke PowerShell script due to restricted execution policy."
+  "detail": "connect ECONNREFUSED 127.0.0.1:11434"
 }
 ```
 
