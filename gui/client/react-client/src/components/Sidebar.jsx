@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import AnalyticsPanel from './AnalyticsPanel';
 import FolderBrowserModal from './FolderBrowserModal';
 
-function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, queue, isWide, onEnqueue, onClearSession }) {
+function Sidebar({ models, activeModel, setActiveModel, isConnected, isModelReady, metrics, queue, isWide, onEnqueue, onClearSession }) {
   const [collectionName, setCollectionName] = useState("TestIngest");
   const [ingestPath, setIngestPath] = useState("");
   const [isBrowseOpen, setIsBrowseOpen] = useState(false);
@@ -65,9 +65,11 @@ function Sidebar({ models, activeModel, setActiveModel, isConnected, metrics, qu
           <label>Status</label>
           <div 
             id="connectionStatus" 
-            className={`status-indicator ${isConnected ? 'status-online' : 'status-offline'}`}
+            className={`status-indicator ${!isConnected ? 'status-offline' : (isModelReady ? 'status-online' : 'status-warning')}`}
           >
-            {isConnected ? 'System Online' : 'Checking Ollama...'}
+            {!isConnected
+              ? 'Checking Ollama...'
+              : (isModelReady ? 'System Online' : 'Ollama reachable; model setup needed')}
           </div>
         </div>
 

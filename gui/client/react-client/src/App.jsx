@@ -8,7 +8,7 @@ import AnalyticsPanel from './components/AnalyticsPanel';
 import './index.css';
 
 function App() {
-  const { isConnected, models, metrics, queue, streamChat, enqueueJob } = useRagApi();
+  const { isConnected, isModelReady, models, metrics, queue, streamChat, enqueueJob } = useRagApi();
   const { width } = useWindowDimensions();
   const isWide = width > 1200;
   
@@ -60,6 +60,7 @@ function App() {
         activeModel={activeModel}
         setActiveModel={setActiveModel}
         isConnected={isConnected}
+        isModelReady={isModelReady}
         metrics={metrics}
         queue={queue}
         isWide={isWide}

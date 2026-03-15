@@ -28,11 +28,18 @@ const config = loadConfig(path.resolve(__dirname, "..", ".."));
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.SERVER_HOST || "127.0.0.1";
 const OLLAMA_URL =
   process.env.OLLAMA_URL ||
   config?.RAG?.OllamaUrl ||
   config?.Ollama?.ServiceUrl ||
   "http://localhost:11434";
+const CORS_ORIGINS = (
+  process.env.CORS_ORIGINS || "http://localhost:5173;http://localhost:8080"
+)
+  .split(";")
+  .map((o) => o.trim())
+  .filter(Boolean);
 const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
   ? path.join(__dirname, "..", "..", config.Paths.ScriptsDirectory)
   : path.join(__dirname, "..", "..", "PowerShell Scripts");
@@ -85,7 +92,17 @@ const shutdown = async () => {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || CORS_ORIGINS.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+  }),
+);
 app.use(express.json());
 
 // Serve React dist if available, else fallback to old vanilla client
@@ -679,8 +696,8 @@ app.post("/api/ingest", (req, res) => {
 
 // Only start server if run directly (not imported)
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  app.listen(PORT, "127.0.0.1", () => {
-    console.log(`🚀 Bridge Server running at http://127.0.0.1:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 Bridge Server running at http://${HOST}:${PORT}`);
     console.log(`📂 PowerShell Scripts: ${PS_SCRIPTS_DIR}`);
   });
 }

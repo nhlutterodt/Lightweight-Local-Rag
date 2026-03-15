@@ -8,6 +8,8 @@ services:
       - "3001:3001"
     environment:
       - OLLAMA_URL=http://ollama:11434
+      - SERVER_HOST=0.0.0.0
+      - CORS_ORIGINS=http://localhost:5173;http://localhost:8080
       # Allow the backend to browse the /data mounted volume
       - ALLOWED_BROWSE_ROOTS=/data
     volumes:

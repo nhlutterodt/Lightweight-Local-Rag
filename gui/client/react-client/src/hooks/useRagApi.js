@@ -4,6 +4,7 @@ const API_URL = "http://localhost:3001/api";
 
 export function useRagApi() {
   const [isConnected, setIsConnected] = useState(false);
+  const [isModelReady, setIsModelReady] = useState(false);
   const [models, setModels] = useState([]);
   const [metrics, setMetrics] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -13,15 +14,20 @@ export function useRagApi() {
   const checkConnection = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/models`);
+      if (!res.ok) {
+        throw new Error(`Connection check failed with status ${res.status}`);
+      }
       const data = await res.json();
 
       if (data.models) {
         const chatModels = data.models.filter((m) => m.role === "chat");
         setModels(chatModels);
       }
-      setIsConnected(!!data.ready);
+      setIsConnected(true);
+      setIsModelReady(!!data.ready);
     } catch (e) {
       setIsConnected(false);
+      setIsModelReady(false);
       console.warn("API Connection failed", e.message);
     }
   }, []);
@@ -97,6 +103,9 @@ export function useRagApi() {
     checkConnection();
     fetchMetrics();
 
+    // Poll API connection state (10s) so startup races recover automatically.
+    const connectionInterval = setInterval(checkConnection, 10000);
+
     // Polling Index (20s)
     const metricInterval = setInterval(fetchMetrics, 20000);
 
@@ -112,6 +121,7 @@ export function useRagApi() {
     };
 
     return () => {
+      clearInterval(connectionInterval);
       clearInterval(metricInterval);
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -121,6 +131,7 @@ export function useRagApi() {
 
   return {
     isConnected,
+    isModelReady,
     models,
     metrics,
     queue,
