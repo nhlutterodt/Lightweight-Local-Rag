@@ -290,6 +290,68 @@ describe("useRagApi streamChat", () => {
     });
   });
 
+  it("emits answer_references and grounding_warning events when present in stream", async () => {
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).includes("/api/models")) {
+        return {
+          ok: true,
+          json: async () => ({ models: [], ready: true }),
+        };
+      }
+
+      if (String(url).includes("/api/index/metrics")) {
+        return {
+          ok: true,
+          json: async () => [],
+        };
+      }
+
+      if (String(url).includes("/api/chat")) {
+        return createStreamingResponse([
+          'data: {"type":"metadata","citations":[{"chunkId":"chunk-1","sourceId":"source-1","fileName":"a.md","score":0.9,"headerContext":"A","preview":"A preview"}]}\n',
+          'data: {"message":{"content":"Grounded answer."}}\n',
+          'data: {"type":"answer_references","references":[{"chunkId":"chunk-1","sourceId":"source-1"}]}\n',
+          'data: {"type":"grounding_warning","code":"PARTIAL_GROUNDING","message":"Partial grounding confidence"}\n',
+        ]);
+      }
+
+      return {
+        ok: true,
+        json: async () => ({}),
+      };
+    });
+
+    const { result } = renderHook(() => useRagApi());
+    const onUpdate = vi.fn();
+
+    await act(async () => {
+      await result.current.streamChat(
+        [{ role: "user", content: "Hi" }],
+        "llama3",
+        "Docs",
+        onUpdate,
+      );
+    });
+
+    expect(onUpdate.mock.calls.map(([event]) => event.type)).toEqual([
+      "start",
+      "metadata",
+      "token",
+      "answer_references",
+      "grounding_warning",
+      "done",
+    ]);
+
+    expect(onUpdate.mock.calls[3][0]).toMatchObject({
+      type: "answer_references",
+      references: [{ chunkId: "chunk-1", sourceId: "source-1" }],
+    });
+    expect(onUpdate.mock.calls[4][0]).toMatchObject({
+      type: "grounding_warning",
+      code: "PARTIAL_GROUNDING",
+    });
+  });
+
   it("emits an error event for non-200 chat responses", async () => {
     global.fetch = vi.fn(async (url) => {
       if (String(url).includes("/api/models")) {

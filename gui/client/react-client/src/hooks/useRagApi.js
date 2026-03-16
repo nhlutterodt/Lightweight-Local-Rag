@@ -266,6 +266,22 @@ export function useRagApi() {
               continue;
             }
 
+            if (
+              data.type === "answer_references" &&
+              Array.isArray(data.references)
+            ) {
+              emit("answer_references", { references: data.references });
+              continue;
+            }
+
+            if (data.type === "grounding_warning") {
+              emit("grounding_warning", {
+                code: data.code,
+                message: data.message,
+              });
+              continue;
+            }
+
             const token = data?.message?.content;
             if (typeof token === "string" && token.length > 0) {
               emit("token", { content: token, raw: data });

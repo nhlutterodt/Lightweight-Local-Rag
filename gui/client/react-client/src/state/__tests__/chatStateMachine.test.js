@@ -56,6 +56,49 @@ describe('chatStateMachine', () => {
     expect(assistant.citations[0].fileName).toBe('Architecture_Design.md');
   });
 
+  it('defines explicit action constants for answer references and grounding warnings', () => {
+    expect(CHAT_ACTIONS.STREAM_ANSWER_REFERENCES).toBe('STREAM_ANSWER_REFERENCES');
+    expect(CHAT_ACTIONS.STREAM_GROUNDING_WARNING).toBe('STREAM_GROUNDING_WARNING');
+  });
+
+  it('attaches answer references separately from citations on the active assistant message', () => {
+    let state = sendPrompt(createInitialChatState(), 'Prompt with grounded references');
+
+    state = chatReducer(state, {
+      type: 'STREAM_ANSWER_REFERENCES',
+      references: [
+        {
+          chunkId: 'chunk-1',
+          sourceId: 'source-1',
+          fileName: 'Architecture_Design.md',
+        },
+      ],
+    });
+
+    const assistant = state.history[state.history.length - 1];
+    expect(Array.isArray(assistant.answerReferences)).toBe(true);
+    expect(assistant.answerReferences).toHaveLength(1);
+    expect(assistant.answerReferences[0].chunkId).toBe('chunk-1');
+    expect(Array.isArray(assistant.citations)).toBe(true);
+  });
+
+  it('stores grounding warning details on the active assistant message', () => {
+    let state = sendPrompt(createInitialChatState(), 'Prompt with weak grounding');
+
+    state = chatReducer(state, {
+      type: 'STREAM_GROUNDING_WARNING',
+      warning: {
+        code: 'NO_APPROVED_CONTEXT',
+        message: 'No approved evidence was available for grounded references.',
+      },
+    });
+
+    const assistant = state.history[state.history.length - 1];
+    expect(assistant.groundingWarning).toMatchObject({
+      code: 'NO_APPROVED_CONTEXT',
+    });
+  });
+
   it('guards illegal token transition when not generating', () => {
     const initial = createInitialChatState();
     const next = chatReducer(initial, {

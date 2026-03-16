@@ -11,6 +11,27 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 
+const findNearestMock = jest.fn(() => [
+  {
+    score: 0.85,
+    ChunkText: "This is a test chunk with full content.",
+    TextPreview: "This is a test chunk...",
+    FileName: "test_doc.md",
+    ChunkIndex: 0,
+    HeaderContext: "Test > Section A",
+    index: 0,
+  },
+  {
+    score: 0.72,
+    ChunkText: "Another test chunk for verification.",
+    TextPreview: "Another test chunk...",
+    FileName: "test_doc2.md",
+    ChunkIndex: 1,
+    HeaderContext: "Test > Section B",
+    index: 1,
+  },
+]);
+
 // ── Mocks ────────────────────────────────────────────────────
 
 // Mock child_process — spawn still used by PowerShellRunner (health/log routes)
@@ -43,26 +64,7 @@ jest.unstable_mockModule("../lib/vectorStore.js", () => {
     model: "nomic-embed-text",
     size: 2,
     load: jest.fn(),
-    findNearest: jest.fn(() => [
-      {
-        score: 0.85,
-        ChunkText: "This is a test chunk with full content.",
-        TextPreview: "This is a test chunk...",
-        FileName: "test_doc.md",
-        ChunkIndex: 0,
-        HeaderContext: "Test > Section A",
-        index: 0,
-      },
-      {
-        score: 0.72,
-        ChunkText: "Another test chunk for verification.",
-        TextPreview: "Another test chunk...",
-        FileName: "test_doc2.md",
-        ChunkIndex: 1,
-        HeaderContext: "Test > Section B",
-        index: 1,
-      },
-    ]),
+    findNearest: findNearestMock,
   };
 
   return {
@@ -114,6 +116,30 @@ function parseSSE(responseText) {
 describe("SSE Contract — /api/chat", () => {
   let response;
   let sseResult;
+
+  beforeEach(() => {
+    findNearestMock.mockReset();
+    findNearestMock.mockResolvedValue([
+      {
+        score: 0.85,
+        ChunkText: "This is a test chunk with full content.",
+        TextPreview: "This is a test chunk...",
+        FileName: "test_doc.md",
+        ChunkIndex: 0,
+        HeaderContext: "Test > Section A",
+        index: 0,
+      },
+      {
+        score: 0.72,
+        ChunkText: "Another test chunk for verification.",
+        TextPreview: "Another test chunk...",
+        FileName: "test_doc2.md",
+        ChunkIndex: 1,
+        HeaderContext: "Test > Section B",
+        index: 1,
+      },
+    ]);
+  });
 
   beforeAll(async () => {
     response = await request(app)
@@ -193,6 +219,65 @@ describe("SSE Contract — /api/chat", () => {
     );
     const fullText = tokenEvents.map((t) => t.message.content).join("");
     expect(fullText).toBe("Hello world!");
+  });
+
+  it("should emit answer_references after token events", () => {
+    const tokenIndexes = sseResult.events
+      .map((event, index) => (event?.message?.content ? index : -1))
+      .filter((index) => index >= 0);
+    const answerReferenceIndex = sseResult.events.findIndex(
+      (event) => event.type === "answer_references",
+    );
+
+    expect(tokenIndexes.length).toBeGreaterThan(0);
+    expect(answerReferenceIndex).toBeGreaterThan(-1);
+    expect(answerReferenceIndex).toBeGreaterThan(
+      Math.max(...tokenIndexes),
+    );
+
+    const answerReferences = sseResult.events[answerReferenceIndex];
+    expect(Array.isArray(answerReferences.references)).toBe(true);
+    expect(answerReferences.references.length).toBeGreaterThan(0);
+    for (const reference of answerReferences.references) {
+      expect(typeof reference.chunkId).toBe("string");
+      expect(typeof reference.sourceId).toBe("string");
+    }
+  });
+
+  it("no-evidence path emits empty answer_references and optional grounding_warning", async () => {
+    findNearestMock.mockResolvedValueOnce([]);
+
+    const noEvidenceResponse = await request(app)
+      .post("/api/chat")
+      .send({
+        messages: [{ role: "user", content: "Question with no matches" }],
+        collection: "TestIngest",
+      });
+
+    expect(noEvidenceResponse.status).toBe(200);
+
+    const noEvidenceEvents = parseSSE(noEvidenceResponse.text).events;
+    const metadataEvent = noEvidenceEvents.find(
+      (event) => event.type === "metadata",
+    );
+    const answerReferencesEvent = noEvidenceEvents.find(
+      (event) => event.type === "answer_references",
+    );
+    const groundingWarningEvent = noEvidenceEvents.find(
+      (event) => event.type === "grounding_warning",
+    );
+
+    expect(metadataEvent).toBeDefined();
+    expect(metadataEvent.citations).toEqual([]);
+
+    expect(answerReferencesEvent).toBeDefined();
+    expect(Array.isArray(answerReferencesEvent.references)).toBe(true);
+    expect(answerReferencesEvent.references).toEqual([]);
+
+    if (groundingWarningEvent) {
+      expect(typeof groundingWarningEvent.code).toBe("string");
+      expect(typeof groundingWarningEvent.message).toBe("string");
+    }
   });
 
   // ── Server-Timing Header ──

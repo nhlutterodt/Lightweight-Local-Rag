@@ -33,7 +33,10 @@ audience: contributors
 - docs/active-drafts/Phase8_RAG_Design.md
 - docs/active-drafts/Phase9_Chat_Design.md
 - docs/active-drafts/Phase10_WebUI_Design.md
+- docs/active-drafts/RAG_Chunk_Identity_Decision_Record.md
+- docs/active-drafts/RAG_Grounding_Stream_Contract_Decision_Record.md
 - docs/active-drafts/RAG_Pipeline_Backend_Assessment.md
+- docs/active-drafts/RAG_PhaseA_Failing_Provenance_Test_Plan.md
 - docs/active-drafts/RAG_Grounding_Provenance_Hardening_Plan.md
 - docs/active-drafts/RAG_Locator_Support_Analysis.md
 - docs/active-drafts/RAG_Retrieval_Redesign_Execution_Plan.md

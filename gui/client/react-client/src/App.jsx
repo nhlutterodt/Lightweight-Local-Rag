@@ -134,6 +134,25 @@ function App() {
           return;
         }
 
+        if (event.type === 'answer_references') {
+          dispatchChat({
+            type: CHAT_ACTIONS.STREAM_ANSWER_REFERENCES,
+            references: event.references,
+          });
+          return;
+        }
+
+        if (event.type === 'grounding_warning') {
+          dispatchChat({
+            type: CHAT_ACTIONS.STREAM_GROUNDING_WARNING,
+            warning: {
+              code: event.code,
+              message: event.message,
+            },
+          });
+          return;
+        }
+
         if (event.type === 'error') {
           dispatchChat({ type: CHAT_ACTIONS.STREAM_ERROR, message: event.message });
           return;

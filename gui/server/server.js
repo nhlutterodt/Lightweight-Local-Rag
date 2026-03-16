@@ -4,6 +4,7 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { createHash } from "crypto";
 import { fileURLToPath } from "url";
 import axios from "axios";
 import { loadConfig } from "./lib/configLoader.js";
@@ -48,6 +49,26 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
 
 const ingestQueue = new IngestionQueue();
 if (config) ingestQueue.setConfig(config);
+
+function stableIdentityHash(parts) {
+  const raw = parts
+    .map((part) => (part === undefined || part === null ? "" : String(part)))
+    .join("||");
+  return createHash("sha256").update(raw).digest("hex").slice(0, 16);
+}
+
+function deriveSourceId(result) {
+  const fileName = result?.FileName || "unknown";
+  return `src_${stableIdentityHash([fileName])}`;
+}
+
+function deriveChunkId(result, sourceId) {
+  return `chk_${stableIdentityHash([
+    sourceId,
+    result?.ChunkIndex,
+    result?.ChunkText || result?.TextPreview || "",
+  ])}`;
+}
 
 // ==========================================
 // 1. LanceDB Initialization (Async)
@@ -777,12 +798,18 @@ app.post("/api/chat", async (req, res) => {
       preview: r.TextPreview,
     }));
 
-    const citations = approvedResults.map((r) => ({
-      fileName: r.FileName,
-      headerContext: r.HeaderContext,
-      score: r.score,
-      preview: r.TextPreview,
-    }));
+    const citations = approvedResults.map((r) => {
+      const sourceId = deriveSourceId(r);
+      const chunkId = deriveChunkId(r, sourceId);
+      return {
+        chunkId,
+        sourceId,
+        fileName: r.FileName,
+        headerContext: r.HeaderContext,
+        score: r.score,
+        preview: r.TextPreview,
+      };
+    });
 
     // 3. Compute Logging Data
     const topScore = approvedResults.length > 0 ? approvedResults[0].score : 0;
@@ -848,6 +875,15 @@ app.post("/api/chat", async (req, res) => {
         );
       },
       abortController.signal,
+    );
+
+    const answerReferences = citations.map((citation) => ({
+      chunkId: citation.chunkId,
+      sourceId: citation.sourceId,
+      fileName: citation.fileName,
+    }));
+    res.write(
+      `data: ${JSON.stringify({ type: "answer_references", references: answerReferences })}\n\n`,
     );
 
     res.end();

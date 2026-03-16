@@ -2,6 +2,8 @@ const CHAT_ACTIONS = {
   SEND_REQUEST: 'SEND_REQUEST',
   STREAM_START: 'STREAM_START',
   STREAM_METADATA: 'STREAM_METADATA',
+  STREAM_ANSWER_REFERENCES: 'STREAM_ANSWER_REFERENCES',
+  STREAM_GROUNDING_WARNING: 'STREAM_GROUNDING_WARNING',
   STREAM_TOKEN: 'STREAM_TOKEN',
   STREAM_ERROR: 'STREAM_ERROR',
   STREAM_CANCELLED: 'STREAM_CANCELLED',
@@ -20,6 +22,8 @@ function createAssistantMessage(prompt) {
     createdAt: new Date().toISOString(),
     content: '',
     citations: [],
+    answerReferences: [],
+    groundingWarning: null,
     status: 'streaming',
     errorMessage: '',
     recoveryPrompt: prompt,
@@ -162,6 +166,58 @@ export function chatReducer(state, action) {
       const nextHistory = updateActiveAssistant(state.history, (assistant) => ({
         ...assistant,
         citations: action.citations,
+      }));
+
+      if (!nextHistory) {
+        warnIllegalTransition(action.type, state);
+        return state;
+      }
+
+      return {
+        ...state,
+        history: nextHistory,
+      };
+    }
+
+    case CHAT_ACTIONS.STREAM_ANSWER_REFERENCES: {
+      if (!state.isGenerating) {
+        warnIllegalTransition(action.type, state);
+        return state;
+      }
+
+      if (!Array.isArray(action.references)) {
+        return state;
+      }
+
+      const nextHistory = updateActiveAssistant(state.history, (assistant) => ({
+        ...assistant,
+        answerReferences: action.references,
+      }));
+
+      if (!nextHistory) {
+        warnIllegalTransition(action.type, state);
+        return state;
+      }
+
+      return {
+        ...state,
+        history: nextHistory,
+      };
+    }
+
+    case CHAT_ACTIONS.STREAM_GROUNDING_WARNING: {
+      if (!state.isGenerating) {
+        warnIllegalTransition(action.type, state);
+        return state;
+      }
+
+      if (!action.warning || typeof action.warning !== 'object') {
+        return state;
+      }
+
+      const nextHistory = updateActiveAssistant(state.history, (assistant) => ({
+        ...assistant,
+        groundingWarning: action.warning,
       }));
 
       if (!nextHistory) {
