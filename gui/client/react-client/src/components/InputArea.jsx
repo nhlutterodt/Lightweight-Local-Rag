@@ -49,7 +49,7 @@ function InputArea({ onSend, onCancel, disabled, isGenerating }) {
           onKeyDown={handleKeyDown}
         ></textarea>
         <button 
-          id="sendMessage" 
+          className="send-message-button"
           type="button"
           aria-label={isGenerating ? 'Stop generation' : 'Send message'}
           disabled={isGenerating ? false : (disabled || !text.trim())}

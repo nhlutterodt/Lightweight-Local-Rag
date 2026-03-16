@@ -23,6 +23,22 @@
   --color-success: #10b981;
   --color-error: #ef4444;
   --color-warning: #f59e0b;
+  /* Semantic status map for status surfaces (Batch B) */
+  --status-info-fg: var(--color-info);
+  --status-info-bg: rgba(59, 130, 246, 0.12);
+  --status-info-border: rgba(59, 130, 246, 0.25);
+  --status-success-fg: var(--color-success);
+  --status-success-bg: rgba(16, 185, 129, 0.16);
+  --status-success-border: rgba(16, 185, 129, 0.3);
+  --status-warning-fg: var(--color-warning);
+  --status-warning-bg: rgba(245, 158, 11, 0.14);
+  --status-warning-border: rgba(245, 158, 11, 0.3);
+  --status-error-fg: var(--color-error);
+  --status-error-bg: rgba(239, 68, 68, 0.14);
+  --status-error-border: rgba(239, 68, 68, 0.3);
+  --status-neutral-fg: var(--text-secondary);
+  --status-neutral-bg: rgba(148, 163, 184, 0.14);
+  --status-neutral-border: rgba(148, 163, 184, 0.3);
   --color-focus-ring: rgba(59, 130, 246, 0.28);
 
   /* Typography tokens */
@@ -50,6 +66,7 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
   --space-10: 2.5rem;
+  --layout-sidebar-width: 20rem;
 
   /* Radius tokens */
   --radius-sm: 4px;
@@ -94,5 +111,20 @@
   --color-success: #059669;
   --color-error: #dc2626;
   --color-warning: #d97706;
+  --status-info-fg: #1d4ed8;
+  --status-info-bg: rgba(37, 99, 235, 0.1);
+  --status-info-border: rgba(37, 99, 235, 0.28);
+  --status-success-fg: #047857;
+  --status-success-bg: rgba(5, 150, 105, 0.1);
+  --status-success-border: rgba(5, 150, 105, 0.28);
+  --status-warning-fg: #b45309;
+  --status-warning-bg: rgba(217, 119, 6, 0.1);
+  --status-warning-border: rgba(217, 119, 6, 0.3);
+  --status-error-fg: #b91c1c;
+  --status-error-bg: rgba(220, 38, 38, 0.1);
+  --status-error-border: rgba(220, 38, 38, 0.3);
+  --status-neutral-fg: #334155;
+  --status-neutral-bg: rgba(148, 163, 184, 0.12);
+  --status-neutral-border: rgba(100, 116, 139, 0.3);
   --color-focus-ring: rgba(37, 99, 235, 0.24);
 }

@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint:css": "stylelint \"src/**/*.css\"",
+    "validate:head-contract": "node ./scripts/validate-head-contract.mjs",
+    "test:visual": "vitest run src/test/visual-regression.test.jsx"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -21,6 +24,8 @@
     "jsdom": "^28.1.0",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
+    "stylelint": "^16.25.0",
+    "stylelint-config-standard": "^37.0.0",
     "vitest": "^4.1.0",
     "vitest-axe": "^0.1.0"
   },

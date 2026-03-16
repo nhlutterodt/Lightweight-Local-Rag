@@ -1,0 +1,593 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`visual regression harness > analytics status surfaces render consistently in dark theme > analytics-status-dark 1`] = `
+<section
+  aria-labelledby="indexMonitorLabel"
+  class="nav-item"
+>
+  <span
+    class="field-label"
+    id="indexMonitorLabel"
+  >
+    Vector Index Monitor
+  </span>
+  <p
+    aria-atomic="true"
+    aria-live="polite"
+    class="sr-only"
+    role="status"
+  >
+    2 vector indices loaded.
+  </p>
+  <div
+    aria-describedby="indexMonitorSummary"
+    class="index-monitor-box"
+    id="indexMonitor"
+  >
+    <div
+      class="panel-state-summary"
+      id="indexMonitorSummary"
+    >
+      2 vector indices loaded.
+    </div>
+    <div
+      class="panel-change-summary"
+    >
+      <time
+        datetime=""
+      >
+        Last updated: 
+        Awaiting first update
+      </time>
+      <span>
+        No changes.
+      </span>
+    </div>
+    <div
+      class="monitor-item"
+    >
+      <div
+        class="monitor-header"
+      >
+        <span
+          class="monitor-name"
+          title="rag-index-A"
+        >
+          rag-index-A
+        </span>
+        <span
+          class="monitor-health "
+        >
+          HEALTHY
+        </span>
+      </div>
+    </div>
+    <div
+      class="monitor-item"
+    >
+      <div
+        class="monitor-header"
+      >
+        <span
+          class="monitor-name"
+          title="rag-index-B"
+        >
+          rag-index-B
+        </span>
+        <span
+          class="monitor-health corrupt"
+        >
+          CORRUPT
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+`;
+
+exports[`visual regression harness > analytics status surfaces render consistently in light theme > analytics-status-light 1`] = `
+<section
+  aria-labelledby="indexMonitorLabel"
+  class="nav-item"
+>
+  <span
+    class="field-label"
+    id="indexMonitorLabel"
+  >
+    Vector Index Monitor
+  </span>
+  <p
+    aria-atomic="true"
+    aria-live="polite"
+    class="sr-only"
+    role="status"
+  >
+    2 vector indices loaded.
+  </p>
+  <div
+    aria-describedby="indexMonitorSummary"
+    class="index-monitor-box"
+    id="indexMonitor"
+  >
+    <div
+      class="panel-state-summary"
+      id="indexMonitorSummary"
+    >
+      2 vector indices loaded.
+    </div>
+    <div
+      class="panel-change-summary"
+    >
+      <time
+        datetime=""
+      >
+        Last updated: 
+        Awaiting first update
+      </time>
+      <span>
+        No changes.
+      </span>
+    </div>
+    <div
+      class="monitor-item"
+    >
+      <div
+        class="monitor-header"
+      >
+        <span
+          class="monitor-name"
+          title="rag-index-A"
+        >
+          rag-index-A
+        </span>
+        <span
+          class="monitor-health "
+        >
+          HEALTHY
+        </span>
+      </div>
+    </div>
+    <div
+      class="monitor-item"
+    >
+      <div
+        class="monitor-header"
+      >
+        <span
+          class="monitor-name"
+          title="rag-index-B"
+        >
+          rag-index-B
+        </span>
+        <span
+          class="monitor-health corrupt"
+        >
+          CORRUPT
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+`;
+
+exports[`visual regression harness > chat recovery states render consistently in dark theme > chat-recovery-dark 1`] = `
+<div
+  aria-busy="false"
+  aria-label="Conversation history"
+  aria-live="polite"
+  aria-relevant="additions text"
+  class="chat-window"
+  id="chatWindow"
+  role="log"
+>
+  <div
+    class="message user-message glass"
+  >
+    <div
+      class="content"
+    >
+      <div
+        class="message-header"
+      >
+        <h3>
+          You
+        </h3>
+        <time
+          class="message-time"
+          datetime="2026-03-16T10:00:00.000Z"
+        >
+          3/16/2026, 6:00:00 AM
+        </time>
+      </div>
+      <div
+        class="message-markdown"
+      >
+        <p>
+          Explain token strategy
+        </p>
+      </div>
+    </div>
+  </div>
+  <div
+    class="message ai-message glass"
+  >
+    <div
+      class="content"
+    >
+      <div
+        class="message-header"
+      >
+        <h3>
+          System
+        </h3>
+        <time
+          class="message-time"
+          datetime="2026-03-16T10:00:02.000Z"
+        >
+          3/16/2026, 6:00:02 AM
+        </time>
+      </div>
+      <div
+        class="message-markdown"
+      >
+        <p>
+          Partial answer
+        </p>
+      </div>
+      <div
+        class="message-recovery status-interrupted"
+        role="alert"
+      >
+        <p
+          class="message-recovery-title"
+        >
+          Response interrupted
+        </p>
+        <p
+          class="message-recovery-detail"
+        >
+          Stream interrupted.
+        </p>
+        <div
+          class="message-recovery-actions"
+        >
+          <button
+            class="btn-secondary message-recovery-button"
+            type="button"
+          >
+            Retry response
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div
+    class="message ai-message glass"
+  >
+    <div
+      class="content"
+    >
+      <div
+        class="message-header"
+      >
+        <h3>
+          System
+        </h3>
+        <time
+          class="message-time"
+          datetime="2026-03-16T10:00:03.000Z"
+        >
+          3/16/2026, 6:00:03 AM
+        </time>
+      </div>
+      <div
+        class="error-badge"
+        role="alert"
+      >
+        Backend unavailable.
+      </div>
+    </div>
+  </div>
+  <div
+    aria-hidden="true"
+  />
+</div>
+`;
+
+exports[`visual regression harness > chat recovery states render consistently in light theme > chat-recovery-light 1`] = `
+<div
+  aria-busy="false"
+  aria-label="Conversation history"
+  aria-live="polite"
+  aria-relevant="additions text"
+  class="chat-window"
+  id="chatWindow"
+  role="log"
+>
+  <div
+    class="message user-message glass"
+  >
+    <div
+      class="content"
+    >
+      <div
+        class="message-header"
+      >
+        <h3>
+          You
+        </h3>
+        <time
+          class="message-time"
+          datetime="2026-03-16T10:00:00.000Z"
+        >
+          3/16/2026, 6:00:00 AM
+        </time>
+      </div>
+      <div
+        class="message-markdown"
+      >
+        <p>
+          Explain token strategy
+        </p>
+      </div>
+    </div>
+  </div>
+  <div
+    class="message ai-message glass"
+  >
+    <div
+      class="content"
+    >
+      <div
+        class="message-header"
+      >
+        <h3>
+          System
+        </h3>
+        <time
+          class="message-time"
+          datetime="2026-03-16T10:00:02.000Z"
+        >
+          3/16/2026, 6:00:02 AM
+        </time>
+      </div>
+      <div
+        class="message-markdown"
+      >
+        <p>
+          Partial answer
+        </p>
+      </div>
+      <div
+        class="message-recovery status-interrupted"
+        role="alert"
+      >
+        <p
+          class="message-recovery-title"
+        >
+          Response interrupted
+        </p>
+        <p
+          class="message-recovery-detail"
+        >
+          Stream interrupted.
+        </p>
+        <div
+          class="message-recovery-actions"
+        >
+          <button
+            class="btn-secondary message-recovery-button"
+            type="button"
+          >
+            Retry response
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div
+    class="message ai-message glass"
+  >
+    <div
+      class="content"
+    >
+      <div
+        class="message-header"
+      >
+        <h3>
+          System
+        </h3>
+        <time
+          class="message-time"
+          datetime="2026-03-16T10:00:03.000Z"
+        >
+          3/16/2026, 6:00:03 AM
+        </time>
+      </div>
+      <div
+        class="error-badge"
+        role="alert"
+      >
+        Backend unavailable.
+      </div>
+    </div>
+  </div>
+  <div
+    aria-hidden="true"
+  />
+</div>
+`;
+
+exports[`visual regression harness > input area states render consistently in dark theme > input-generating-dark 1`] = `
+<div
+  class="input-area glass"
+>
+  <div
+    class="input-wrapper"
+  >
+    <label
+      class="sr-only"
+      for="userInput"
+    >
+      Query message
+    </label>
+    <textarea
+      id="userInput"
+      placeholder="Ask anything about your documents..."
+      rows="1"
+      style="height: 0px;"
+    />
+    <button
+      aria-label="Stop generation"
+      class="send-message-button"
+      data-tooltip="Stop generating this response"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■
+      </span>
+    </button>
+  </div>
+  <div
+    class="input-footer"
+  >
+    Powered by Native Ollama Embeddings & LanceDB • Local Execution Only
+  </div>
+</div>
+`;
+
+exports[`visual regression harness > input area states render consistently in dark theme > input-ready-dark 1`] = `
+<div
+  class="input-area glass"
+>
+  <div
+    class="input-wrapper"
+  >
+    <label
+      class="sr-only"
+      for="userInput"
+    >
+      Query message
+    </label>
+    <textarea
+      id="userInput"
+      placeholder="Ask anything about your documents..."
+      rows="1"
+      style="height: 0px;"
+    />
+    <button
+      aria-label="Send message"
+      class="send-message-button"
+      data-tooltip="Send your query to the AI"
+      disabled=""
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        height="24"
+        viewBox="0 0 24 24"
+        width="24"
+      >
+        <path
+          d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+  </div>
+  <div
+    class="input-footer"
+  >
+    Powered by Native Ollama Embeddings & LanceDB • Local Execution Only
+  </div>
+</div>
+`;
+
+exports[`visual regression harness > input area states render consistently in light theme > input-generating-light 1`] = `
+<div
+  class="input-area glass"
+>
+  <div
+    class="input-wrapper"
+  >
+    <label
+      class="sr-only"
+      for="userInput"
+    >
+      Query message
+    </label>
+    <textarea
+      id="userInput"
+      placeholder="Ask anything about your documents..."
+      rows="1"
+      style="height: 0px;"
+    />
+    <button
+      aria-label="Stop generation"
+      class="send-message-button"
+      data-tooltip="Stop generating this response"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■
+      </span>
+    </button>
+  </div>
+  <div
+    class="input-footer"
+  >
+    Powered by Native Ollama Embeddings & LanceDB • Local Execution Only
+  </div>
+</div>
+`;
+
+exports[`visual regression harness > input area states render consistently in light theme > input-ready-light 1`] = `
+<div
+  class="input-area glass"
+>
+  <div
+    class="input-wrapper"
+  >
+    <label
+      class="sr-only"
+      for="userInput"
+    >
+      Query message
+    </label>
+    <textarea
+      id="userInput"
+      placeholder="Ask anything about your documents..."
+      rows="1"
+      style="height: 0px;"
+    />
+    <button
+      aria-label="Send message"
+      class="send-message-button"
+      data-tooltip="Send your query to the AI"
+      disabled=""
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        height="24"
+        viewBox="0 0 24 24"
+        width="24"
+      >
+        <path
+          d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+  </div>
+  <div
+    class="input-footer"
+  >
+    Powered by Native Ollama Embeddings & LanceDB • Local Execution Only
+  </div>
+</div>
+`;

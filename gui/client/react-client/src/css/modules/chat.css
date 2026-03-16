@@ -20,6 +20,8 @@
   flex-direction: column;
   gap: 1.5rem;
   margin-bottom: 2rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border) transparent;
 }
 
 .chat-window::-webkit-scrollbar {
@@ -63,15 +65,11 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
-textarea:focus {
-  border-color: var(--accent-primary);
-}
-
 textarea:focus-visible {
   border-color: var(--accent-primary);
 }
 
-#sendMessage {
+.send-message-button {
   background: var(--accent-primary);
   border: none;
   color: white;
@@ -87,12 +85,12 @@ textarea:focus-visible {
     opacity 0.2s;
 }
 
-#sendMessage:disabled {
+.send-message-button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-#sendMessage:not(:disabled):hover {
+.send-message-button:not(:disabled):hover {
   transform: scale(1.05);
 }
 
@@ -101,7 +99,7 @@ textarea:focus-visible {
     background: Canvas;
   }
 
-  #sendMessage {
+  .send-message-button {
     background: ButtonFace;
     color: ButtonText;
   }

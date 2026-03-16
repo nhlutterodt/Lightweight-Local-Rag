@@ -8,6 +8,8 @@
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid var(--glass-border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border) transparent;
 }
 
 .monitor-item {
@@ -45,13 +47,13 @@
   font-size: 0.65rem;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
 }
 
 .monitor-health.corrupt {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background: var(--status-error-bg);
+  color: var(--status-error-fg);
 }
 
 .monitor-stats {
@@ -94,31 +96,31 @@
 }
 
 :root[data-theme="light"] .monitor-state.monitor-loading {
-  background: rgba(37, 99, 235, 0.08);
-  border-color: rgba(37, 99, 235, 0.28);
-  color: #1d4ed8;
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+  color: var(--status-info-fg);
 }
 
 :root[data-theme="light"] .monitor-state.monitor-empty-state {
-  background: rgba(148, 163, 184, 0.12);
-  border-color: rgba(100, 116, 139, 0.3);
-  color: #334155;
+  background: var(--status-neutral-bg);
+  border-color: var(--status-neutral-border);
+  color: var(--status-neutral-fg);
 }
 
 :root[data-theme="light"] .monitor-state.monitor-error {
-  background: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.3);
-  color: #b91c1c;
+  background: var(--status-error-bg);
+  border-color: var(--status-error-border);
+  color: var(--status-error-fg);
 }
 
 :root[data-theme="light"] .monitor-health {
-  background: rgba(16, 185, 129, 0.14);
-  color: #047857;
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
 }
 
 :root[data-theme="light"] .monitor-health.corrupt {
-  background: rgba(220, 38, 38, 0.14);
-  color: #b91c1c;
+  background: var(--status-error-bg);
+  color: var(--status-error-fg);
 }
 
 @media (forced-colors: active) {

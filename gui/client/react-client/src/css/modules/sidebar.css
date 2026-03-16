@@ -1,9 +1,9 @@
 /* Sidebar */
 .sidebar {
-  width: 320px;
+  width: var(--layout-sidebar-width);
   display: flex;
   flex-direction: column;
-  padding: 2rem;
+  padding: var(--space-8);
   border-right: 1px solid var(--glass-border);
 }
 
@@ -148,7 +148,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .folder-browser-dialog {
@@ -269,13 +269,13 @@
 }
 
 .status-online {
-  color: #10b981;
+  color: var(--status-success-fg);
 }
 .status-offline {
-  color: #ef4444;
+  color: var(--status-error-fg);
 }
 .status-warning {
-  color: #f59e0b;
+  color: var(--status-warning-fg);
 }
 
 @media (forced-colors: active) {
@@ -292,8 +292,8 @@
 .model-warning {
   margin-top: 10px;
   padding: 10px 12px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--status-warning-bg);
+  border: 1px solid var(--status-warning-border);
   border-radius: 8px;
   font-size: 0.75rem;
   line-height: 1.5;
@@ -318,7 +318,7 @@
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.7rem;
-  color: #f59e0b;
+  color: var(--status-warning-fg);
 }
 
 .sidebar-clear-undo {
@@ -349,7 +349,7 @@
 
 :root[data-theme="light"] .ingest-error-message,
 :root[data-theme="light"] .folder-browser-error {
-  color: #b91c1c;
+  color: var(--status-error-fg);
 }
 
 :root[data-theme="light"] .folder-browser-loading,
@@ -371,20 +371,20 @@
 }
 
 :root[data-theme="light"] .status-online {
-  color: #047857;
+  color: var(--status-success-fg);
 }
 
 :root[data-theme="light"] .status-offline {
-  color: #b91c1c;
+  color: var(--status-error-fg);
 }
 
 :root[data-theme="light"] .status-warning {
-  color: #b45309;
+  color: var(--status-warning-fg);
 }
 
 :root[data-theme="light"] .model-warning {
-  background: rgba(217, 119, 6, 0.08);
-  border-color: rgba(217, 119, 6, 0.3);
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
 }
 
 :root[data-theme="light"] .model-warning-text {

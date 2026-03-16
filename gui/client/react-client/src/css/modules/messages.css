@@ -106,12 +106,12 @@
 }
 
 .thinking-status.phase-generating {
-  border-left-color: #10b981;
-  color: #10b981;
+  border-left-color: var(--status-success-fg);
+  color: var(--status-success-fg);
 }
 
 .thinking-status.phase-generating .status-spinner {
-  border-top-color: #10b981;
+  border-top-color: var(--status-success-fg);
 }
 
 .status-timer {
@@ -179,6 +179,8 @@
   word-break: break-word;
   font-family: "Menlo", "Consolas", monospace;
   margin: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border) transparent;
 }
 
 .thinking-disclosure-streaming {
@@ -223,8 +225,8 @@
 
 .error-badge {
   display: inline-block;
-  background: rgba(255, 50, 50, 0.2);
-  color: #ff5555;
+  background: var(--status-error-bg);
+  color: var(--status-error-fg);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.7rem;
@@ -240,19 +242,19 @@
   margin-top: 0.85rem;
   padding: 0.9rem 1rem;
   border-radius: 10px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: var(--status-error-bg);
+  border: 1px solid var(--status-error-border);
 }
 
 .message-recovery.status-interrupted {
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.25);
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
 }
 
 .message-recovery.status-cancelled,
 .message-recovery.status-cancelled-before-start {
-  background: rgba(59, 130, 246, 0.09);
-  border-color: rgba(59, 130, 246, 0.25);
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
 }
 
 .message-recovery-title,
@@ -362,18 +364,18 @@
 }
 
 :root[data-theme="light"] .message-recovery {
-  background: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.2);
+  background: var(--status-error-bg);
+  border-color: var(--status-error-border);
 }
 
 :root[data-theme="light"] .error-badge {
-  background: rgba(220, 38, 38, 0.14);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: #b91c1c;
+  background: var(--status-error-bg);
+  border: 1px solid var(--status-error-border);
+  color: var(--status-error-fg);
 }
 
 :root[data-theme="light"] .message-recovery-title {
-  color: #7f1d1d;
+  color: var(--status-error-fg);
 }
 
 :root[data-theme="light"] .message-recovery-detail {
@@ -381,23 +383,23 @@
 }
 
 :root[data-theme="light"] .message-recovery.status-interrupted {
-  background: rgba(217, 119, 6, 0.08);
-  border-color: rgba(217, 119, 6, 0.22);
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
 }
 
 :root[data-theme="light"] .message-recovery.status-interrupted .message-recovery-title {
-  color: #9a3412;
+  color: var(--status-warning-fg);
 }
 
 :root[data-theme="light"] .message-recovery.status-cancelled,
 :root[data-theme="light"] .message-recovery.status-cancelled-before-start {
-  background: rgba(37, 99, 235, 0.08);
-  border-color: rgba(37, 99, 235, 0.2);
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
 }
 
 :root[data-theme="light"] .message-recovery.status-cancelled .message-recovery-title,
 :root[data-theme="light"] .message-recovery.status-cancelled-before-start .message-recovery-title {
-  color: #1e3a8a;
+  color: var(--status-info-fg);
 }
 
 @media (forced-colors: active) {

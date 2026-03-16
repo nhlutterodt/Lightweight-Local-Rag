@@ -8,13 +8,21 @@
       content="Local RAG dashboard for private document question-answering with local models and on-device indexing."
     />
     <meta name="theme-color" content="#111318" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss: http://localhost:* https://localhost:*; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Local RAG" />
     <link rel="icon" type="image/svg+xml" href="/local-rag-favicon.svg" />
     <link rel="shortcut icon" href="/local-rag-favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
     <title>Local RAG Dashboard</title>
   </head>
   <body>
+    <noscript>
+      Local RAG Dashboard requires JavaScript to run. Enable JavaScript to use local document question-answering.
+    </noscript>
     <!-- The React App mounts here instead of #root to preserve CSS targets -->
     <div id="app"></div>
     <script type="module" src="/src/main.jsx"></script>
