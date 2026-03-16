@@ -34,9 +34,13 @@ audience: contributors
 - docs/active-drafts/Phase9_Chat_Design.md
 - docs/active-drafts/Phase10_WebUI_Design.md
 - docs/active-drafts/RAG_Pipeline_Backend_Assessment.md
+- docs/active-drafts/RAG_Grounding_Provenance_Hardening_Plan.md
+- docs/active-drafts/RAG_Locator_Support_Analysis.md
 - docs/active-drafts/RAG_Retrieval_Redesign_Execution_Plan.md
+- docs/active-drafts/RAG_Source_Identity_Decision_Record.md
 
 ## Historical (Authoritative Locations)
+- docs/Frontend_Remediation_Execution_Template.md
 - docs/historical/Project_Critique.md
 - docs/historical/analysis_results.md
 - docs/historical/Analysis on Immediate non-negotiable steps.md

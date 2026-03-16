@@ -1,3 +1,10 @@
+---
+doc_state: historical
+doc_owner: frontend
+canonical_ref: docs/UI_UX_Frontend_Implementation_Plan.md
+last_reviewed: 2026-03-16
+audience: engineering
+---
 # Frontend Remediation Execution Template
 
 Status: Completed

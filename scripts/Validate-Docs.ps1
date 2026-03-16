@@ -266,14 +266,18 @@ foreach ($p in $actualEntries) { [void]$actualSet.Add($p) }
 foreach ($p in $indexEntries) { [void]$indexSet.Add($p) }
 
 $warnings = New-Object System.Collections.Generic.List[string]
-$gitChangedPaths = Get-GitChangedPaths -RepoRoot $repoRoot
+$gitChangedPaths = @(Get-GitChangedPaths -RepoRoot $repoRoot)
 if ($gitChangedPaths.Count -gt 0) {
-    $changedObservabilitySeams = $gitChangedPaths |
-        Where-Object { $observabilitySeamPaths -contains $_ } |
-        Sort-Object -Unique
-    $changedObservabilityDocs = $gitChangedPaths |
-        Where-Object { $observabilityDocsForChangeReview -contains $_ } |
-        Sort-Object -Unique
+    $changedObservabilitySeams = @(
+        $gitChangedPaths |
+            Where-Object { $observabilitySeamPaths -contains $_ } |
+            Sort-Object -Unique
+    )
+    $changedObservabilityDocs = @(
+        $gitChangedPaths |
+            Where-Object { $observabilityDocsForChangeReview -contains $_ } |
+            Sort-Object -Unique
+    )
 
     if ($changedObservabilitySeams.Count -gt 0 -and $changedObservabilityDocs.Count -eq 0) {
         $warnings.Add(
