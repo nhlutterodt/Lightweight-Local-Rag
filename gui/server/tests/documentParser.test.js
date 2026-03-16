@@ -146,4 +146,68 @@ describe("DocumentParser", () => {
       expect(fileNames).not.toContain("ignored.json");
     });
   });
+
+  describe("Schema Migration", () => {
+    const manifestEntry = {
+      FileName: "doc.md",
+      SourcePath: "/path/doc.md",
+      ContentHash: "ABCD",
+      ChunkCount: 1,
+      FileSize: 100,
+      LastIngested: new Date().toISOString(),
+      EmbeddingModel: "test-model",
+    };
+
+    async function writeManifest(dir, name, payload) {
+      await fs.writeFile(
+        path.join(dir, `${name}.manifest.json`),
+        JSON.stringify(payload),
+        "utf8",
+      );
+    }
+
+    it("loads manifest that has no Version field (legacy) as version 1.0", async () => {
+      const col = "MigLegacy";
+      await writeManifest(tempDir, col, { Entries: [manifestEntry] });
+
+      const p = new DocumentParser(tempDir, col);
+      await p.load();
+
+      expect(p.count()).toBe(1);
+      expect(p.getEntry("doc.md")).not.toBeNull();
+    });
+
+    it("loads manifest with explicit Version 1.0 normally", async () => {
+      const col = "MigV1";
+      await writeManifest(tempDir, col, {
+        Version: "1.0",
+        Collection: col,
+        Entries: [manifestEntry],
+      });
+
+      const p = new DocumentParser(tempDir, col);
+      await p.load();
+
+      expect(p.count()).toBe(1);
+    });
+
+    it("warns and loads empty entries when Version is unrecognised", async () => {
+      const col = "MigFuture";
+      await writeManifest(tempDir, col, {
+        Version: "99.0",
+        Collection: col,
+        Entries: [manifestEntry],
+      });
+
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const p = new DocumentParser(tempDir, col);
+      await p.load();
+
+      expect(p.count()).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("99.0"),
+      );
+      warnSpy.mockRestore();
+    });
+  });
 });

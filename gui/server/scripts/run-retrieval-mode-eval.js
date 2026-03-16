@@ -97,7 +97,7 @@ async function runModeEvaluation({ mode, queries, config, store, dbDir }) {
   const entries = [];
 
   for (const query of queries) {
-    const collection = query.collection || "TestIngestNodeFinal";
+    const collection = query.collection || config?.RAG?.CollectionName || "TestIngestNodeFinal";
     const topK = Number(query.topK || config?.RAG?.TopK || 5);
     const minScore = Number(query.minScore || config?.RAG?.MinScore || 0.003);
 

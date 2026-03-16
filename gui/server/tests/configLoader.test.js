@@ -265,3 +265,39 @@ describe("loadConfig() — environment variable overrides", () => {
     expect(config.RAG.ChunkSize).toBe(512);
   });
 });
+
+// ---------------------------------------------------------------------------
+// RAG.CollectionName — M1
+// ---------------------------------------------------------------------------
+
+describe("RAG.CollectionName", () => {
+  it("loads RAG.CollectionName from psd1 when present", () => {
+    const root = makeTempRoot(
+      [
+        "@{",
+        "    RAG = @{",
+        '        CollectionName = "MyCustomCollection"',
+        "    }",
+        "}",
+      ].join("\n"),
+    );
+    const cfg = loadConfig(root);
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(cfg.RAG.CollectionName).toBe("MyCustomCollection");
+  });
+
+  it("defaults RAG.CollectionName to TestIngestNodeFinal when not in psd1", () => {
+    const root = makeTempRoot(
+      [
+        "@{",
+        "    RAG = @{",
+        '        EmbeddingModel = "nomic-embed-text"',
+        "    }",
+        "}",
+      ].join("\n"),
+    );
+    const cfg = loadConfig(root);
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(cfg.RAG.CollectionName).toBe("TestIngestNodeFinal");
+  });
+});

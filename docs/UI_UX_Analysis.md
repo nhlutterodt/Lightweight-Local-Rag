@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/UI_UX_Analysis.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-16
 audience: engineering
 ---
 
@@ -11,34 +11,70 @@ audience: engineering
 > **Scope**: `gui/client/react-client/` — React 19 + Vite frontend.
 > **Purpose**: Identify concrete gaps against best practices and WCAG 2.1 AA accessibility standards, and establish a prioritized remediation roadmap.
 
-## 0. Phase C Context Refresh (2026-03-15)
+## 0. Current-State Delta and Long-Term Fit (2026-03-15)
 
-This document captures the original gap analysis and is still the source-of-truth for historical findings. Before starting Phase C, the implementation status was re-checked against the current frontend code and tests.
+This section supersedes the earlier pre-Phase-C refresh and records the current implementation reality.
 
-Resolved before Phase C start:
+Completed baseline now confirmed in code and tests:
 
-- XSS sanitization is in place for AI-rendered HTML via DOMPurify.
-- Modal dialog semantics, focus trap, and focus restoration are implemented.
-- Chat log and status live-region semantics are implemented.
-- Collection selection is app-owned and passed to chat requests (no hardcoded collection path).
-- Async stream lifecycle now includes explicit interruption and cancellation handling.
-- Error boundaries, skip link, reduced motion, forced-colors fallbacks, textarea auto-resize, and analytics state modeling are implemented.
-- Accessibility regression checks (`axe`) and frontend CI test workflow are present.
+- C-1 through C-7 are complete.
+- Chat rendering is structured (`react-markdown`) and sanitized (`rehype-sanitize`).
+- Async chat lifecycle is reducer-driven with explicit cancellation and interruption states.
+- Stable identifiers are used for chat and queue entities in production render paths.
+- Architecture-critical inline presentational styles removed from core C-scope surfaces.
+- Frontend verification baseline remains green (`37/37` tests).
 
-Still open for Phase C and beyond:
+### 0.1 Current vs Long-Term Expectations
 
-- Sidebar decomposition and local preference state isolation.
-- JS-driven responsive branching (`useWindowDimensions`) replacement with CSS-owned layout behavior.
-- Regex-first AI rendering replacement with structured Markdown rendering pipeline.
-- Stable message and queue IDs replacing index keys.
-- Explicit async state machine consolidation (single reducer/transition model).
-- Broad inline-style removal and design-system token maturity (tracked for late Phase C into Phase D).
+| Area | Current State | Long-Term Expectation | Gap Severity |
+| ---- | ------------- | --------------------- | ------------ |
+| State architecture | Reducer-backed chat flow with guarded transitions | Keep explicit machine contract while adding citations/timestamps/actions | 🟡 |
+| Render performance | Memoization + stable callbacks reduce token-stream churn | Sustain responsiveness with larger conversations and richer message metadata | 🟡 |
+| Accessibility baseline | Core live regions, modal behavior, and focus visibility are implemented | Expand coverage with additional semantic/a11y test depth for future modal complexity | 🟡 |
+| Design system maturity | Color and scale tokens are in place with `data-theme` wiring | Expand from light-mode stub to full multi-theme parity | 🟡 |
+| Operational UX | Queue/index show status, summaries, and timestamps | Add stronger causal context and user-action linkage for updates | 🟡 |
+| Feature completeness | Stable chat + ingestion controls are present | Deliver source citations, message timestamps, and destructive-action confirmation | 🟠 |
+
+### 0.2 Scalability Findings (New)
+
+1. Message rendering scale risk: `ChatWindow.jsx` currently renders the full history list without virtualization. This is acceptable at current volumes but will degrade with long-running sessions and richer citation payloads.
+2. Queue identity fallback risk: `useRagApi.js` still contains random UUID fallback for jobs without stable fields. This is a safe compatibility path, but long-term API contracts should guarantee durable server-issued IDs.
+3. Theme-parity remains in progress: light-mode contrast has been strengthened for less-common states (error banners, loading/empty variants, and dense analytics rows), but full dark/light parity across all modules and states is not complete.
+4. Modal semantics baseline is now in place (`listbox`/`option` + active descendant); keep parity as folder-browser interactions expand.
+5. Operational actions now support action-to-entity deep links (queue item and chat-region navigation), improving causality traceability during troubleshooting.
+6. Documentation-to-implementation drift risk: this analysis originally tracked pre-C completion assumptions. Ongoing updates must now track Phase D deltas explicitly to avoid stale severity framing.
+
+### 0.3 Immediate Recommendations from This Re-Analysis
+
+1. Phase D implementation set is complete (D-1 through D-9); post-Phase-D hardening now includes long-history performance thresholds plus actionable operational deep links.
+2. Keep folder-browser semantic parity as feature complexity grows, including keyboard and assistive-technology regressions.
+3. Preserve the new message metadata contract (timestamps + citations) as the default path for future chat enrichments.
+4. Implement and keep the long-history performance gate (render timing + thresholded operational advisory) as a non-regression guard.
+5. Keep the `47/47` test baseline as a non-regression floor and add performance-oriented regression checks for long history sessions.
+
+### 0.4 Phase D Kickoff Baseline (Fresh Verification)
+
+The following statuses are verified against current frontend code and test results (not prior narrative only):
+
+| Item | Status | Verification Basis |
+| ---- | ------ | ------------------ |
+| D-1 inline-style retirement on core targets | Complete | No inline `style={{...}}` remains in current frontend source surfaces. |
+| D-2 token-system completion | Complete | `tokens.css` now includes spacing, typography, radius, z-index, and transition token scales. |
+| D-3 theme architecture scaffold | Complete | `data-theme` is now wired in app bootstrapping with dark default and light stub tokens. |
+| D-4 message timestamps | Complete | Chat messages now include timestamp metadata and render with semantic `<time>` elements. |
+| D-5 source citation UI | Complete | Citation metadata from SSE is rendered as citation cards in `ChatWindow.jsx`. |
+| D-6 folder-browser advanced semantics | Complete | Modal now exposes `listbox`/`option`, `aria-selected`, and `aria-activedescendant` semantics. |
+| D-7 clear-session confirmation | Complete | Clear action now provides an undo affordance with a timed restore window. |
+| D-8 favicon replacement | Complete | `index.html` now uses a project favicon and updated browser metadata. |
+| D-9 analytics temporal/context richness | Complete | Analytics now includes action-linked confirmations with timestamps for recent user-triggered operations. |
 
 ---
 
 ## 1. Executive Summary
 
-The frontend is a clean React 19 / Vite application with a coherent "Dark Nebula" glassmorphism aesthetic. The component structure is small and readable. However, it carries **one critical security vulnerability**, **pervasive accessibility failures**, and several architectural decisions that will limit maintainability as the surface area grows. None of the issues are architectural dead ends; they are all correctable in place. The highest-priority items are the XSS vector, the missing ARIA and semantic HTML foundations, and the absence of modeled async interaction states.
+The frontend has moved from blocker remediation into systems-hardening and scale-readiness work. Security and foundational accessibility blockers identified in the original analysis are now resolved in current code, and the architecture has improved materially through explicit async state modeling, memoized render boundaries, and stable entity identity.
+
+The next risk tier is no longer critical defects; it is long-term UX/system coherence. The highest-value remaining work is design-system completion, advanced accessibility semantics for complex controls, and richer message/operational metadata surfaces (timestamps, citations, and stronger update causality). These items are tractable in place and should be addressed as Phase D priorities.
 
 **Severity legend used throughout this document:**
 
@@ -51,7 +87,17 @@ The frontend is a clean React 19 / Vite application with a coherent "Dark Nebula
 
 ---
 
-## 2. Security
+### 1.1 Historical Findings Notice
+
+Sections 2 through 10 are preserved as a historical pre-remediation audit trail.
+
+- They are superseded by Section 0 and the canonical implementation plan.
+- Items originally labeled critical/high in those sections should not be interpreted as currently open unless re-listed in Section 0.
+- Keep the legacy narrative for traceability only; use current status tables as source of truth.
+
+---
+
+## 2. Security (Historical, Superseded)
 
 ### 2.1 🔴 CRITICAL — XSS via `dangerouslySetInnerHTML`
 
@@ -79,7 +125,7 @@ This is a small, high-leverage fix and should be the first change merged.
 
 ---
 
-## 3. Accessibility (WCAG 2.1 AA)
+## 3. Accessibility (WCAG 2.1 AA, Historical, Superseded)
 
 ### 3.1 🔴 CRITICAL — Modal Has No Focus Trap, ARIA Role, or Focus Restoration
 
@@ -325,7 +371,7 @@ The `activeIndex` state drives visual highlight, but there is no `aria-activedes
 
 ---
 
-## 4. Focus Visibility and Keyboard Journey
+## 4. Focus Visibility and Keyboard Journey (Historical, Superseded)
 
 ### 4.1 🟠 HIGH — Visible Focus Is Not Reliably Present Across Interactive Controls
 
@@ -379,7 +425,7 @@ Weak points today:
 
 ---
 
-## 5. Windows High Contrast and Forced Colors
+## 5. Windows High Contrast and Forced Colors (Historical, Superseded)
 
 ### 5.1 🟠 HIGH — Glassmorphism Styling Has Not Been Audited in `forced-colors` Mode
 
@@ -437,7 +483,7 @@ Each state should remain understandable through text, border treatment, and layo
 
 ---
 
-## 6. Component Architecture
+## 6. Component Architecture (Historical, Superseded)
 
 ### 6.1 🔴 CRITICAL — `collectionName` Disconnected from Chat
 
@@ -555,7 +601,7 @@ const handleChange = (event) => {
 
 ---
 
-## 7. CSS and Design System
+## 7. CSS and Design System (Historical, Superseded)
 
 ### 7.1 🟠 HIGH — Pervasive Inline Styles Undermine the Design System
 
@@ -629,15 +675,15 @@ Below `1200px` the sidebar remains fixed at `320px`. On smaller screens, that co
 
 ---
 
-### 7.5 🟢 LOW — Favicon Still References Vite Branding
+### 7.5 🟢 LOW — Browser Metadata and Favicon Are Project-Aligned
 
 **File**: `gui/client/react-client/index.html`
 
 ```html
-<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+<link rel="icon" type="image/svg+xml" href="/local-rag-favicon.svg" />
 ```
 
-The browser tab still shows the Vite logo instead of a project-specific icon.
+The browser icon and metadata are now project-specific.
 
 ---
 
@@ -649,11 +695,11 @@ Internal scrolling is intentional, but `overflow: hidden` on the `body` makes ex
 
 ---
 
-## 8. UX Patterns and Interaction Design
+## 8. UX Patterns and Interaction Design (Historical, Superseded)
 
-### 8.1 🟠 HIGH — No Message Timestamps
+### 8.1 🟢 LOW — Message Timestamps Landed; Persistence Context Still Limited
 
-Chat messages have no timestamps. Users cannot determine when a conversation occurred after returning to the app.
+Chat messages now render semantic `<time>` elements, improving temporal clarity in-session. Remaining improvement area is persistence context across app restarts.
 
 ---
 
@@ -689,19 +735,19 @@ The query textarea provides no feedback on message length. For RAG systems, over
 
 ---
 
-### 8.6 🟢 LOW — Source Citations Are Designed but Not Implemented
+### 8.6 🟢 LOW — Source Citations Are Implemented; UX Polish Remains
 
-Source citations were a primary feature goal, but the frontend has no UI surface to display them.
-
----
-
-### 8.7 🟢 LOW — Clear Session Is Immediately Destructive
-
-The `Clear Session` button executes `setChatHistory([])` without confirmation or undo.
+Source citations now render from SSE metadata in chat responses. Remaining improvement area is optional drill-down behavior (for example expand/collapse or source preview actions).
 
 ---
 
-## 9. Async Interaction States
+### 8.7 🟢 LOW — Clear Session Undo Path Is Implemented
+
+Clear Session now supports an undo affordance, reducing accidental destructive loss.
+
+---
+
+## 9. Async Interaction States (Historical, Superseded)
 
 ### 9.1 🟠 HIGH — Connection Loss Before Send Has No Deterministic User-Facing Handling
 
@@ -763,7 +809,7 @@ There is no user control to stop an in-flight generation, and the data layer has
 
 ---
 
-## 10. Analytics and Operational UX
+## 10. Analytics and Operational UX (Historical, Superseded)
 
 ### 10.1 🟡 MEDIUM — Queue and Health Surfaces Are Dynamic But Not Announced as Operational Status
 
@@ -890,17 +936,15 @@ Minimum scenarios:
 
 ### Phase D: Design System Completion
 
-| #   | Areas                    | Change                                                                                    |
-| --- | ------------------------ | ----------------------------------------------------------------------------------------- |
-| D-1 | all CSS modules          | Replace inline styles in `App.jsx` and `FolderBrowserModal.jsx` with classes              |
-| D-2 | `tokens.css`             | Add full spacing, typography, radius, and z-index scales                                  |
-| D-3 | `tokens.css`             | Establish a `data-theme="dark"` architecture and light-mode stub                          |
-| D-4 | `ChatWindow.jsx`         | Add timestamps to message objects and render with `<time>`                                |
-| D-5 | `ChatWindow.jsx`         | Implement source citation cards in the response footer                                    |
-| D-6 | `FolderBrowserModal.jsx` | Add `listbox` and `option` semantics plus `aria-activedescendant`                         |
-| D-7 | `Sidebar.jsx`            | Add confirmation before clearing a session                                                |
-| D-8 | `index.html`             | Replace `vite.svg` favicon with a project-specific icon                                   |
-| D-9 | `AnalyticsPanel.jsx`     | Add timestamps, change summaries, and action-linked confirmations for operational updates |
+1. D-1 in all CSS modules: Replace inline styles in `App.jsx` and `FolderBrowserModal.jsx` with classes. Status: Complete.
+2. D-2 in `tokens.css`: Add full spacing, typography, radius, and z-index scales. Status: Complete.
+3. D-3 in `tokens.css`: Establish a `data-theme="dark"` architecture and light-mode stub. Status: Complete.
+4. D-4 in `ChatWindow.jsx`: Add timestamps to message objects and render with `<time>`. Status: Complete.
+5. D-5 in `ChatWindow.jsx`: Implement source citation cards in the response footer. Status: Complete.
+6. D-6 in `FolderBrowserModal.jsx`: Add `listbox` and `option` semantics plus `aria-activedescendant`. Status: Complete.
+7. D-7 in `Sidebar.jsx`: Add confirmation before clearing a session. Status: Complete.
+8. D-8 in `index.html`: Replace `vite.svg` favicon with a project-specific icon. Status: Complete.
+9. D-9 in `AnalyticsPanel.jsx`: Add timestamps, change summaries, and action-linked confirmations for operational updates. Status: Complete.
 
 ---
 

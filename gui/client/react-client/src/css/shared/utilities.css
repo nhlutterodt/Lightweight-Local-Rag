@@ -23,12 +23,12 @@
 .skip-link {
   position: absolute;
   top: -100%;
-  left: 1rem;
+  left: var(--space-4);
   background: var(--accent-primary);
   color: white;
-  padding: 0.5rem 1rem;
-  z-index: 9999;
-  border-radius: 0 0 8px 8px;
+  padding: var(--space-2) var(--space-4);
+  z-index: var(--z-skip-link);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   text-decoration: none;
 }
 
@@ -40,16 +40,18 @@
 .error-boundary {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   justify-content: center;
-  padding: 1.5rem;
-  margin: 1rem;
+  padding: var(--space-6);
+  margin: var(--space-4);
   min-height: 180px;
 }
 
 .error-boundary-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
+  line-height: var(--line-height-tight);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-main);
 }
 
@@ -67,11 +69,12 @@
   background: var(--accent-primary);
   color: white;
   border: none;
-  border-radius: 8px;
-  padding: 10px;
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: transform 0.2s, background 0.2s;
+  transition: transform var(--transition-base), background var(--transition-base);
 }
 
 .btn-primary:active {
@@ -80,19 +83,21 @@
 
 .btn-secondary {
   margin-top: auto;
-  padding: 0.75rem;
+  padding: var(--space-3);
   background: transparent;
   border: 1px solid var(--glass-border);
   color: var(--text-muted);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   width: 100%;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: white;
+  background: var(--glass-bg);
+  color: var(--text-main);
 }
 
 :where(button, [href], input, select, textarea, [tabindex]):focus-visible {
@@ -109,21 +114,22 @@
 [data-tooltip]::before {
   content: attr(data-tooltip);
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + var(--space-2));
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-color);
   color: var(--text-main);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity var(--transition-base), transform var(--transition-base);
   pointer-events: none;
-  z-index: 100;
+  z-index: var(--z-tooltip);
   border: 1px solid var(--glass-border);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
 }

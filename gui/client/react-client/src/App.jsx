@@ -1,15 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import InputArea from './components/InputArea';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useRagApi } from './hooks/useRagApi';
 import AnalyticsPanel from './components/AnalyticsPanel';
+import { chatReducer, CHAT_ACTIONS, createInitialChatState } from './state/chatStateMachine';
 import './index.css';
 
 const STORAGE_KEYS = {
   collection: 'rag.sidebar.collection',
+  theme: 'rag.ui.theme',
 };
+
+const DEFAULT_THEME = 'dark';
+const VALID_THEMES = new Set(['dark', 'light']);
+const MAX_OPERATIONAL_ACTIONS = 5;
+const PERFORMANCE_ACTION_COOLDOWN_MS = 15000;
+
+function createOperationalAction(kind, message, status = 'info', target = null) {
+  return {
+    id: crypto.randomUUID(),
+    kind,
+    message,
+    status,
+    target,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function resolveThemePreference(rawTheme) {
+  if (typeof rawTheme !== 'string') {
+    return DEFAULT_THEME;
+  }
+
+  return VALID_THEMES.has(rawTheme) ? rawTheme : DEFAULT_THEME;
+}
 
 function readLocalStorage(key, fallback) {
   try {
@@ -28,25 +54,22 @@ function writeLocalStorage(key, value) {
   }
 }
 
-function createAssistantMessage(overrides = {}) {
-  return {
-    role: 'ai',
-    content: '',
-    status: 'idle',
-    errorMessage: '',
-    recoveryPrompt: '',
-    ...overrides,
-  };
-}
-
 function App() {
   const { isConnected, isModelReady, models, metrics, queue, metricsState, queueState, streamChat, cancelStreamChat, enqueueJob } = useRagApi();
   
   const [activeModel, setActiveModel] = useState("llama3");
   const [collectionName, setCollectionName] = useState(() => readLocalStorage(STORAGE_KEYS.collection, 'TestIngest'));
-  const [chatHistory, setChatHistory] = useState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [sessionNotice, setSessionNotice] = useState('');
+  const [chatState, dispatchChat] = useReducer(chatReducer, undefined, createInitialChatState);
+  const { history: chatHistory, isGenerating, sessionNotice } = chatState;
+  const [operationalActions, setOperationalActions] = useState([]);
+  const chatHistoryRef = useRef(chatHistory);
+  const activeModelRef = useRef(activeModel);
+  const collectionNameRef = useRef(collectionName);
+  const isGeneratingRef = useRef(isGenerating);
+  const clearedSessionRef = useRef(null);
+  const undoTimerRef = useRef(null);
+  const lastPerformanceActionRef = useRef({ key: '', timestamp: 0 });
+  const [canUndoClear, setCanUndoClear] = useState(false);
 
   // Auto-select first model if available
   useEffect(() => {
@@ -59,106 +82,231 @@ function App() {
     writeLocalStorage(STORAGE_KEYS.collection, collectionName);
   }, [collectionName]);
 
-  const handleRetryQuery = (prompt) => {
-    if (!prompt || isGenerating) return;
-    return handleSendQuery(prompt);
-  };
+  useEffect(() => {
+    const theme = resolveThemePreference(readLocalStorage(STORAGE_KEYS.theme, DEFAULT_THEME));
+    document.documentElement.dataset.theme = theme;
+  }, []);
 
-  const handleCancelGeneration = () => {
-    if (!isGenerating) return;
+  useEffect(() => {
+    chatHistoryRef.current = chatHistory;
+  }, [chatHistory]);
 
-    cancelStreamChat();
-    setIsGenerating(false);
-    setSessionNotice('Generation cancelled.');
-  };
+  useEffect(() => {
+    activeModelRef.current = activeModel;
+  }, [activeModel]);
 
-  const handleClearSession = () => {
-    if (isGenerating) {
-      cancelStreamChat();
-      setIsGenerating(false);
-      setChatHistory([]);
-      setSessionNotice('Generation cancelled and session cleared.');
-      return;
+  useEffect(() => {
+    collectionNameRef.current = collectionName;
+  }, [collectionName]);
+
+  useEffect(() => {
+    isGeneratingRef.current = isGenerating;
+  }, [isGenerating]);
+
+  useEffect(() => () => {
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
     }
+  }, []);
 
-    setChatHistory([]);
-    setSessionNotice('Session cleared.');
-  };
-
-  // Handle User Chat Submission
-  const handleSendQuery = async (text) => {
+  const handleSendQuery = useCallback(async (text) => {
     const trimmedText = text.trim();
-    if (!trimmedText || isGenerating) return;
+    if (!trimmedText || isGeneratingRef.current) return;
 
-    setIsGenerating(true);
-    setSessionNotice('');
+    dispatchChat({ type: CHAT_ACTIONS.SEND_REQUEST, prompt: trimmedText });
 
-    const nextChat = [...chatHistory, { role: 'user', content: trimmedText }];
-    let assistantMessage = createAssistantMessage({
-      status: 'streaming',
-      recoveryPrompt: trimmedText,
-    });
-    const syncChatHistory = () => setChatHistory([...nextChat, assistantMessage]);
-
-    syncChatHistory();
+    const nextChat = [...chatHistoryRef.current, { role: 'user', content: trimmedText }];
 
     try {
-      await streamChat(nextChat, activeModel, collectionName, (event) => {
+      await streamChat(nextChat, activeModelRef.current, collectionNameRef.current, (event) => {
         if (event.type === 'start') {
-          assistantMessage = {
-            ...assistantMessage,
-            status: 'streaming',
-            errorMessage: '',
-          };
-          syncChatHistory();
+          dispatchChat({ type: CHAT_ACTIONS.STREAM_START });
           return;
         }
 
         if (event.type === 'token') {
-          assistantMessage = {
-            ...assistantMessage,
-            content: `${assistantMessage.content}${event.content}`,
-          };
-          syncChatHistory();
+          dispatchChat({ type: CHAT_ACTIONS.STREAM_TOKEN, content: event.content });
+          return;
+        }
+
+        if (event.type === 'metadata') {
+          dispatchChat({ type: CHAT_ACTIONS.STREAM_METADATA, citations: event.citations });
           return;
         }
 
         if (event.type === 'error') {
-          const hasPartialContent = assistantMessage.content.trim().length > 0;
-          assistantMessage = {
-            ...assistantMessage,
-            status: hasPartialContent ? 'interrupted' : 'failed-before-start',
-            errorMessage: event.message || 'Unable to complete request.',
-            recoveryPrompt: trimmedText,
-          };
-          syncChatHistory();
+          dispatchChat({ type: CHAT_ACTIONS.STREAM_ERROR, message: event.message });
           return;
         }
 
         if (event.type === 'cancelled') {
-          const hasPartialContent = assistantMessage.content.trim().length > 0;
-          assistantMessage = {
-            ...assistantMessage,
-            status: hasPartialContent ? 'cancelled' : 'cancelled-before-start',
-            errorMessage: event.message || 'Generation cancelled.',
-            recoveryPrompt: trimmedText,
-          };
-          syncChatHistory();
+          dispatchChat({ type: CHAT_ACTIONS.STREAM_CANCELLED, message: event.message });
           return;
         }
 
         if (event.type === 'done') {
-          assistantMessage = {
-            ...assistantMessage,
-            status: assistantMessage.errorMessage ? 'error' : 'done',
-          };
-          syncChatHistory();
+          dispatchChat({ type: CHAT_ACTIONS.STREAM_DONE });
         }
       });
     } finally {
-      setIsGenerating(false);
+      dispatchChat({ type: CHAT_ACTIONS.STREAM_FINISHED });
     }
-  };
+  }, [streamChat]);
+
+  const handleRetryQuery = useCallback((prompt) => {
+    if (!prompt || isGeneratingRef.current) return;
+    return handleSendQuery(prompt);
+  }, [handleSendQuery]);
+
+  const handleCancelGeneration = useCallback(() => {
+    if (!isGeneratingRef.current) return;
+
+    cancelStreamChat();
+    dispatchChat({ type: CHAT_ACTIONS.CANCEL_REQUESTED });
+  }, [cancelStreamChat]);
+
+  const recordOperationalAction = useCallback((kind, message, status, target = null) => {
+    setOperationalActions((current) => [
+      createOperationalAction(kind, message, status, target),
+      ...current,
+    ].slice(0, MAX_OPERATIONAL_ACTIONS));
+  }, []);
+
+  const handleChatPerformanceSignal = useCallback((signal) => {
+    if (!signal || typeof signal.durationMs !== 'number') {
+      return;
+    }
+
+    const durationBucket = Math.floor(signal.durationMs / 5) * 5;
+    const dedupeKey = `${signal.severity}:${signal.messageCount}:${signal.citationCount}:${durationBucket}`;
+    const now = Date.now();
+
+    if (
+      lastPerformanceActionRef.current.key === dedupeKey
+      && now - lastPerformanceActionRef.current.timestamp < PERFORMANCE_ACTION_COOLDOWN_MS
+    ) {
+      return;
+    }
+
+    lastPerformanceActionRef.current = {
+      key: dedupeKey,
+      timestamp: now,
+    };
+
+    const safeCitationCount = Number.isFinite(signal.citationCount) ? signal.citationCount : 0;
+    const safeMessageCount = Number.isFinite(signal.messageCount) ? signal.messageCount : 0;
+    const status = signal.severity === 'warning' ? 'warning' : 'info';
+    const messagePrefix = signal.severity === 'warning' ? 'Long-history render warning' : 'Long-history render advisory';
+
+    recordOperationalAction(
+      'performance',
+      `${messagePrefix}: ${signal.durationMs}ms for ${safeMessageCount} messages and ${safeCitationCount} citations (threshold ${signal.thresholdMs}ms).`,
+      status,
+      {
+        section: 'chat',
+        label: 'Open chat history',
+      },
+    );
+  }, [recordOperationalAction]);
+
+  const handleEnqueue = useCallback(async (path, collection) => {
+    try {
+      const result = await enqueueJob(path, collection);
+      const fileLabel = path?.split(/[\\/]/).filter(Boolean).pop() || path || 'item';
+      const queueEntityId = result?.entityId || result?.id || path;
+      recordOperationalAction(
+        'enqueue',
+        `Queued ${fileLabel} for collection ${collection}.`,
+        'success',
+        {
+          section: 'queue',
+          entityId: queueEntityId ? String(queueEntityId) : undefined,
+          label: 'View queued job',
+        },
+      );
+      return result;
+    } catch (error) {
+      recordOperationalAction(
+        'enqueue',
+        `Queue request failed for ${collection}: ${error.message || 'Unknown error'}.`,
+        'error',
+        {
+          section: 'queue',
+          label: 'Open queue panel',
+        },
+      );
+      throw error;
+    }
+  }, [enqueueJob, recordOperationalAction]);
+
+  const handleClearSession = useCallback(() => {
+    if (isGeneratingRef.current) {
+      cancelStreamChat();
+      dispatchChat({ type: CHAT_ACTIONS.CLEAR_SESSION_DURING_GENERATION });
+      recordOperationalAction('session', 'Generation cancelled and session cleared.', 'warning', {
+        section: 'chat',
+        label: 'Open chat history',
+      });
+      clearedSessionRef.current = null;
+      setCanUndoClear(false);
+
+      if (undoTimerRef.current) {
+        window.clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = null;
+      }
+      return;
+    }
+
+    const historySnapshot = chatHistoryRef.current;
+    if (historySnapshot.length > 0) {
+      clearedSessionRef.current = {
+        history: historySnapshot,
+      };
+      setCanUndoClear(true);
+
+      if (undoTimerRef.current) {
+        window.clearTimeout(undoTimerRef.current);
+      }
+
+      undoTimerRef.current = window.setTimeout(() => {
+        clearedSessionRef.current = null;
+        setCanUndoClear(false);
+        undoTimerRef.current = null;
+      }, 10000);
+
+      recordOperationalAction('session', 'Session cleared. Undo is available for 10 seconds.', 'warning', {
+        section: 'chat',
+        label: 'Open chat history',
+      });
+    }
+
+    dispatchChat({ type: CHAT_ACTIONS.CLEAR_SESSION });
+  }, [cancelStreamChat, recordOperationalAction]);
+
+  const handleUndoClearSession = useCallback(() => {
+    if (isGeneratingRef.current || !clearedSessionRef.current) {
+      return;
+    }
+
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+
+    dispatchChat({
+      type: CHAT_ACTIONS.RESTORE_SESSION,
+      history: clearedSessionRef.current.history,
+      sessionNotice: 'Session restored.',
+    });
+
+    recordOperationalAction('session', 'Session restored from undo.', 'success', {
+      section: 'chat',
+      label: 'Open chat history',
+    });
+
+    clearedSessionRef.current = null;
+    setCanUndoClear(false);
+  }, [recordOperationalAction]);
 
   return (
     <div id="app">
@@ -175,9 +323,11 @@ function App() {
           setCollectionName={setCollectionName}
           isConnected={isConnected}
           isModelReady={isModelReady}
-          onEnqueue={enqueueJob}
+          onEnqueue={handleEnqueue}
           isGenerating={isGenerating}
           onClearSession={handleClearSession}
+          canUndoClear={canUndoClear}
+          onUndoClear={handleUndoClearSession}
         />
       </ErrorBoundary>
       <ErrorBoundary
@@ -185,7 +335,13 @@ function App() {
         message="The chat surface failed to render. Retry this section to restore the conversation view and input box."
       >
         <main id="mainContent" className="chat-container">
-          <ChatWindow history={chatHistory} isGenerating={isGenerating} sessionNotice={sessionNotice} onRetry={handleRetryQuery} />
+          <ChatWindow
+            history={chatHistory}
+            isGenerating={isGenerating}
+            sessionNotice={sessionNotice}
+            onRetry={handleRetryQuery}
+            onPerformanceSignal={handleChatPerformanceSignal}
+          />
           <InputArea
             onSend={handleSendQuery}
             onCancel={handleCancelGeneration}
@@ -205,7 +361,13 @@ function App() {
             <p className="analytics-aside-subtitle">High-Density View</p>
           </header>
           <div>
-            <AnalyticsPanel metrics={metrics} queue={queue} metricsState={metricsState} queueState={queueState} />
+            <AnalyticsPanel
+              metrics={metrics}
+              queue={queue}
+              metricsState={metricsState}
+              queueState={queueState}
+              operationalActions={operationalActions}
+            />
           </div>
         </aside>
       </ErrorBoundary>

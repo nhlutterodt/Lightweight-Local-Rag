@@ -143,7 +143,7 @@ async function runEvaluation(options) {
     : path.join(workspaceRoot, "PowerShell Scripts", "Data");
   const dbDir = path.join(dataDir, "vector_store.lance");
 
-  const defaultCollection = options.collection || "TestIngestNodeFinal";
+  const defaultCollection = options.collection || config?.RAG?.CollectionName || "TestIngestNodeFinal";
   const embeddingModel = config?.RAG?.EmbeddingModel || "nomic-embed-text";
   const ollamaUrl = config?.RAG?.OllamaUrl || "http://localhost:11434";
 

@@ -50,13 +50,17 @@ textarea {
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--glass-border);
-  color: white;
+  color: var(--text-main);
   resize: none;
   padding: 0.5rem 0;
   font-size: 1rem;
   outline: none;
   line-height: 1.5;
   transition: border-color 0.3s;
+}
+
+textarea::placeholder {
+  color: var(--text-muted);
 }
 
 textarea:focus {
@@ -109,4 +113,13 @@ textarea:focus-visible {
   margin-top: 1rem;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+:root[data-theme="light"] .chat-container {
+  background: radial-gradient(
+    circle at top right,
+    rgba(37, 99, 235, 0.08),
+    rgba(124, 58, 237, 0.03) 45%,
+    transparent
+  );
 }

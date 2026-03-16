@@ -8,7 +8,12 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "eval:golden:baseline": "node scripts/run-golden-eval.js --mode baseline",
     "eval:golden:compare": "node scripts/run-golden-eval.js --mode compare",
-    "eval:retrieval:modes": "node scripts/run-retrieval-mode-eval.js"
+    "eval:retrieval:modes": "node scripts/run-retrieval-mode-eval.js",
+    "check:integrity": "node scripts/check-integrity.js",
+    "check:integrity:repair": "node scripts/check-integrity.js --repair",
+    "snapshot:list": "node scripts/snapshot.js --list",
+    "snapshot:rollback": "node scripts/snapshot.js --rollback",
+    "snapshot:prune": "node scripts/snapshot.js --prune"
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.26.2",

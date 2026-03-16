@@ -38,6 +38,7 @@ The application is strictly separated into three concerns:
   - **Ingestion Orchestration:** Manages queue state, document scanning, chunking, embedding, and LanceDB writes through the native Node ingestion pipeline.
   - **Operational APIs:** Serves `/api/health`, `/api/index/metrics`, `/api/models`, `/api/queue`, and `/api/log`.
   - **Observability:** Asynchronously writes query telemetry to `logs/query_log.jsonl`, emits `Server-Timing` headers for chat requests, and appends bridge XML logs for UI-originated events.
+  - **Operational CLI:** `scripts/check-integrity.js` (manifest/DB diff and repair) and `scripts/snapshot.js` (LanceDB version list/rollback/prune) run out-of-process as maintenance tools sharing the same `lib/` modules as the live server.
 
 ### Tier 3: Utility and Diagnostics Layer
 
@@ -154,7 +155,9 @@ A state-tracking ledger for ingestion optimization.
 
 - Stores `SHA256` hashes of original files.
 - Tracks source paths, file size, chunk count, and embedding model.
+- Carries a `schemaVersion` field; forward migrations run automatically on load via `lib/documentParser.js`.
 - Prevents re-vectorizing files that haven't changed and supports rename/orphan detection.
+- Cleared and rebuilt automatically by `lib/modelMigration.js` when `EmbeddingModel` changes.
 
 ### 3. `queue.json`
 

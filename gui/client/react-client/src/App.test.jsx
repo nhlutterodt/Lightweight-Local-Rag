@@ -37,6 +37,8 @@ describe("App", () => {
     mockStreamChat = vi.fn();
     mockCancelStreamChat = vi.fn();
     mockEnqueueJob = vi.fn();
+    window.localStorage.clear();
+    delete document.documentElement.dataset.theme;
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -54,6 +56,14 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByRole("link", { name: /skip to chat input/i })).toHaveAttribute("href", "#userInput");
+  });
+
+  it("restores light theme preference from localStorage", () => {
+    window.localStorage.setItem("rag.ui.theme", "light");
+
+    render(<App />);
+
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("has no detectable accessibility violations in the initial shell", async () => {
@@ -148,8 +158,50 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /stop & clear session/i }));
 
     expect(mockCancelStreamChat).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/generation cancelled and session cleared/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/generation cancelled and session cleared/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/clear while running/i)).not.toBeInTheDocument();
+  });
+
+  it("supports undo after clearing a completed session", async () => {
+    const user = userEvent.setup();
+    mockStreamChat.mockImplementation(async (_messages, _model, _collection, onUpdate) => {
+      onUpdate({ type: "start" });
+      onUpdate({ type: "token", content: "Answer body" });
+      onUpdate({ type: "done" });
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText(/query message/i), "Keep this history");
+    await user.click(screen.getByRole("button", { name: /send message/i }));
+
+    expect(await screen.findByText(/answer body/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /clear session/i }));
+
+    expect(await screen.findByRole("button", { name: /undo clear/i })).toBeInTheDocument();
+    expect(screen.queryByText(/keep this history/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /undo clear/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /undo clear/i })).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/keep this history/i)).toBeInTheDocument();
+    expect(screen.getByText(/answer body/i)).toBeInTheDocument();
+  });
+
+  it("shows action-linked queue confirmation in analytics after enqueue", async () => {
+    const user = userEvent.setup();
+    mockEnqueueJob.mockResolvedValue({ id: "job-123" });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText(/vectorize new data/i), "C:/Docs/Notes.md");
+    await user.click(screen.getByRole("button", { name: /queue/i }));
+
+    expect(await screen.findByText(/queued notes\.md for collection testingest\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /view queued job/i })).toBeInTheDocument();
   });
 
   it("supports a keyboard journey from sidebar to modal and back to the chat input", async () => {

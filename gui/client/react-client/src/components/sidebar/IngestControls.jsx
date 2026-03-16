@@ -16,7 +16,7 @@ function IngestControls({
   return (
     <div className="nav-item">
       <label htmlFor="ingestPath">Vectorize New Data</label>
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="ingest-input-row">
         <input
           type="text"
           id="ingestPath"
@@ -24,7 +24,7 @@ function IngestControls({
           onChange={(event) => setIngestPath(event.target.value)}
           placeholder="C:\\MyDocuments"
           list="recentPaths"
-          style={{ flex: 1 }}
+          className="ingest-path-input"
         />
         <datalist id="recentPaths">
           {recentPaths.map((item) => (
@@ -34,8 +34,7 @@ function IngestControls({
         <button
           id="browseFolderBtn"
           type="button"
-          className="btn-secondary"
-          style={{ marginTop: 0, padding: '0 12px', width: 'auto' }}
+          className="btn-secondary ingest-browse-button"
           data-tooltip="Browse for a folder"
           aria-label="Browse for a folder"
           aria-haspopup="dialog"
@@ -46,12 +45,11 @@ function IngestControls({
           📁
         </button>
       </div>
-      <div className="ingest-actions" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+      <div className="ingest-actions">
         <button
           id="enqueueIngest"
           type="button"
-          className="btn-primary"
-          style={{ flex: 1 }}
+          className="btn-primary ingest-queue-button"
           data-tooltip="Add to queue for background processing"
           onClick={onEnqueue}
           disabled={!isConnected || !ingestPath}
@@ -59,7 +57,7 @@ function IngestControls({
           ➕ Queue
         </button>
       </div>
-      <label htmlFor="clearPathOnQueue" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', fontSize: '0.8rem' }}>
+      <label htmlFor="clearPathOnQueue" className="ingest-clear-toggle-label">
         <input
           id="clearPathOnQueue"
           type="checkbox"
@@ -68,7 +66,7 @@ function IngestControls({
         />
         Clear path after successful queue
       </label>
-      {enqueueError && <div style={{ color: 'var(--color-error)', fontSize: '0.8rem', marginTop: '5px' }}>{enqueueError}</div>}
+      {enqueueError && <div className="ingest-error-message">{enqueueError}</div>}
 
       <FolderBrowserModal
         isOpen={isBrowseOpen}

@@ -2,6 +2,28 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import path from "path";
 
+/**
+ * Ordered list of all known manifest versions, oldest first.
+ * Add new versions here when the manifest schema changes.
+ */
+const MANIFEST_KNOWN_VERSIONS = ["1.0"];
+const MANIFEST_VERSION = MANIFEST_KNOWN_VERSIONS.at(-1); // "1.0"
+
+/**
+ * Migration functions keyed by TARGET version string.
+ * Each function receives the full manifest JSON at (previous version)
+ * and returns the JSON at (target version).
+ */
+const MANIFEST_MIGRATIONS = {
+  // "1.0" is the baseline — no migration needed from a prior version.
+  // Future example:
+  // "1.1": (json) => ({
+  //   ...json,
+  //   Version: "1.1",
+  //   Entries: json.Entries.map((e) => ({ ...e, NewField: null })),
+  // }),
+};
+
 class ManifestEntry {
   constructor(
     fileName,
@@ -71,8 +93,34 @@ class DocumentParser {
 
       if (!json || !json.Entries) return;
 
+      // --- Schema version check and migration ---
+      const loadedVersion = json.Version || "1.0"; // missing = legacy = "1.0"
+      if (!MANIFEST_KNOWN_VERSIONS.includes(loadedVersion)) {
+        console.warn(
+          `[Manifest Warn] Unsupported manifest version "${loadedVersion}". ` +
+          `Known: [${MANIFEST_KNOWN_VERSIONS.join(", ")}]. Entries will not be loaded.`,
+        );
+        return;
+      }
+
+      // Apply any pending migrations
+      const startIdx = MANIFEST_KNOWN_VERSIONS.indexOf(loadedVersion);
+      const endIdx = MANIFEST_KNOWN_VERSIONS.indexOf(MANIFEST_VERSION);
+      let workingJson = json;
+      for (let i = startIdx + 1; i <= endIdx; i++) {
+        const targetVersion = MANIFEST_KNOWN_VERSIONS[i];
+        const fn = MANIFEST_MIGRATIONS[targetVersion];
+        if (fn) {
+          console.log(
+            `[Manifest] Migrating manifest from ${MANIFEST_KNOWN_VERSIONS[i - 1]} → ${targetVersion}`,
+          );
+          workingJson = fn(workingJson);
+        }
+      }
+      // --- End migration ---
+
       this.entries.clear();
-      for (const raw of json.Entries) {
+      for (const raw of workingJson.Entries) {
         const entry = new ManifestEntry(
           raw.FileName,
           raw.SourcePath,

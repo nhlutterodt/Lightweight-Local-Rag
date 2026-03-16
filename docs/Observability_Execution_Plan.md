@@ -36,6 +36,32 @@ This plan depends on:
 - `docs/Architecture_Design.md`
 - `docs/RAG_Copilot_Instructions.md`
 
+## Implementation Anchors Reviewed
+
+This execution plan should only be revised after re-reading the implementation seams it depends on.
+
+For the current revision, the following anchors were reviewed directly:
+
+- `gui/server/server.js`
+- `gui/server/lib/queryLogger.js`
+- `gui/server/lib/xmlLogger.js`
+- `gui/server/lib/healthCheck.js`
+- `gui/server/IngestionQueue.js`
+- `gui/server/lib/documentParser.js`
+- `gui/server/lib/integrityCheck.js`
+- `gui/server/scripts/check-integrity.js`
+- `gui/server/tests/queryLogger.test.js`
+- `gui/server/tests/xmlLogger.test.js`
+- `gui/server/tests/healthCheck.test.js`
+- `gui/server/tests/retrieval.behavior.test.js`
+- `gui/server/tests/IngestionQueue.test.js`
+- `gui/server/tests/integrityCheck.test.js`
+- `gui/client/react-client/src/components/AnalyticsPanel.jsx`
+- `gui/client/react-client/src/hooks/useRagApi.js`
+- `scripts/Validate-Docs.ps1`
+
+This section is intended to become part of the normal docs-governance rhythm for observability work.
+
 ## Planning Standard
 
 Each phase in this plan declares:
@@ -83,6 +109,7 @@ The execution plan is anchored to the following implementation seams.
 - `gui/server/IngestionQueue.js`
 - `PowerShell Scripts/Data/queue.json`
 - collection manifests in `PowerShell Scripts/Data/*.manifest.json`
+- integrity reports emitted by `gui/server/scripts/check-integrity.js`
 
 ### PowerShell Diagnostic Logging
 
@@ -107,6 +134,7 @@ The execution plan is anchored to the following implementation seams.
 - `gui/server/tests/api.routes.test.js`
 - `gui/server/tests/IngestionQueue.test.js`
 - `gui/server/tests/api.e2e.test.js`
+- `gui/server/tests/integrityCheck.test.js`
 
 ### PowerShell Tests
 
@@ -145,6 +173,12 @@ Observed in the workspace on 2026-03-15:
 - Observed p95 duration is 15260 ms.
 - The queue state has usable operational fields today: `addedAt`, `startedAt`, `completedAt`, `status`, `progress`, `collection`, and `path`.
 
+### Integrity Baseline
+
+- The repo now includes first-party integrity tooling for manifest-versus-LanceDB divergence in `gui/server/lib/integrityCheck.js`.
+- The companion CLI `gui/server/scripts/check-integrity.js` can emit a JSON report and optionally repair orphaned vectors.
+- Dedicated test coverage exists in `gui/server/tests/integrityCheck.test.js`.
+
 ### Performance Baseline
 
 From `logs/perf-baseline.json`:
@@ -170,6 +204,114 @@ The following rules apply across all phases.
 8. Every phase must keep `/api/health` lightweight and cache-friendly.
 9. Every phase must preserve the current security controls around localhost binding, CORS, path validation, and browse error contracts.
 10. Every phase must define how to validate the change locally using existing repo tooling.
+11. Observability docs must name the implementation anchors reviewed in the same change that updates their analysis or plan narrative.
+
+## Proposed `Validate-Docs.ps1` Extensions
+
+The current validator already enforces frontmatter and docs index coverage. The most valuable next step is to extend that same validator, rather than inventing a separate observability process.
+
+The following checks are the most practical additions.
+
+### 1. Require an implementation-anchor section in observability docs
+
+Target files:
+
+- `docs/Observability_Analysis.md`
+- `docs/Observability_Execution_Plan.md`
+
+Suggested rule:
+
+- fail if either file does not contain a `## Implementation Anchors Reviewed` heading
+- fail if the section does not contain at least five repo-relative file bullets
+
+Suggested implementation sketch:
+
+1. Read the raw markdown for each target doc.
+2. Regex-match the section body between `## Implementation Anchors Reviewed` and the next `##`.
+3. Extract bullet lines that look like repo paths in backticks.
+4. Require a minimum count and optionally require that each referenced path exists in the repo.
+
+### 2. Require observability docs to mention first-party integrity tooling when it exists
+
+Trigger condition:
+
+- `gui/server/lib/integrityCheck.js` exists
+
+Suggested rule:
+
+- fail if neither observability doc mentions `IntegrityCheck` or `check-integrity.js`
+
+Suggested implementation sketch:
+
+1. `Test-Path` the integrity-check module.
+2. If present, scan the observability docs for `IntegrityCheck` or `check-integrity.js`.
+3. Raise a violation if both docs omit the capability entirely.
+
+### 3. Flag stale observability claims about API docs
+
+Problem this guards:
+
+- one doc can continue claiming another doc is stale after the other doc has already been corrected
+
+Suggested rule:
+
+- if `docs/Observability_Analysis.md` contains a claim that `docs/API_REFERENCE.md` still uses old `/api/health` or `/api/log` wording, validate the referenced wording against the actual file
+- fail if the claim is no longer true
+
+Suggested implementation sketch:
+
+1. Search `Observability_Analysis.md` for text asserting API doc staleness.
+2. Search `API_REFERENCE.md` for the old phrases and the new phrases.
+3. If the analysis doc claims stale wording but the API doc already contains the corrected wording, raise a violation.
+
+### 4. Flag stale UI-observability descriptions when the analytics panel exposes richer state
+
+Trigger condition:
+
+- `AnalyticsPanel.jsx` contains `lastUpdated` or `changeSummary`
+
+Suggested rule:
+
+- fail if `docs/Observability_Analysis.md` still describes the UI surface only as a thin status panel without mentioning timestamps, summaries, or operational update context
+
+Suggested implementation sketch:
+
+1. Scan `AnalyticsPanel.jsx` and `useRagApi.js` for `lastUpdated` and `changeSummary`.
+2. If present, require `Observability_Analysis.md` to mention update timestamps, change summaries, or equivalent wording in the UI section.
+
+### 5. Require observability doc review when observability seams change
+
+Trigger condition:
+
+- a future version of the validator is run in a git-aware context and changed files include known observability seams
+
+Suggested rule:
+
+- if changed files include any of:
+  - `gui/server/server.js`
+  - `gui/server/lib/queryLogger.js`
+  - `gui/server/lib/xmlLogger.js`
+  - `gui/server/lib/healthCheck.js`
+  - `gui/server/IngestionQueue.js`
+  - `gui/server/lib/integrityCheck.js`
+  - `gui/client/react-client/src/components/AnalyticsPanel.jsx`
+  - `gui/client/react-client/src/hooks/useRagApi.js`
+- then warn or fail unless one of the observability docs is also changed
+
+Suggested implementation sketch:
+
+1. Optionally use `git diff --name-only --cached` or `git diff --name-only HEAD`.
+2. Intersect the changed set with a hardcoded observability seam list.
+3. If there is a seam hit and no observability doc change, emit a validator warning first, then consider promoting it to failure after trial use.
+
+### 6. Keep the validator conservative
+
+Guardrail for the guardrail:
+
+- prefer exact targeted checks over broad semantic rules
+- start new checks as warnings if they rely on git state or textual heuristics
+- keep frontmatter/index validation as the hard blocker path
+- only promote a heuristic check to failure after it has proven low-noise over a few edits
 
 ## Delivery Strategy Overview
 
@@ -199,6 +341,7 @@ Create a reliable starting point by formalizing the current observability baseli
 - `logs/bridge-log.xml`
 - `PowerShell Scripts/Data/queue.json`
 - `logs/perf-baseline.json`
+- `gui/server/scripts/check-integrity.js`
 
 ## Allowed Changes
 
@@ -218,14 +361,16 @@ Create a reliable starting point by formalizing the current observability baseli
 
 1. Add a baseline-generation script that summarizes current query logs, bridge XML, queue state, and perf baseline.
 2. Capture the current field inventory for `query_log.jsonl`, `bridge-log.xml`, and `queue.json`.
-3. Identify parse hazards in current data such as missing `retrievalMode` or mixed threshold values.
-4. Record the baseline snapshot in a stable document or generated artifact that future phases can compare against.
+3. Run the integrity checker in read-only mode and capture its summary as part of the baseline evidence.
+4. Identify parse hazards in current data such as missing `retrievalMode` or mixed threshold values.
+5. Record the baseline snapshot in a stable document or generated artifact that future phases can compare against.
 
 ## Evidence And Rationale
 
 - The current query telemetry already shows strong schema drift: 95.1% blank `retrievalMode`.
 - The bridge XML is active but low-detail, with 45 session entries dominating the sample.
 - Queue timings already exist implicitly in `queue.json`; they should be harvested before changing the schema.
+- Integrity scan output is now part of the first-party operational picture and should be treated as baseline evidence rather than future-only tooling.
 
 ## Tests Required
 

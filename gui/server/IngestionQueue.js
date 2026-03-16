@@ -14,6 +14,21 @@ import PDFParser from "pdf2json";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const QUEUE_STATE_VERSION = 1;
+
+/**
+ * Migration functions keyed by TARGET version.
+ * Each function receives the raw state at (version - 1) and returns state at (version).
+ * Version 1 migration handles the pre-versioning plain-array format (v0 → v1).
+ */
+const QUEUE_MIGRATIONS = {
+  1: (raw) => ({
+    schemaVersion: 1,
+    jobs: Array.isArray(raw) ? raw : (raw?.jobs ?? []),
+  }),
+  // Future example:
+  // 2: (state) => ({ ...state, schemaVersion: 2, newField: "default" }),
+};
+
 const DEFAULT_MAX_TERMINAL_JOBS = 200;
 const DEFAULT_PERSIST_DEBOUNCE_MS = 200;
 const DEFAULT_UPDATE_EMIT_DEBOUNCE_MS = 120;
@@ -432,6 +447,48 @@ class IngestionQueue extends EventEmitter {
     return [];
   }
 
+  /**
+   * Checks the schema version of raw persisted state and applies any
+   * registered migrations to bring it up to QUEUE_STATE_VERSION.
+   *
+   * Returns the (possibly migrated) state object, or null if the stored
+   * version is newer than QUEUE_STATE_VERSION (forward-compat failure).
+   */
+  _migrateQueueState(raw) {
+    // Detect stored version: plain array = legacy v0 (pre-versioning)
+    let storedVersion;
+    if (Array.isArray(raw)) {
+      storedVersion = 0;
+    } else if (
+      raw &&
+      typeof raw === "object" &&
+      typeof raw.schemaVersion === "number"
+    ) {
+      storedVersion = raw.schemaVersion;
+    } else {
+      storedVersion = 0;
+    }
+
+    if (storedVersion > QUEUE_STATE_VERSION) {
+      return null; // forward-compat failure — caller should backup + reset
+    }
+
+    if (storedVersion === QUEUE_STATE_VERSION) {
+      return raw; // no migration needed
+    }
+
+    // Apply migration chain: storedVersion → QUEUE_STATE_VERSION
+    let state = raw;
+    for (let v = storedVersion + 1; v <= QUEUE_STATE_VERSION; v++) {
+      const fn = QUEUE_MIGRATIONS[v];
+      if (fn) {
+        console.log(`[Queue] Migrating queue state v${v - 1} → v${v}`);
+        state = fn(state);
+      }
+    }
+    return state;
+  }
+
   _schedulePersist() {
     this._pendingPersist = true;
 
@@ -574,7 +631,18 @@ class IngestionQueue extends EventEmitter {
       if (this.persistencePath && fs.existsSync(this.persistencePath)) {
         const data = fs.readFileSync(this.persistencePath, "utf8");
         const parsed = JSON.parse(data);
-        this.jobs = this._hydrateJobs(parsed);
+
+        const migrated = this._migrateQueueState(parsed);
+        if (migrated === null) {
+          const storedVersion = parsed?.schemaVersion ?? "unknown";
+          console.warn(
+            `[Queue Load Warning] Queue state has schema version ${storedVersion} which is newer than this code (v${QUEUE_STATE_VERSION}). Resetting to empty state.`,
+          );
+          this._backupCorruptState();
+          this.jobs = [];
+          return;
+        }
+        this.jobs = this._hydrateJobs(migrated);
 
         this._pruneJobs();
         // Reset any "processing" jobs to "failed" on startup (interrupted)

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 function formatUpdateTime(value) {
   if (!value) return 'Awaiting first update';
@@ -46,9 +46,77 @@ function buildQueueSummary(queue, queueState) {
   return `${queue.length} ${queue.length === 1 ? 'job' : 'jobs'} in the ingestion queue.`;
 }
 
-function AnalyticsPanel({ metrics, queue, metricsState, queueState }) {
+function focusAndScrollElement(element) {
+  if (!element) return false;
+
+  element.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  element.focus?.({ preventScroll: true });
+  return true;
+}
+
+function AnalyticsPanel({ metrics, queue, metricsState, queueState, operationalActions = [] }) {
   const metricsSummary = buildMetricsSummary(metrics, metricsState);
   const queueSummary = buildQueueSummary(queue, queueState);
+  const [highlightedQueueEntityId, setHighlightedQueueEntityId] = useState('');
+  const clearHighlightTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (clearHighlightTimerRef.current) {
+      window.clearTimeout(clearHighlightTimerRef.current);
+    }
+  }, []);
+
+  const highlightQueueEntity = (entityId) => {
+    if (!entityId) return;
+
+    setHighlightedQueueEntityId(entityId);
+    if (clearHighlightTimerRef.current) {
+      window.clearTimeout(clearHighlightTimerRef.current);
+    }
+
+    clearHighlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedQueueEntityId('');
+      clearHighlightTimerRef.current = null;
+    }, 5000);
+  };
+
+  const navigateToActionTarget = (action) => {
+    const target = action?.target;
+    if (!target) return;
+
+    if (target.section === 'index') {
+      const indexRegion = document.getElementById('indexMonitor');
+      focusAndScrollElement(indexRegion);
+      return;
+    }
+
+    if (target.section === 'chat') {
+      const chatRegion = document.getElementById('chatWindow');
+      focusAndScrollElement(chatRegion);
+      return;
+    }
+
+    if (target.section !== 'queue') {
+      return;
+    }
+
+    const queueRegion = document.getElementById('queueManager');
+    focusAndScrollElement(queueRegion);
+
+    if (!target.entityId) {
+      return;
+    }
+
+    const queueItems = Array.from(document.querySelectorAll('[data-queue-entity-id]'));
+    const linkedQueueItem = queueItems.find((item) => item.getAttribute('data-queue-entity-id') === target.entityId);
+
+    if (!linkedQueueItem) {
+      return;
+    }
+
+    highlightQueueEntity(target.entityId);
+    focusAndScrollElement(linkedQueueItem);
+  };
 
   return (
     <>
@@ -103,10 +171,44 @@ function AnalyticsPanel({ metrics, queue, metricsState, queueState }) {
             <div className="queue-empty queue-state queue-empty-state">Queue is empty</div>
           ) : (
             queue.map((q) => (
-               <div key={`${q.path}-${q.status}-${q.updatedAt || ''}`} className={`queue-item ${String(q.status || '').toLowerCase()}`}>
-                 <div className="queue-filename">{q.path.split(/[\\/]/).pop()}</div>
+               <div
+                 key={q.entityId || q.id || q.path}
+                 className={`queue-item ${String(q.status || '').toLowerCase()} ${highlightedQueueEntityId && highlightedQueueEntityId === (q.entityId || q.id || q.path) ? 'is-linked-highlight' : ''}`}
+                 data-queue-entity-id={q.entityId || q.id || q.path}
+                 tabIndex={-1}
+               >
+                 <div className="queue-filename">{q.path ? q.path.split(/[\\/]/).pop() : 'Unknown job'}</div>
                  <small className="queue-status-text">{q.status}</small>
                </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <div className="nav-divider"></div>
+
+      <section className="nav-item" aria-labelledby="operationsHistoryLabel">
+        <span className="field-label" id="operationsHistoryLabel">Recent Operational Actions</span>
+        <div className="queue-manager-box" aria-live="polite">
+          {operationalActions.length === 0 ? (
+            <div className="queue-empty queue-state queue-empty-state">No recent user actions.</div>
+          ) : (
+            operationalActions.map((action) => (
+              <article key={action.id} className={`operation-item operation-${action.status || 'info'}`}>
+                <time className="operation-time" dateTime={action.timestamp}>
+                  {formatUpdateTime(action.timestamp)}
+                </time>
+                <p className="operation-message">{action.message}</p>
+                {action.target && (
+                  <button
+                    type="button"
+                    className="operation-link-button"
+                    onClick={() => navigateToActionTarget(action)}
+                  >
+                    {action.target.label || 'Open related item'}
+                  </button>
+                )}
+              </article>
             ))
           )}
         </div>

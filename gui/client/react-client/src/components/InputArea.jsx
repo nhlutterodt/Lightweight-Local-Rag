@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 
 function InputArea({ onSend, onCancel, disabled, isGenerating }) {
   const [text, setText] = useState("");
@@ -72,4 +72,4 @@ function InputArea({ onSend, onCancel, disabled, isGenerating }) {
   );
 }
 
-export default InputArea;
+export default memo(InputArea);

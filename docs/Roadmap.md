@@ -2,12 +2,27 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/Roadmap.md
-last_reviewed: 2026-03-14
+last_reviewed: 2026-03-15
 audience: engineering
 ---
 # Local RAG Project — Roadmap
 
 This document outlines the trajectory for the Local RAG ecosystem, categorized by immediate practical feature enhancements and long-term aspirational goals.
+
+---
+
+## Completed — Operational Reliability (2026-03-15)
+
+The following infrastructure milestones are fully implemented and covered by the test suite
+(236 passing tests):
+
+| Milestone | What it delivers |
+|-----------|-----------------|
+| M1 — Config-driven collection name | `config.RAG.CollectionName` replaces hardcoded default; validated `/^[a-zA-Z0-9_-]+$/` on boot |
+| M2 — Model migration | Auto re-index on `EmbeddingModel` change; no manual steps required |
+| M3 — Integrity scan | `npm run check:integrity [--repair]` for manifest/DB divergence |
+| M4 — Snapshot tooling | `npm run snapshot:list/rollback/prune` for LanceDB version management |
+| M5 — Schema migrations | Manifest and queue `schemaVersion` with forward-migration system |
 
 ---
 
@@ -28,7 +43,7 @@ These features represent the immediate next steps to enrich the current UI archi
 ### 3. Interactive Index Management
 
 - **Goal:** Move beyond pure "ingestion" to allow active "pruning" within the GUI.
-- **Implementation:** Expose an api `DELETE /api/vectors/{id}` endpoint. The Node server will rewrite the `.vectors.bin` array excluding the target index, triggering a hot-reload automatically.
+- **Implementation:** Expose a `DELETE /api/vectors/{id}` endpoint. The Node server will issue a LanceDB row delete and update the manifest accordingly.
 
 ### 4. Vector Metrics Dashboard
 

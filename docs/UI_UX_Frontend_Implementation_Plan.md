@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/UI_UX_Frontend_Implementation_Plan.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-16
 audience: engineering
 ---
 
@@ -23,7 +23,7 @@ This plan applies the roadmap items from the UI/UX analysis to the frontend work
 - establish operational UX for queue and index health states
 - add verification gates so the fixes remain enforced
 
-### 1.1 Phase C Readiness Snapshot (2026-03-15)
+### 1.1 Phase C Progress Snapshot (2026-03-15)
 
 Context was re-validated against the current frontend implementation before beginning Phase C.
 
@@ -36,14 +36,58 @@ Completed (A/B baseline now in place):
 - analytics loading/ready/error semantics with update summaries and timestamps
 - automated accessibility tests and frontend CI workflow
 
-Remaining architecture-first work to start Phase C:
+Phase C execution status:
 
-- Sidebar decomposition and preference-state extraction
-- CSS-owned responsiveness replacing JS width-branch rendering
-- structured content rendering pipeline for AI output (Markdown + sanitize)
-- render-boundary optimization for streaming updates
-- stable IDs replacing index keys
-- explicit async state reducer with guarded transitions
+- C-1 complete: sidebar split + preferences hook extraction.
+- C-2 complete: layout responsiveness moved to CSS media behavior.
+- C-3 complete: Markdown + sanitize response rendering pipeline implemented.
+- C-4 complete: reducer-backed async state machine with guarded transitions.
+- C-5 complete: streaming rerender scope reduced through state isolation and memoization.
+- C-6 complete: stable IDs now used for chat and queue entities.
+- C-7 complete: architecture-critical inline presentational styles moved to class-based CSS.
+
+Current phase state:
+
+- Phase C is complete.
+- Next execution target is Phase D (design-system completion and UX context depth).
+
+Verification baseline after C-7:
+
+- Frontend test suite passing (`37/37`).
+- Async cancellation/retry flows green in integration tests.
+- Queue identity normalization verified in hook tests.
+- Targeted regression suites for sidebar, app shell, and modal surfaces are green.
+
+Phase D continuation order (recommended):
+
+1. Maintain Phase D baseline and shift to performance hardening and observability polish.
+
+Post-Phase-D hardening kickoff (current):
+
+- Long-history render threshold instrumentation is now wired into chat rendering and surfaced through analytics operational actions.
+- Thresholded advisory/warning events are deduplicated and bounded to avoid analytics noise.
+- Operational action entries now include clickable deep links that jump to related queue entities or the chat region.
+- Light-theme polish now includes refined contrast for less-common states (error banners, loading/empty variants, and high-density analytics state rows).
+- Regression coverage now includes long-history threshold signaling in `ChatWindow` tests.
+- Frontend test baseline is currently `47/47`.
+
+### 1.2 Phase D Kickoff Snapshot (2026-03-15, Fresh)
+
+This snapshot is based on direct source inspection plus a fresh frontend test run (`44/44` passing), to avoid stale planning assumptions.
+
+| Item | Current Status | Notes |
+| ---- | -------------- | ----- |
+| D-1 | Complete | Inline-style migration on `App.jsx` and `FolderBrowserModal.jsx` is already in place from Phase C carry-forward work. |
+| D-2 | Complete | Token file now includes spacing, typography, radius, z-index, and transition scales. |
+| D-3 | Complete | `data-theme` wiring is present with dark default and light-mode token stub. |
+| D-4 | Complete | Chat message timestamps are modeled and rendered with semantic `<time>` elements. |
+| D-5 | Complete | Citation UI is wired in chat rendering using SSE metadata citations. |
+| D-6 | Complete | Folder browser now exposes `listbox`/`option`, `aria-selected`, and active descendant semantics. |
+| D-7 | Complete | Session clear now includes an undo path with a timed restore window. |
+| D-8 | Complete | `index.html` now uses project favicon + browser metadata updates. |
+| D-9 | Complete | Analytics now includes action-linked confirmations with timestamped recent user actions. |
+
+Phase D execution baseline is complete; continue with post-Phase-D hardening work.
 
 ---
 
@@ -167,15 +211,20 @@ Primary items:
 
 ### 6.2 Implementation Tasks
 
-| ID  | Work                                                                                                                               | Files                                                                                                        |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| C-1 | Split sidebar into focused subcomponents and a preferences hook                                                                    | `src/components/Sidebar.jsx`, new component files, new hook file                                             |
-| C-2 | Move layout responsiveness to CSS media queries                                                                                    | `src/App.jsx`, `src/hooks/useWindowDimensions.js`, CSS modules                                               |
-| C-3 | Replace regex-only response formatting with markdown renderer plus sanitization                                                    | `src/components/ChatWindow.jsx`                                                                              |
-| C-4 | Consolidate async state into a reducer-backed state machine with explicit transitions and illegal-transition guards                | `src/App.jsx`, `src/hooks/useRagApi.js`, optional new state-machine module                                   |
-| C-5 | Reduce streaming re-renders through state isolation and targeted memoization                                                       | `src/App.jsx`, `src/components/ChatWindow.jsx`, `src/components/Sidebar.jsx`, `src/components/InputArea.jsx` |
-| C-6 | Replace index-based keys with stable IDs across chat and queue entities                                                           | `src/components/ChatWindow.jsx`, `src/components/AnalyticsPanel.jsx`, `src/hooks/useRagApi.js`             |
-| C-7 | Shift remaining inline presentational styles used by architecture-critical surfaces into CSS classes                              | `src/App.jsx`, `src/components/Sidebar.jsx`, `src/components/FolderBrowserModal.jsx`, CSS modules           |
+1. C-1: Split sidebar into focused subcomponents and a preferences hook.
+Files: `src/components/Sidebar.jsx`, new component files, new hook file.
+2. C-2: Move layout responsiveness to CSS media queries.
+Files: `src/App.jsx`, `src/hooks/useWindowDimensions.js`, CSS modules.
+3. C-3: Replace regex-only response formatting with markdown renderer plus sanitization.
+Files: `src/components/ChatWindow.jsx`.
+4. C-4: Consolidate async state into a reducer-backed state machine with explicit transitions and illegal-transition guards.
+Files: `src/App.jsx`, `src/hooks/useRagApi.js`, optional new state-machine module.
+5. C-5: Reduce streaming re-renders through state isolation and targeted memoization.
+Files: `src/App.jsx`, `src/components/ChatWindow.jsx`, `src/components/Sidebar.jsx`, `src/components/InputArea.jsx`.
+6. C-6: Replace index-based keys with stable IDs across chat and queue entities.
+Files: `src/components/ChatWindow.jsx`, `src/components/AnalyticsPanel.jsx`, `src/hooks/useRagApi.js`.
+7. C-7: Shift remaining inline presentational styles used by architecture-critical surfaces into CSS classes.
+Files: `src/App.jsx`, `src/components/Sidebar.jsx`, `src/components/FolderBrowserModal.jsx`, CSS modules.
 
 ### 6.3 Acceptance Criteria
 

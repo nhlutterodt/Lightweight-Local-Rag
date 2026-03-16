@@ -578,4 +578,69 @@ describe("IngestionQueue", () => {
       expect(mockTable.add).not.toHaveBeenCalled(); // Failed to embed, so not added
     });
   });
+
+  describe("Schema Migration", () => {
+    const queueFile = () => path.join(tempDir, "queue.json");
+
+    function writeQueueFile(content) {
+      fs.writeFileSync(queueFile(), JSON.stringify(content), "utf8");
+    }
+
+    function loadFreshQueue() {
+      const q = new IngestionQueue();
+      q.setConfig({ Paths: { DataDir: tempDir } });
+      return q;
+    }
+
+    afterEach(() => {
+      // Clean up any migration-related backup files
+      const files = fs.readdirSync(tempDir);
+      for (const f of files) {
+        if (f.startsWith("queue.json")) {
+          fs.unlinkSync(path.join(tempDir, f));
+        }
+      }
+    });
+
+    it("loads current v1 state without applying any migration", () => {
+      writeQueueFile({ schemaVersion: 1, jobs: [{ id: "a", status: "completed" }] });
+      const q = loadFreshQueue();
+      expect(q.jobs.length).toBe(1);
+      expect(q.jobs[0].id).toBe("a");
+    });
+
+    it("migrates legacy plain-array state (v0) to v1 and loads jobs", () => {
+      writeQueueFile([{ id: "b", status: "completed" }]);
+      const q = loadFreshQueue();
+      expect(q.jobs.length).toBe(1);
+      expect(q.jobs[0].id).toBe("b");
+    });
+
+    it("warns and resets to empty when state has a future schema version", () => {
+      writeQueueFile({ schemaVersion: 999, jobs: [{ id: "c", status: "pending" }] });
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const q = loadFreshQueue();
+      warnSpy.mockRestore();
+
+      expect(q.jobs).toEqual([]);
+      // A backup file should have been created
+      const backups = fs.readdirSync(tempDir).filter((f) => f.startsWith("queue.json.corrupt-"));
+      expect(backups.length).toBeGreaterThan(0);
+    });
+
+    it("_migrateQueueState returns null for future schema versions", () => {
+      const q = new IngestionQueue();
+      q.setConfig({ Paths: { DataDir: tempDir } });
+      const result = q._migrateQueueState({ schemaVersion: 999, jobs: [] });
+      expect(result).toBeNull();
+    });
+
+    it("_migrateQueueState returns state unchanged when version equals current", () => {
+      const q = new IngestionQueue();
+      q.setConfig({ Paths: { DataDir: tempDir } });
+      const state = { schemaVersion: 1, jobs: [{ id: "x" }] };
+      const result = q._migrateQueueState(state);
+      expect(result).toBe(state); // same reference, no copy
+    });
+  });
 });

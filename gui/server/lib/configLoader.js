@@ -89,6 +89,7 @@ const DEFAULTS = {
     FilteredVectorOverfetch: 4,
     HybridOverfetch: 6,
     HybridLexicalWeight: 0.35,
+    CollectionName: "TestIngestNodeFinal",
   },
   Metadata: {
     ConfigVersion: "1.0.0",

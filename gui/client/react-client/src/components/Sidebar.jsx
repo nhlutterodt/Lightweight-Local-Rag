@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { useSidebarPreferences } from '../hooks/useSidebarPreferences';
 import ModelSelector from './sidebar/ModelSelector';
 import CollectionInput from './sidebar/CollectionInput';
 import ConnectionStatus from './sidebar/ConnectionStatus';
 import IngestControls from './sidebar/IngestControls';
 
-function Sidebar({ models, activeModel, setActiveModel, collectionName, setCollectionName, isConnected, isModelReady, onEnqueue, onClearSession, isGenerating = false }) {
+function Sidebar({ models, activeModel, setActiveModel, collectionName, setCollectionName, isConnected, isModelReady, onEnqueue, onClearSession, isGenerating = false, canUndoClear = false, onUndoClear }) {
   const {
     ingestPath,
     setIngestPath,
@@ -73,6 +73,18 @@ function Sidebar({ models, activeModel, setActiveModel, collectionName, setColle
       </nav>
       
       <footer>
+        {canUndoClear && (
+          <div className="sidebar-clear-undo" role="status" aria-live="polite">
+            <p className="sidebar-clear-undo-text">Session cleared.</p>
+            <button
+              type="button"
+              className="btn-secondary sidebar-clear-undo-button"
+              onClick={onUndoClear}
+            >
+              Undo clear
+            </button>
+          </div>
+        )}
         <button
           id="clearChat"
           type="button"
@@ -88,4 +100,4 @@ function Sidebar({ models, activeModel, setActiveModel, collectionName, setColle
   );
 }
 
-export default Sidebar;
+export default memo(Sidebar);

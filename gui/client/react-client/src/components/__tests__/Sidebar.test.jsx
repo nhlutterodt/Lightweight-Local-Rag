@@ -81,4 +81,14 @@ describe("Sidebar", () => {
       expect(screen.getByLabelText(/vectorize new data/i)).toHaveValue("");
     });
   });
+
+  it("shows undo clear action when undo state is available", () => {
+    const onUndoClear = vi.fn();
+    renderSidebar({ canUndoClear: true, onUndoClear });
+
+    fireEvent.click(screen.getByRole("button", { name: /undo clear/i }));
+
+    expect(onUndoClear).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/session cleared/i)).toBeInTheDocument();
+  });
 });

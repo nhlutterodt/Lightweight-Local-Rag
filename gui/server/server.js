@@ -19,6 +19,8 @@ import {
 import { getSystemHealth } from "./lib/healthCheck.js";
 import { bridgeLogger } from "./lib/xmlLogger.js";
 import * as lancedb from "@lancedb/lancedb";
+import { DocumentParser } from "./lib/documentParser.js";
+import { triggerModelMigration } from "./lib/modelMigration.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,7 +53,15 @@ if (config) ingestQueue.setConfig(config);
 // 1. LanceDB Initialization (Async)
 // ==========================================
 let store;
-let collectionName = "TestIngestNodeFinal"; // Native JS Insertion test
+const COLLECTION_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+let collectionName = config?.RAG?.CollectionName || "TestIngestNodeFinal";
+if (!COLLECTION_NAME_PATTERN.test(collectionName)) {
+  console.warn(
+    `[Config] Invalid CollectionName "${collectionName}". ` +
+      `Must match /^[a-zA-Z0-9_-]+$/. Falling back to "TestIngestNodeFinal".`,
+  );
+  collectionName = "TestIngestNodeFinal";
+}
 
 async function initializeVectorStore() {
   const dataDir = config?.Paths?.DataDir
@@ -60,19 +70,46 @@ async function initializeVectorStore() {
 
   const dbDir = path.join(dataDir, "vector_store.lance");
   store = new VectorStore();
+  const targetModel = config?.RAG?.EmbeddingModel || "nomic-embed-text";
+
   try {
-    // We pass the required embedding model (from project-config) as validation
-    const targetModel = config?.RAG?.EmbeddingModel || "nomic-embed-text";
-    await store.load(dbDir, collectionName, targetModel);
-    console.log(
-      `[VectorStore] Connected to LanceDB at ${dbDir}, Collection: ${collectionName}. Model=${store.model || "legacy"}`,
-    );
+    // Pass null to skip the throw-on-mismatch guard; we check store.model
+    // ourselves below to handle migration gracefully.
+    await store.load(dbDir, collectionName, null);
   } catch (err) {
     console.error(
       "[VectorStore] Warning: Initialization failed or table missing.",
     );
     console.error(err.message);
+    return;
   }
+
+  // Table does not exist yet — normal first-run state.
+  if (!store.isReady) {
+    return;
+  }
+
+  // Embedding model mismatch — trigger migration.
+  const storedModel = store.model;
+  if (storedModel && storedModel !== "unknown" && storedModel !== targetModel) {
+    const parser = new DocumentParser(dataDir, collectionName);
+    await parser.load();
+    await triggerModelMigration(
+      parser,
+      ingestQueue,
+      collectionName,
+      storedModel,
+      targetModel,
+    );
+    store.isReady = false; // prevent stale queries during re-indexing
+    return;
+  }
+
+  // Normal success.
+  console.log(
+    `[VectorStore] Connected to LanceDB at ${dbDir}, Collection: ${collectionName}. ` +
+      `Model=${store.model || "legacy"}`,
+  );
 }
 
 // Call init. Server starts anyway, but RAG requires it to succeed eventually.

@@ -59,6 +59,17 @@ const mockTable = {
   add: jest.fn().mockResolvedValue(true),
   delete: jest.fn().mockResolvedValue(true),
   countRows: jest.fn().mockResolvedValue(10),
+  // --- M4: Snapshot API ---
+  version: 3,
+  listVersions: jest.fn().mockResolvedValue([
+    { version: 1, timestamp: new Date("2026-03-10T12:00:00.000Z") },
+    { version: 2, timestamp: new Date("2026-03-11T08:30:00.000Z") },
+    { version: 3, timestamp: new Date("2026-03-12T14:22:00.000Z") },
+  ]),
+  checkout: jest.fn().mockResolvedValue(undefined),
+  restore: jest.fn().mockResolvedValue(undefined),
+  checkoutLatest: jest.fn().mockResolvedValue(undefined),
+  cleanupOldVersions: jest.fn().mockResolvedValue(undefined),
 };
 
 export const connect = jest.fn().mockResolvedValue({

@@ -21,6 +21,31 @@ It also defines the gaps between the current implementation and a more complete 
 
 This analysis covers the current local application runtime as implemented in the Node.js bridge, PowerShell utilities, and React UI. It does not assume Azure-hosted monitoring services or external APM infrastructure.
 
+## Implementation Anchors Reviewed
+
+This document should be revised against implementation anchors, not against prior documentation alone.
+
+For the current revision, the following anchors were reviewed directly:
+
+- `gui/server/server.js`
+- `gui/server/lib/queryLogger.js`
+- `gui/server/lib/xmlLogger.js`
+- `gui/server/lib/healthCheck.js`
+- `gui/server/IngestionQueue.js`
+- `gui/server/lib/documentParser.js`
+- `gui/server/lib/integrityCheck.js`
+- `gui/server/scripts/check-integrity.js`
+- `gui/client/react-client/src/components/AnalyticsPanel.jsx`
+- `gui/client/react-client/src/hooks/useRagApi.js`
+- `PowerShell Scripts/XMLLogger.ps1`
+- `PowerShell Scripts/ExecutionContext.ps1`
+- `logs/query_log.jsonl`
+- `logs/bridge-log.xml`
+- `PowerShell Scripts/Data/queue.json`
+- `logs/perf-baseline.json`
+
+When this document changes in the future, this section should be updated in the same edit so the reader can see which first-party runtime seams were actually re-verified.
+
 ## Current Signal Inventory
 
 ### 1. Query Telemetry
@@ -138,18 +163,21 @@ Primary source: `gui/client/react-client/src/components/AnalyticsPanel.jsx`
 Current behavior:
 
 - The UI shows vector-index monitor status and ingestion queue state.
-- The panel is operational status, not analytical reporting.
+- The panel now also shows last-updated timestamps and short change summaries for metrics and queue updates.
+- The panel remains focused on operational awareness rather than deeper analytical reporting.
 
 Current strengths:
 
 - Good for immediate local awareness.
 - Low complexity.
+- Gives operators a quick sense of when the visible state last changed and whether the latest refresh added, removed, or updated visible items.
 
 Current limits:
 
 - No trend views.
 - No query-quality dashboard.
 - No drill-down from visible problems to root-cause evidence.
+- The update summaries are useful situational context, but they are still UI-derived summaries rather than a full debugging or reporting surface.
 
 ## Observed Baseline
 
@@ -211,12 +239,15 @@ Gaps:
 
 ## Documentation Drift
 
-The current docs do not fully match implementation:
+The most important drift risk in this area is not frontmatter or indexing. It is narrative drift between observability docs and the implementation seams they describe.
 
-- `docs/API_REFERENCE.md` still describes `/api/health` as a PowerShell-backed diagnostic, but the implementation is native Node.js.
-- `docs/API_REFERENCE.md` also describes `/api/log` as writing through `Append-LogEntry.ps1`, but the implementation uses the Node bridge XML logger directly.
+Examples of current drift vectors:
 
-This matters because observability decisions depend on understanding the true signal path.
+- the UI analytics surface can evolve without the observability docs being refreshed
+- new backend operational tooling, such as integrity scanning, can be added without being reflected in the observability inventory
+- endpoint contracts may be corrected in one doc while older assumptions remain in another observability-focused doc
+
+This matters because observability decisions depend on understanding the true signal path, not merely the most recently edited narrative.
 
 ## Key Gaps To Address
 
@@ -342,7 +373,7 @@ The observability model is good enough when the team can reliably answer:
 ## Immediate Next Actions
 
 1. Create the observability matrix from the existing code paths and on-disk artifacts.
-2. Update `docs/API_REFERENCE.md` so health and logging paths match current implementation.
+2. Keep `docs/API_REFERENCE.md`, `docs/Architecture_Design.md`, and the observability docs synchronized when implementation anchors change.
 3. Define a shared telemetry contract for query, queue, ingestion, and error events.
 4. Decide whether XML remains the debug format while JSONL becomes the reporting format, or whether a unified structured event format is preferred.
 5. Add a small baseline-report script that summarizes current `query_log.jsonl` and queue/index state.

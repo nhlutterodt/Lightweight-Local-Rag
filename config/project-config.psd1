@@ -129,6 +129,7 @@
         FilteredVectorOverfetch = 4
         HybridOverfetch  = 6
         HybridLexicalWeight = 0.35
+        CollectionName   = "TestIngestNodeFinal"
     }
     
     # ===== Metadata =====

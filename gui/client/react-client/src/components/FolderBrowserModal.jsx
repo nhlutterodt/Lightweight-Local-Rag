@@ -11,6 +11,7 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
   const [error, setError] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const dialogRef = useRef(null);
+  const listboxRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previouslyFocusedElementRef = useRef(null);
 
@@ -73,6 +74,20 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
     ...contents.map((item) => ({ ...item, isParent: false })),
   ];
 
+  const getOptionId = useCallback((index) => `folder-browser-option-${index}`, []);
+
+  const activeDescendantId =
+    !loading && !error && rows.length > 0 && activeIndex >= 0 && activeIndex < rows.length
+      ? getOptionId(activeIndex)
+      : undefined;
+
+  useEffect(() => {
+    if (!isOpen || !activeDescendantId) return;
+
+    const activeElement = document.getElementById(activeDescendantId);
+    activeElement?.scrollIntoView({ block: 'nearest' });
+  }, [activeDescendantId, isOpen]);
+
   const handleDialogKeyDown = (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -104,6 +119,9 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
       return;
     }
 
+  };
+
+  const handleListboxKeyDown = (event) => {
     if (loading || error || !rows.length) return;
 
     if (event.key === 'ArrowDown') {
@@ -115,6 +133,18 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
     if (event.key === 'ArrowUp') {
       event.preventDefault();
       setActiveIndex((prev) => Math.max(prev - 1, 0));
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setActiveIndex(0);
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      setActiveIndex(rows.length - 1);
       return;
     }
 
@@ -130,31 +160,23 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 1000
-    }}>
+    <div className="modal-overlay folder-browser-overlay">
       <div
         id="folder-browser-dialog"
-        className="modal-content glass"
+        className="modal-content glass folder-browser-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="folder-browser-title"
         tabIndex={-1}
         ref={dialogRef}
         onKeyDown={handleDialogKeyDown}
-        style={{
-        width: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-        backgroundColor: 'var(--bg-panel)', padding: '20px', borderRadius: '8px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-          <h2 id="folder-browser-title" style={{ margin: 0, fontSize: '1.2rem' }}>Select Folder</h2>
+      >
+        <div className="folder-browser-header">
+          <h2 id="folder-browser-title" className="folder-browser-title">Select Folder</h2>
           <button
             ref={closeButtonRef}
             type="button"
-            className="btn-secondary"
-            style={{ padding: '4px 8px' }}
+            className="btn-secondary folder-browser-close-button"
             aria-label="Close folder browser"
             onClick={handleClose}
           >
@@ -162,11 +184,11 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
           </button>
         </div>
 
-        <div style={{ padding: '8px', backgroundColor: 'var(--bg-main)', borderRadius: '4px', marginBottom: '10px', wordBreak: 'break-all' }}>
+        <div className="folder-browser-path-box">
           <strong>Path:</strong> {currentPath || "Loading default..."}
         </div>
 
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+        <div className="folder-browser-breadcrumbs">
           {currentPath.split(/[/\\]+/).filter(Boolean).map((segment, index, segments) => {
             const prefix = currentPath.startsWith('\\\\') ? '\\\\' : (currentPath.includes(':') ? `${segments[0]}\\` : '/');
             const pathParts = segments.slice(0, index + 1);
@@ -178,8 +200,7 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
               <button
                 key={`${segment}-${index}`}
                 type="button"
-                className="btn-secondary"
-                style={{ marginTop: 0, padding: '2px 8px', fontSize: '0.75rem' }}
+                className="btn-secondary folder-browser-crumb-button"
                 onClick={() => fetchDirectory(crumbPath)}
               >
                 {segment}
@@ -189,29 +210,37 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
         </div>
 
         {error && (
-          <div style={{ color: 'var(--color-error)', marginBottom: '10px', fontSize: '0.9rem' }}>
+          <div className="folder-browser-error">
             {error}
           </div>
         )}
 
-        <div style={{
-          flex: 1, overflowY: 'auto', border: '1px solid var(--glass-border)',
-          borderRadius: '4px', backgroundColor: 'var(--bg-main)', padding: '4px'
-        }}>
+        <div className="folder-browser-list-shell">
           {loading ? (
-            <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>
+            <div className="folder-browser-loading">Loading...</div>
+          ) : rows.length === 0 ? (
+            <div className="folder-browser-empty">Empty directory</div>
           ) : (
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <ul
+              ref={listboxRef}
+              className="folder-browser-list"
+              role="listbox"
+              aria-label="Directory contents"
+              aria-activedescendant={activeDescendantId}
+              tabIndex={0}
+              onKeyDown={handleListboxKeyDown}
+            >
               {parentPath && (
                 <li 
-                  onClick={() => setActiveIndex(0)}
-                  onDoubleClick={() => fetchDirectory(parentPath)}
-                  style={{
-                    padding: '8px',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid var(--glass-border)',
-                    backgroundColor: activeIndex === 0 ? 'rgba(255,255,255,0.08)' : 'transparent'
+                  id={getOptionId(0)}
+                  className={`folder-browser-item folder-browser-parent-item ${activeIndex === 0 ? 'is-active' : ''}`}
+                  role="option"
+                  aria-selected={activeIndex === 0}
+                  onClick={() => {
+                    setActiveIndex(0);
+                    listboxRef.current?.focus();
                   }}
+                  onDoubleClick={() => fetchDirectory(parentPath)}
                 >
                   📁 <strong>..</strong>
                 </li>
@@ -222,33 +251,26 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
                 return (
                 <li 
                   key={item.path}
-                  onClick={() => setActiveIndex(itemIndex)}
-                  onDoubleClick={() => item.isDirectory ? fetchDirectory(item.path) : null}
-                  style={{
-                    padding: '8px',
-                    cursor: item.isDirectory ? 'pointer' : 'default',
-                    borderBottom: '1px solid var(--glass-border)',
-                    opacity: item.isDirectory ? 1 : 0.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    backgroundColor: activeIndex === itemIndex
-                      ? 'rgba(255,255,255,0.08)'
-                      : 'transparent'
+                  id={getOptionId(itemIndex)}
+                  className={`folder-browser-item ${item.isDirectory ? 'is-directory' : 'is-file'} ${activeIndex === itemIndex ? 'is-active' : ''}`}
+                  role="option"
+                  aria-selected={activeIndex === itemIndex}
+                  aria-disabled={!item.isDirectory}
+                  onClick={() => {
+                    setActiveIndex(itemIndex);
+                    listboxRef.current?.focus();
                   }}
+                  onDoubleClick={() => item.isDirectory ? fetchDirectory(item.path) : null}
                 >
                   {item.isDirectory ? '📁' : '📄'} {item.name}
                 </li>
                 );
               })}
-              {contents.length === 0 && !parentPath && (
-                <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>Empty directory</div>
-              )}
             </ul>
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
+        <div className="folder-browser-actions">
           <button type="button" className="btn-secondary" onClick={handleClose}>Cancel</button>
           <button 
             type="button"

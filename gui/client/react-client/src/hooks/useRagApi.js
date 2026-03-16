@@ -16,6 +16,82 @@ function nowIsoString() {
   return new Date().toISOString();
 }
 
+function getQueueIdentity(job) {
+  if (job?.entityId) return job.entityId;
+  if (job?.id) return String(job.id);
+  if (job?.path) return String(job.path);
+  return '';
+}
+
+function buildQueueFingerprint(job) {
+  const stableParts = [
+    job?.id,
+    job?.path,
+    job?.collection,
+    job?.createdAt,
+    job?.submittedAt,
+    job?.enqueuedAt,
+  ].filter(Boolean);
+
+  if (stableParts.length > 0) {
+    return stableParts.join('|');
+  }
+
+  const fallbackSource = Object.keys(job || {})
+    .filter((key) => key !== 'status' && key !== 'updatedAt' && key !== 'progress')
+    .sort()
+    .map((key) => `${key}:${JSON.stringify(job[key])}`)
+    .join('|');
+
+  return fallbackSource || null;
+}
+
+function normalizeQueueJobs(rawJobs, idMapRef) {
+  const seenFingerprints = new Set();
+
+  const jobs = rawJobs.map((job) => {
+    if (job?.entityId) {
+      return job;
+    }
+
+    if (job?.id) {
+      return {
+        ...job,
+        entityId: String(job.id),
+      };
+    }
+
+    const fingerprint = buildQueueFingerprint(job);
+    if (!fingerprint) {
+      return {
+        ...job,
+        entityId: `queue-${crypto.randomUUID()}`,
+      };
+    }
+
+    seenFingerprints.add(fingerprint);
+    let entityId = idMapRef.current.get(fingerprint);
+    if (!entityId) {
+      entityId = `queue-${crypto.randomUUID()}`;
+      idMapRef.current.set(fingerprint, entityId);
+    }
+
+    return {
+      ...job,
+      entityId,
+    };
+  });
+
+  // Prune stale fingerprints to keep map size bounded.
+  for (const key of idMapRef.current.keys()) {
+    if (!seenFingerprints.has(key)) {
+      idMapRef.current.delete(key);
+    }
+  }
+
+  return jobs;
+}
+
 function summarizeMetricChanges(previousMetrics, nextMetrics) {
   if (previousMetrics.length === 0 && nextMetrics.length === 0) {
     return "No indices reported.";
@@ -52,8 +128,11 @@ function summarizeQueueChanges(previousQueue, nextQueue) {
     return `${previousQueue.length - nextQueue.length} job ${previousQueue.length - nextQueue.length === 1 ? 'removed from queue' : 'removed from queue'}.`;
   }
 
-  const previousByPath = new Map(previousQueue.map((job) => [job.path, job.status]));
-  const changedStatusCount = nextQueue.filter((job) => previousByPath.get(job.path) !== undefined && previousByPath.get(job.path) !== job.status).length;
+  const previousByIdentity = new Map(previousQueue.map((job) => [getQueueIdentity(job), job.status]));
+  const changedStatusCount = nextQueue.filter((job) => {
+    const identity = getQueueIdentity(job);
+    return identity && previousByIdentity.get(identity) !== undefined && previousByIdentity.get(identity) !== job.status;
+  }).length;
 
   if (changedStatusCount > 0) {
     return `${changedStatusCount} job ${changedStatusCount === 1 ? 'status updated' : 'statuses updated'}.`;
@@ -73,6 +152,7 @@ export function useRagApi() {
   const eventSourceRef = useRef(null);
   const chatAbortControllerRef = useRef(null);
   const queueSignatureRef = useRef("[]");
+  const queueIdMapRef = useRef(new Map());
   const previousMetricsRef = useRef([]);
   const previousQueueRef = useRef([]);
 
@@ -126,7 +206,7 @@ export function useRagApi() {
   }, []);
 
   // Submit Chat Query (Streaming)
-  const streamChat = async (messages, model, collection, onUpdate) => {
+  const streamChat = useCallback(async (messages, model, collection, onUpdate) => {
     const emit = (type, payload = {}) => {
       onUpdate?.({ type, ...payload });
     };
@@ -181,6 +261,11 @@ export function useRagApi() {
               return;
             }
 
+            if (data.type === "metadata" && Array.isArray(data.citations)) {
+              emit("metadata", { citations: data.citations });
+              continue;
+            }
+
             const token = data?.message?.content;
             if (typeof token === "string" && token.length > 0) {
               emit("token", { content: token, raw: data });
@@ -208,7 +293,7 @@ export function useRagApi() {
         chatAbortControllerRef.current = null;
       }
     }
-  };
+  }, []);
 
   const cancelStreamChat = useCallback(() => {
     if (!chatAbortControllerRef.current) {
@@ -220,7 +305,7 @@ export function useRagApi() {
   }, []);
 
   // Enqueue Ingestion
-  const enqueueJob = async (path, collection) => {
+  const enqueueJob = useCallback(async (path, collection) => {
     const response = await fetch(`${API_URL}/queue`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -231,7 +316,7 @@ export function useRagApi() {
       throw new Error(data.error);
     }
     return response.json();
-  };
+  }, []);
 
   // Mount effects
   useEffect(() => {
@@ -266,15 +351,17 @@ export function useRagApi() {
           return;
         }
 
+        const normalizedJobs = normalizeQueueJobs(jobs, queueIdMapRef);
+
         setQueueState({
           status: "ready",
           error: "",
           lastUpdated: nowIsoString(),
-          changeSummary: summarizeQueueChanges(previousQueueRef.current, jobs),
+          changeSummary: summarizeQueueChanges(previousQueueRef.current, normalizedJobs),
         });
         queueSignatureRef.current = nextSignature;
-        previousQueueRef.current = jobs;
-        setQueue(jobs);
+        previousQueueRef.current = normalizedJobs;
+        setQueue(normalizedJobs);
       } catch (e) {
         console.error("Queue SSE Parse", e);
         setQueueState((current) => ({

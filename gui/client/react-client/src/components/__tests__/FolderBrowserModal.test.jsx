@@ -65,14 +65,40 @@ describe("FolderBrowserModal", () => {
     );
 
     await screen.findByText(/Folder A/);
-    const dialog = screen.getByRole("dialog", { name: /select folder/i });
+    const listbox = screen.getByRole("listbox", { name: /directory contents/i });
 
-    fireEvent.keyDown(dialog, { key: "ArrowDown" });
-    fireEvent.keyDown(dialog, { key: "Enter" });
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: "Enter" });
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
     const secondCallUrl = new URL(global.fetch.mock.calls[1][0]);
     expect(secondCallUrl.searchParams.get("path")).toBe("/allowed/root/Folder A");
+  });
+
+  it("exposes listbox option semantics with active descendant and selected option", async () => {
+    render(
+      <FolderBrowserModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+        initialPath="/allowed/root"
+      />,
+    );
+
+    await screen.findByText(/Folder A/);
+
+    const listbox = screen.getByRole("listbox", { name: /directory contents/i });
+    const options = screen.getAllByRole("option");
+
+    expect(options).toHaveLength(3);
+    expect(listbox).toHaveAttribute("aria-activedescendant", options[0].id);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+
+    expect(listbox).toHaveAttribute("aria-activedescendant", options[1].id);
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(options[0]).toHaveAttribute("aria-selected", "false");
   });
 
   it("closes on Escape", async () => {

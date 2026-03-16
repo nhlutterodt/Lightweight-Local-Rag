@@ -60,6 +60,10 @@
   border-left-color: #ef4444;
 }
 
+.queue-item.is-linked-highlight {
+  box-shadow: 0 0 0 1px var(--accent-primary), 0 0 0 3px var(--color-focus-ring);
+}
+
 .queue-header {
   display: flex;
   justify-content: space-between;
@@ -109,6 +113,129 @@
   font-style: normal;
 }
 
+.operation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.65rem;
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+  border-left: 3px solid var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.operation-item:last-child {
+  margin-bottom: 0;
+}
+
+.operation-item.operation-success {
+  border-left-color: var(--color-success);
+}
+
+.operation-item.operation-warning {
+  border-left-color: var(--color-warning);
+}
+
+.operation-item.operation-info {
+  border-left-color: var(--accent-primary);
+}
+
+.operation-item.operation-error {
+  border-left-color: var(--color-error);
+}
+
+.operation-time {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.operation-message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.operation-link-button {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--accent-primary);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.operation-link-button:hover,
+.operation-link-button:focus-visible {
+  border-color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+:root[data-theme="light"] .queue-manager-box {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+:root[data-theme="light"] .queue-item,
+:root[data-theme="light"] .operation-item {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+:root[data-theme="light"] .queue-state {
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-style: normal;
+}
+
+:root[data-theme="light"] .queue-state.queue-loading {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.28);
+  color: #1d4ed8;
+}
+
+:root[data-theme="light"] .queue-state.queue-empty-state {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: #334155;
+}
+
+:root[data-theme="light"] .queue-state.queue-error {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.3);
+  color: #b91c1c;
+}
+
+:root[data-theme="light"] .operation-item.operation-info {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+:root[data-theme="light"] .operation-item.operation-success {
+  background: rgba(5, 150, 105, 0.08);
+}
+
+:root[data-theme="light"] .operation-item.operation-warning {
+  background: rgba(217, 119, 6, 0.1);
+}
+
+:root[data-theme="light"] .operation-item.operation-error {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+:root[data-theme="light"] .operation-message {
+  color: #1f2937;
+}
+
+:root[data-theme="light"] .operation-time {
+  color: #64748b;
+}
+
+:root[data-theme="light"] .queue-item.processing {
+  background: rgba(37, 99, 235, 0.12);
+}
+
 @media (forced-colors: active) {
   .queue-item,
   .queue-manager-box {
@@ -126,9 +253,21 @@
   .queue-status-text,
   .panel-state-summary,
   .panel-change-summary,
+  .operation-time,
+  .operation-message,
   .queue-empty,
   .queue-path,
   .queue-filename {
     color: CanvasText;
+  }
+
+  .operation-item {
+    border-left-color: Highlight;
+  }
+
+  .operation-link-button {
+    color: LinkText;
+    border-color: ButtonText;
+    background: Canvas;
   }
 }

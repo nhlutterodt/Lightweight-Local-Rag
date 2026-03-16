@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/RAG_Copilot_Instructions.md
-last_reviewed: 2026-03-14
+last_reviewed: 2026-03-15
 audience: engineering
 ---
 # RAG Pipeline — Copilot Instructions
@@ -42,6 +42,12 @@ Use this terminology consistently in all docs and API contracts.
 | `lib/queryLogger.js`  | JSONL append logger, fire-and-forget, graceful flush on shutdown |
 | `IngestionQueue.js`   | FIFO queue with persistence and interrupted-job recovery         |
 | `PowerShellRunner.js` | Process spawning, JSON stream parsing, shell-injection guard     |
+| `lib/configLoader.js`       | Parses `config/project-config.psd1`; applies env-var overrides; exposes `config.RAG.*` |
+| `lib/documentParser.js`     | Manifest read/write, `schemaVersion` migrations, SHA256 change detection |
+| `lib/smartChunker.js`       | JS-native chunker dispatching by file type; emits `SmartChunk` objects with metadata |
+| `lib/integrityCheck.js`     | Diffs manifest vs. LanceDB table; reports MISSING_VECTORS, ORPHANED_VECTORS, MODEL_MISMATCH |
+| `lib/modelMigration.js`     | Triggers full re-embedding queue when `EmbeddingModel` changes between restarts |
+| `lib/snapshotManager.js`    | LanceDB version list / rollback / prune via `checkout()` + `restore()` sequence |
 
 ### PowerShell (ingestion path — do not move to Node.js)
 
@@ -115,6 +121,7 @@ RAG = @{
     TopK             = 5
     MinScore         = 0.003
     MaxContextTokens = 2048
+    CollectionName   = "TestIngestNodeFinal"   # validated /^[a-zA-Z0-9_-]+$/ on boot
 }
 ```
 
@@ -164,9 +171,48 @@ Log writes are fire-and-forget — never awaited in the request path.
 - **Config:** always `config.RAG.*` in Node.js, `$Config.RAG.*` in PowerShell —
   never hardcode model names, URLs, or thresholds
 
+## Frontend UI/UX Agent Workflow (Required)
+
+When an AI agent is asked to perform UI/UX analysis or implementation in
+`gui/client/react-client`, follow this deterministic workflow:
+
+1. Search for canonical docs first, in this order:
+  - `docs/UI_UX_Analysis.md`
+  - `docs/UI_UX_Frontend_Implementation_Plan.md`
+  - `docs/Roadmap.md`
+2. Compare current code against those documents before proposing changes.
+3. Update canonical docs in the same change set when implementation status shifts.
+4. Keep terminology stable across docs and code (`Phase A/B/C/D`, reducer-driven chat lifecycle, stable IDs).
+5. Preserve accessibility and async-state guarantees as non-negotiable regression constraints.
+
+### Frontend Guardrails for Agents
+
+- Prefer class-based CSS over inline presentational styles.
+- Keep chat message identity stable (`message.id`) and queue identity stable (`entityId`).
+- Do not bypass the chat reducer contract in `src/state/chatStateMachine.js`.
+- Keep sanitization in place for AI-rendered content.
+- Do not introduce breaking changes to the API/SSE contracts without corresponding doc updates.
+
+### Frontend Validation Commands
+
+Before finalizing UI/UX work, run from `gui/client/react-client`:
+
+```powershell
+npm test
+```
+
+Before finalizing docs-focused changes, run from repo root:
+
+```powershell
+pwsh ./scripts/Validate-Docs.ps1
+```
+
+Treat failures in either command as blockers.
+
 ## Do Not Change Without Coordination
 
-- `.vectors.bin` binary layout — JS and PS readers must stay in sync
+- `lib/documentParser.js` manifest schema — `schemaVersion` field and `MANIFEST_MIGRATIONS` table must be extended when new manifest fields are added
+- `IngestionQueue.js` queue schema — `schemaVersion` field and queue migration steps must be extended in sync
 - `VectorMath.ps1` C# accelerator — correct and performant, not part of the hot path
 - `SourceManifest.ps1` change detection and orphan cleanup logic
 - `IngestionQueue.js` FIFO persistence and interrupted-job recovery

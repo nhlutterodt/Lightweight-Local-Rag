@@ -38,8 +38,8 @@
     var(--accent-primary),
     var(--accent-secondary)
   );
-  background-clip: text;
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.25rem;
 }
@@ -67,9 +67,9 @@
 .nav-item select,
 .nav-item input {
   width: 100%;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-main);
   border: 1px solid var(--glass-border);
-  color: white;
+  color: var(--text-main);
   padding: 0.75rem;
   border-radius: 8px;
   outline: none;
@@ -97,6 +97,169 @@
   align-items: center;
   gap: 8px;
   border-left: 3px solid var(--accent-primary);
+}
+
+.ingest-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ingest-path-input {
+  flex: 1;
+}
+
+.ingest-browse-button {
+  margin-top: 0;
+  padding: 0 12px;
+  width: auto;
+}
+
+.ingest-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ingest-queue-button {
+  flex: 1;
+}
+
+.ingest-clear-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+.ingest-error-message {
+  color: var(--color-error);
+  font-size: 0.8rem;
+  margin-top: 5px;
+}
+
+.folder-browser-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.folder-browser-dialog {
+  width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-panel);
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.folder-browser-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.folder-browser-title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.folder-browser-close-button {
+  padding: 4px 8px;
+}
+
+.folder-browser-path-box {
+  padding: 8px;
+  background-color: var(--bg-main);
+  border-radius: 4px;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.folder-browser-breadcrumbs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.folder-browser-crumb-button {
+  margin-top: 0;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+.folder-browser-error {
+  color: var(--color-error);
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.folder-browser-list-shell {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background-color: var(--bg-main);
+  padding: 4px;
+}
+
+.folder-browser-loading,
+.folder-browser-empty {
+  padding: 20px;
+  text-align: center;
+}
+
+.folder-browser-empty {
+  opacity: 0.5;
+}
+
+.folder-browser-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.folder-browser-list:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.folder-browser-item {
+  padding: 8px;
+  border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-browser-item.is-directory,
+.folder-browser-parent-item {
+  cursor: pointer;
+}
+
+.folder-browser-item.is-file {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.folder-browser-item.is-active {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.folder-browser-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 15px;
 }
 
 .status-indicator {
@@ -156,6 +319,80 @@
   border-radius: 3px;
   font-size: 0.7rem;
   color: #f59e0b;
+}
+
+.sidebar-clear-undo {
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sidebar-clear-undo-text {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.sidebar-clear-undo-button {
+  margin-top: 0.55rem;
+}
+
+:root[data-theme="light"] .analytics-aside {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+:root[data-theme="light"] .ingest-status-box {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme="light"] .ingest-error-message,
+:root[data-theme="light"] .folder-browser-error {
+  color: #b91c1c;
+}
+
+:root[data-theme="light"] .folder-browser-loading,
+:root[data-theme="light"] .folder-browser-empty {
+  color: #475569;
+}
+
+:root[data-theme="light"] .folder-browser-overlay {
+  background-color: rgba(15, 23, 42, 0.28);
+}
+
+:root[data-theme="light"] .folder-browser-item.is-active {
+  background-color: rgba(37, 99, 235, 0.12);
+}
+
+:root[data-theme="light"] .status-indicator {
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+:root[data-theme="light"] .status-online {
+  color: #047857;
+}
+
+:root[data-theme="light"] .status-offline {
+  color: #b91c1c;
+}
+
+:root[data-theme="light"] .status-warning {
+  color: #b45309;
+}
+
+:root[data-theme="light"] .model-warning {
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.3);
+}
+
+:root[data-theme="light"] .model-warning-text {
+  color: #78350f;
+}
+
+:root[data-theme="light"] .model-warning-text code {
+  background: rgba(15, 23, 42, 0.06);
 }
 
 @keyframes fadeIn {

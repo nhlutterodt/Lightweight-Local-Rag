@@ -102,7 +102,8 @@ describe("useRagApi queue equality guard", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.queue).toEqual(queuePayload);
+      expect(result.current.queue).toMatchObject(queuePayload);
+      expect(result.current.queue[0]?.entityId).toBe("job-1");
     });
 
     const queueRefAfterFirstMessage = result.current.queue;
@@ -207,7 +208,7 @@ describe("useRagApi queue equality guard", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.queue).toEqual(firstPayload);
+      expect(result.current.queue).toMatchObject(firstPayload);
     });
 
     const afterFirstRef = result.current.queue;
@@ -218,7 +219,7 @@ describe("useRagApi queue equality guard", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.queue).toEqual(sameSemanticsDifferentOrder);
+      expect(result.current.queue).toMatchObject(sameSemanticsDifferentOrder);
     });
 
     expect(result.current.queue).not.toBe(afterFirstRef);
