@@ -2,6 +2,46 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const DOCKER_DATA_ROOT = '/data';
+
+function formatPathLabel(pathValue) {
+  if (!pathValue) return 'Loading default...';
+
+  if (pathValue === DOCKER_DATA_ROOT) {
+    return 'Data Volume Root (/data)';
+  }
+
+  if (pathValue.startsWith(`${DOCKER_DATA_ROOT}/`)) {
+    const relativePath = pathValue.slice(DOCKER_DATA_ROOT.length);
+    return `Data Volume${relativePath} (${pathValue})`;
+  }
+
+  if (/^[a-zA-Z]:\\?$/.test(pathValue)) {
+    return `Local Disk (${pathValue.replace(/\\$/, '')})`;
+  }
+
+  return pathValue;
+}
+
+function formatBreadcrumbLabel(segment, index, segments, fullPath) {
+  if (!segment) return segment;
+
+  if (fullPath.startsWith(`${DOCKER_DATA_ROOT}/`) || fullPath === DOCKER_DATA_ROOT) {
+    if (index === 0 && segment === 'data') {
+      return 'Data Volume';
+    }
+  }
+
+  if (index === 0 && /^[a-zA-Z]:$/.test(segment)) {
+    return `Local Disk ${segment}`;
+  }
+
+  if (fullPath.startsWith('\\\\') && index === 0) {
+    return `Network ${segment}`;
+  }
+
+  return segment;
+}
 
 function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
   const [currentPath, setCurrentPath] = useState(initialPath);
@@ -185,7 +225,7 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
         </div>
 
         <div className="folder-browser-path-box">
-          <strong>Path:</strong> {currentPath || "Loading default..."}
+          <strong>Path:</strong> {formatPathLabel(currentPath)}
         </div>
 
         <div className="folder-browser-breadcrumbs">
@@ -203,7 +243,7 @@ function FolderBrowserModal({ isOpen, onClose, onSelect, initialPath = "" }) {
                 className="btn-secondary folder-browser-crumb-button"
                 onClick={() => fetchDirectory(crumbPath)}
               >
-                {segment}
+                {formatBreadcrumbLabel(segment, index, segments, currentPath)}
               </button>
             );
           })}

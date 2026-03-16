@@ -1,0 +1,35 @@
+# Publishing an App to the Google Play Store
+This guide outlines the critical steps necessary to publish a mobile application to the Google Play platform via the Play Console.
+
+## Step 1: Create a Google Play Developer Account
+Before you can publish any app to the Play Store, you must register for a Google Play Developer account. 
+- You need to pay a one-time $25 USD registration fee.
+- Complete the identity verification process and accept the Developer Distribution Agreement.
+
+## Step 2: Set up a Google payments merchant account
+If you plan to sell paid apps or offer in-app purchases, you need a Google payment profile. 
+- Link this profile directly from the Play Console to handle your financial payouts and tax documentation.
+
+## Step 3: Create your App and setup Store Listing
+Once inside the console, click on "Create App". You will need to provide:
+- App Name (Max 30 characters)
+- Short description (Max 80 characters)
+- Full description (Max 4000 characters)
+- Graphic Assets: App icon (512x512), Feature Graphic (1024x500), and Phone/Tablet screenshots.
+
+## Step 4: Complete the Content Rating Questionnaire
+Google requires all apps to be rated by the International Age Rating Coalition (IARC).
+- You must accurately answer questions about violence, swearing, and adult themes.
+- This rating ensures your app is displayed to the appropriate age groups in different global regions.
+
+## Step 5: Upload your App Bundle (AAB)
+Google Play no longer accepts generic APKs for new apps. 
+- You must build and sign a compliant Android App Bundle (.aab).
+- Navigate to the "Production" track or "Testing" tracks (Internal, Closed, Open).
+- Upload your .aab file and ensure you have configured Play App Signing.
+
+## Step 6: Review and Rollout
+After all checklist criteria have green checkmarks, you can click "Start rollout to Production".
+- Your app will enter the "In Review" status.
+- Google automates policy checks and uses human reviewers to ensure compliance.
+- Review times typically range from 24 hours to 7 days. Once approved, your app will be officially visible in the Google Play Store!
