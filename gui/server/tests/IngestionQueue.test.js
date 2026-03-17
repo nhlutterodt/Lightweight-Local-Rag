@@ -6,8 +6,12 @@ import os from "os";
 // We'll use this object to control mock behavior dynamically across modules
 const MOCK_STATE = {
   files: [],
+  // null = new file; object with SourceId/FileName/ChunkCount/FileSize = existing entry
   hashMatch: null,
-  isUnchanged: false,
+  // null = no existing entry by name; object = content-changed file with existing sourceId
+  entryByFileName: null,
+  // sourceIds returned by getOrphans (not filenames)
+  orphanSourceIds: ["src_orphan12345678"],
 };
 
 // --- Mocks ---
@@ -25,16 +29,22 @@ jest.unstable_mockModule("../lib/documentParser.js", () => {
       constructor() {}
       async load() {}
       async save() {}
-      isUnchanged() {
-        return MOCK_STATE.isUnchanged;
-      }
       findByHash() {
         return MOCK_STATE.hashMatch;
       }
+      getEntryByFileName() {
+        return MOCK_STATE.entryByFileName;
+      }
+      getEntry(sourceId) {
+        // Return the entry if its SourceId matches (used for orphan lookups)
+        if (MOCK_STATE.hashMatch?.SourceId === sourceId) return MOCK_STATE.hashMatch;
+        return null;
+      }
       addOrUpdate() {}
+      updateEntry() {}
       remove() {}
       getOrphans() {
-        return ["orphan.md"];
+        return MOCK_STATE.orphanSourceIds;
       }
       static async scanDirectory() {
         return MOCK_STATE.files;
@@ -50,7 +60,7 @@ jest.unstable_mockModule("../lib/smartChunker.js", () => {
   return {
     SmartTextChunker: class MockChunker {
       dispatchByExtension() {
-        return [{ text: "Chunk 1", headerContext: "Ctx" }];
+        return [{ text: "Chunk 1", headerContext: "Ctx", locatorType: "section" }];
       }
     },
   };
@@ -86,7 +96,8 @@ describe("IngestionQueue", () => {
 
     MOCK_STATE.files = [];
     MOCK_STATE.hashMatch = null;
-    MOCK_STATE.isUnchanged = false;
+    MOCK_STATE.entryByFileName = null;
+    MOCK_STATE.orphanSourceIds = ["src_orphan12345678"];
 
     mockTable = {
       update: jest.fn(),
@@ -439,8 +450,9 @@ describe("IngestionQueue", () => {
         "http://localhost:11434",
       );
       expect(mockDb.openTable).toHaveBeenCalledWith("my_collection");
+      // Delete must use SourceId predicate (not FileName)
       expect(mockTable.delete).toHaveBeenCalledWith(
-        expect.stringContaining("file1.md"),
+        expect.stringMatching(/^SourceId = 'src_/),
       );
       expect(mockTable.add).toHaveBeenCalled();
       expect(mockTable.add).toHaveBeenCalledWith([
@@ -448,10 +460,96 @@ describe("IngestionQueue", () => {
           FileName: "file1.md",
           FileType: "md",
           ChunkType: "content",
+          LocatorType: "section",
           StructuralPath: "Ctx",
         }),
       ]);
       expect(job.progress).toBe("Complete");
+    });
+
+    it("mints a new sourceId for a truly new source (no existing manifest entry)", async () => {
+      const testFilePath = path.join(tempDir, "brand_new.md");
+      fs.writeFileSync(testFilePath, "brand new file content");
+      MOCK_STATE.files = [testFilePath];
+      // No hash match, no entry by filename → mint new
+      MOCK_STATE.hashMatch = null;
+      MOCK_STATE.entryByFileName = null;
+
+      const { mintSourceId } = await import("../lib/sourceIdentity.js");
+      const expectedSourceId = mintSourceId("my_collection", testFilePath);
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      expect(mockTable.add).toHaveBeenCalledWith([
+        expect.objectContaining({ SourceId: expectedSourceId, LocatorType: "section" }),
+      ]);
+    });
+
+    it("preserves sourceId when file content changes (edit-in-place, lineage continuity)", async () => {
+      const testFilePath = path.join(tempDir, "edited.md");
+      fs.writeFileSync(testFilePath, "new content version");
+      MOCK_STATE.files = [testFilePath];
+      MOCK_STATE.hashMatch = null; // no hash match → content changed
+      // getEntryByFileName returns an existing entry → preserve its sourceId
+      MOCK_STATE.entryByFileName = {
+        SourceId: "src_existinglineage1",
+        FileName: "edited.md",
+        ChunkCount: 2,
+      };
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      expect(mockTable.add).toHaveBeenCalledWith([
+        expect.objectContaining({ SourceId: "src_existinglineage1", LocatorType: "section" }),
+      ]);
+    });
+
+    it("should include ChunkHash derived from (SourceId, chunkOrdinal, text) in every LanceDB record", async () => {
+      const testFilePath = path.join(tempDir, "file_chunkhash.md");
+      fs.writeFileSync(testFilePath, "chunk hash test content");
+      MOCK_STATE.files = [testFilePath];
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      const writtenRecord = mockTable.add.mock.calls[0][0][0];
+      expect(writtenRecord).toHaveProperty("ChunkHash");
+      expect(typeof writtenRecord.ChunkHash).toBe("string");
+      expect(writtenRecord.ChunkHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(writtenRecord.LocatorType).toBe("section");
+    });
+
+    it("ChunkHash is stable: same inputs yield same ChunkHash across separate ingest runs", async () => {
+      const testFilePath = path.join(tempDir, "file_chunkhash_stable.md");
+      fs.writeFileSync(testFilePath, "stable chunk content");
+      MOCK_STATE.files = [testFilePath];
+
+      const job1 = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job1);
+      const firstChunkHash = mockTable.add.mock.calls[0][0][0].ChunkHash;
+
+      mockTable.add.mockClear();
+      const job2 = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job2);
+      const secondChunkHash = mockTable.add.mock.calls[0][0][0].ChunkHash;
+
+      expect(firstChunkHash).toBe(secondChunkHash);
+    });
+
+    it("stores chunkOrdinal as an explicit sequencing field per chunk", async () => {
+      const testFilePath = path.join(tempDir, "file_ordinal.md");
+      fs.writeFileSync(testFilePath, "ordinal test content");
+      MOCK_STATE.files = [testFilePath];
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      const writtenRecord = mockTable.add.mock.calls[0][0][0];
+      expect(writtenRecord).toHaveProperty("chunkOrdinal");
+      expect(typeof writtenRecord.chunkOrdinal).toBe("number");
+      expect(writtenRecord.chunkOrdinal).toBe(0); // first (and only) chunk
     });
 
     it("should throw error if zero files are found in directory", async () => {
@@ -462,11 +560,17 @@ describe("IngestionQueue", () => {
       );
     });
 
-    it("should skip files if they are completely unchanged", async () => {
+    it("skips files that are completely unchanged (findByHash returns same FileName)", async () => {
       const testFilePath = path.join(tempDir, "file_unchanged.md");
       fs.writeFileSync(testFilePath, "dummy content");
       MOCK_STATE.files = [testFilePath];
-      MOCK_STATE.isUnchanged = true;
+      // findByHash returns a match with the same FileName → unchanged, skip
+      MOCK_STATE.hashMatch = {
+        FileName: "file_unchanged.md",
+        SourceId: "src_unchangedid1234",
+        ChunkCount: 1,
+        FileSize: 12,
+      };
 
       const job = queue.enqueue(tempDir, "col");
       await queue.executeNodeIngest(job);
@@ -474,44 +578,112 @@ describe("IngestionQueue", () => {
       expect(ollamaClient.embed).not.toHaveBeenCalled();
     });
 
-    it("should rename files in lanceDb if hash matches but filename differs", async () => {
+    it("rename detection: updates LanceDB by SourceId, calls updateEntry, skips re-embedding", async () => {
       const testFilePath = path.join(tempDir, "file_renamed.md");
       fs.writeFileSync(testFilePath, "dummy content");
       MOCK_STATE.files = [testFilePath];
       MOCK_STATE.hashMatch = {
-        FileName: "old_name.md",
+        FileName: "old_name.md", // different basename → rename detected
+        SourceId: "src_oldid123456789a",
         ChunkCount: 1,
         FileSize: 10,
+        // No SourcePath → legacy entry; rename detection still applies
       };
 
       const job = queue.enqueue(tempDir, "my_collection");
       await queue.executeNodeIngest(job);
 
-      expect(mockTable.update).toHaveBeenCalledWith({
-        where: "FileName = 'old_name.md'",
-        values: { FileName: "file_renamed.md" },
-      });
-      // It skips embedding because content is the same
+      // Must use SourceId predicate — not FileName — so identity is stable
+      expect(mockTable.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: "SourceId = 'src_oldid123456789a'",
+        }),
+      );
+      // Content unchanged — no re-embedding
       expect(ollamaClient.embed).not.toHaveBeenCalled();
     });
 
-    it("should escape single quotes in filenames to prevent LanceDB filter injection", async () => {
-      const testFilePath = path.join(tempDir, "file_renamed.md");
-      fs.writeFileSync(testFilePath, "dummy content");
+    // WS1 Acceptance Criteria #1+#2 — RAG_Source_Identity_Decision_Record.md:
+    // "Ingesting A/spec.md and B/spec.md into the same collection produces two distinct
+    //  manifest entries and two distinct row sets. Re-ingesting one source does not delete
+    //  or overwrite the other."  Option B (content-hash identity) was rejected precisely
+    // because it collapses two distinct files with identical content into one lineage.
+    it("two distinct files with identical content are each ingested as separate sources (WS1 AC#1)", async () => {
+      const fileA = path.join(tempDir, "collision_a.md");
+      const fileB = path.join(tempDir, "collision_b.md");
+      fs.writeFileSync(fileA, "identical content");
+      fs.writeFileSync(fileB, "identical content");
+      // Both files present in the active scan
+      MOCK_STATE.files = [fileA, fileB];
+      // findByHash returns fileA's entry (same hash), simulating that fileA has already
+      // been processed; fileA's SourcePath is still in the active files list.
+      MOCK_STATE.hashMatch = {
+        FileName: "collision_a.md",
+        SourcePath: fileA, // ← fileA is still on disk → must NOT be treated as rename
+        SourceId: "src_filea_collision1234",
+        ChunkCount: 1,
+        FileSize: 16,
+      };
+      MOCK_STATE.entryByFileName = null;
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      // fileB must NOT be treated as a rename of fileA:
+      //   - no table.update call targeting fileA's SourceId
+      const updateCalls = mockTable.update.mock.calls;
+      const wrongRename = updateCalls.find((c) =>
+        c[0]?.where?.includes("src_filea_collision1234"),
+      );
+      expect(wrongRename).toBeUndefined();
+
+      // fileB must be embedded and written as a new source with its own SourceId
+      expect(ollamaClient.embed).toHaveBeenCalled();
+      const addCalls = mockTable.add.mock.calls.flatMap((c) => c[0]);
+      expect(addCalls.every((r) => r.SourceId !== "src_filea_collision1234")).toBe(true);
+    });
+
+    it("rename detection still works when matched entry has no SourcePath (legacy row)", async () => {
+      // Legacy entries stored without SourcePath must still trigger rename detection
+      // — backward compat guarantee while migration completes.
+      const testFilePath = path.join(tempDir, "file_legacy_rename.md");
+      fs.writeFileSync(testFilePath, "legacy content");
       MOCK_STATE.files = [testFilePath];
       MOCK_STATE.hashMatch = {
-        FileName: "attacker's_file.md",
+        FileName: "file_old_legacy.md",
+        // SourcePath deliberately absent (legacy entry)
+        SourceId: "src_legacyid12345678",
         ChunkCount: 1,
-        FileSize: 10,
+        FileSize: 14,
       };
 
       const job = queue.enqueue(tempDir, "my_collection");
       await queue.executeNodeIngest(job);
 
-      expect(mockTable.update).toHaveBeenCalledWith({
-        where: "FileName = 'attacker''s_file.md'",
-        values: { FileName: "file_renamed.md" },
-      });
+      expect(mockTable.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: "SourceId = 'src_legacyid12345678'",
+        }),
+      );
+      expect(ollamaClient.embed).not.toHaveBeenCalled();
+    });
+
+    it("orphan cleanup deletes by SourceId predicate, not FileName", async () => {
+      const testFilePath = path.join(tempDir, "active_file.md");
+      fs.writeFileSync(testFilePath, "active content");
+      MOCK_STATE.files = [testFilePath];
+      MOCK_STATE.hashMatch = null;
+      MOCK_STATE.entryByFileName = null;
+      MOCK_STATE.orphanSourceIds = ["src_orphandeadbeef12"];
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      const deleteCalls = mockTable.delete.mock.calls.map((c) => c[0]);
+      const orphanDelete = deleteCalls.find((d) =>
+        d.includes("src_orphandeadbeef12"),
+      );
+      expect(orphanDelete).toBe("SourceId = 'src_orphandeadbeef12'");
     });
 
     it("should ignore files with empty content", async () => {

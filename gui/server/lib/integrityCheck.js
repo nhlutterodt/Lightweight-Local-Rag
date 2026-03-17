@@ -38,26 +38,27 @@ export class IntegrityCheck {
 
     const allRows = await this.store.table.query().toArray();
 
-    // Group rows by normalised FileName key
-    const vectorsByFile = new Map();
+    // Group rows by SourceId (primary identity — not FileName)
+    const vectorsBySourceId = new Map();
     for (const row of allRows) {
-      const key = (row.FileName ?? "").toLowerCase();
-      if (!vectorsByFile.has(key)) {
-        vectorsByFile.set(key, []);
+      const key = row.SourceId ?? "";
+      if (!vectorsBySourceId.has(key)) {
+        vectorsBySourceId.set(key, []);
       }
-      vectorsByFile.get(key).push(row);
+      vectorsBySourceId.get(key).push(row);
     }
 
     const issues = [];
 
     // --- Check every manifest entry against LanceDB ---
     for (const entry of this.parser.entries.values()) {
-      const key = entry.FileName.toLowerCase();
-      const rows = vectorsByFile.get(key);
+      const key = entry.SourceId;
+      const rows = vectorsBySourceId.get(key);
 
       if (!rows || rows.length === 0) {
         issues.push({
           type: "MISSING_VECTORS",
+          sourceId: entry.SourceId,
           fileName: entry.FileName,
           manifestChunkCount: entry.ChunkCount,
         });
@@ -67,6 +68,7 @@ export class IntegrityCheck {
       if (rows.length !== entry.ChunkCount) {
         issues.push({
           type: "CHUNK_COUNT_MISMATCH",
+          sourceId: entry.SourceId,
           fileName: entry.FileName,
           manifestChunkCount: entry.ChunkCount,
           actualChunkCount: rows.length,
@@ -77,6 +79,7 @@ export class IntegrityCheck {
       if (entry.EmbeddingModel && rowModel && rowModel !== entry.EmbeddingModel) {
         issues.push({
           type: "MODEL_MISMATCH",
+          sourceId: entry.SourceId,
           fileName: entry.FileName,
           manifestModel: entry.EmbeddingModel,
           rowModel,
@@ -85,10 +88,11 @@ export class IntegrityCheck {
     }
 
     // --- Check for orphaned vectors (in LanceDB but not in manifest) ---
-    for (const [key, rows] of vectorsByFile.entries()) {
+    for (const [key, rows] of vectorsBySourceId.entries()) {
       if (!this.parser.getEntry(key)) {
         issues.push({
           type: "ORPHANED_VECTORS",
+          sourceId: key,
           fileName: rows[0].FileName ?? key,
           orphanedChunkCount: rows.length,
         });
@@ -107,7 +111,7 @@ export class IntegrityCheck {
 
     const summary = {
       totalManifestEntries: this.parser.count(),
-      totalVectorFiles: vectorsByFile.size,
+      totalVectorSourceIds: vectorsBySourceId.size,
       totalVectorRows: allRows.length,
       issueCount: issues.length,
       byType,
@@ -142,10 +146,9 @@ export class IntegrityCheck {
 
     let removed = 0;
     for (const orphan of orphans) {
-      const safeFileName = orphan.fileName.replace(/'/g, "''");
-      await this.store.table.delete(`FileName = '${safeFileName}'`);
+      await this.store.table.delete(`SourceId = '${orphan.sourceId}'`);
       console.log(
-        `[IntegrityCheck] Removed ${orphan.orphanedChunkCount} orphaned chunk(s) for: ${orphan.fileName}`,
+        `[IntegrityCheck] Removed ${orphan.orphanedChunkCount} orphaned chunk(s) for: ${orphan.fileName} (${orphan.sourceId})`,
       );
       removed += orphan.orphanedChunkCount;
     }

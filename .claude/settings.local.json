@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/Users/Owner/Local-Rag-Project-v2/Local-RAG-Project-v2/gui/server/*.js)",
+      "Bash(npm test:*)",
+      "Bash(node --experimental-vm-modules node_modules/jest/bin/jest.js provenance)"
+    ]
+  }
+}

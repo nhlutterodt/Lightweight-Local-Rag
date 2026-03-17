@@ -1,13 +1,14 @@
 import fs from "fs/promises";
 import crypto from "crypto";
 import path from "path";
+import { mintSourceId } from "./sourceIdentity.js";
 
 /**
  * Ordered list of all known manifest versions, oldest first.
  * Add new versions here when the manifest schema changes.
  */
-const MANIFEST_KNOWN_VERSIONS = ["1.0"];
-const MANIFEST_VERSION = MANIFEST_KNOWN_VERSIONS.at(-1); // "1.0"
+const MANIFEST_KNOWN_VERSIONS = ["1.0", "2.0"];
+const MANIFEST_VERSION = MANIFEST_KNOWN_VERSIONS.at(-1); // "2.0"
 
 /**
  * Migration functions keyed by TARGET version string.
@@ -15,17 +16,28 @@ const MANIFEST_VERSION = MANIFEST_KNOWN_VERSIONS.at(-1); // "1.0"
  * and returns the JSON at (target version).
  */
 const MANIFEST_MIGRATIONS = {
-  // "1.0" is the baseline — no migration needed from a prior version.
-  // Future example:
-  // "1.1": (json) => ({
-  //   ...json,
-  //   Version: "1.1",
-  //   Entries: json.Entries.map((e) => ({ ...e, NewField: null })),
-  // }),
+  // v1.0 → v2.0: entries gain a SourceId field.
+  // We mint using (collection, SourcePath) as the seed, which matches the
+  // approved persisted-lineage minting rule.  Entries without a SourcePath
+  // fall back to (collection, FileName).
+  "2.0": (json) => {
+    const collection = json.Collection || "";
+    return {
+      ...json,
+      Version: "2.0",
+      Entries: json.Entries.map((e) => ({
+        ...e,
+        SourceId:
+          e.SourceId ||
+          mintSourceId(collection, e.SourcePath || e.FileName),
+      })),
+    };
+  },
 };
 
 class ManifestEntry {
   constructor(
+    sourceId,
     fileName,
     sourcePath,
     contentHash,
@@ -33,6 +45,7 @@ class ManifestEntry {
     fileSize,
     embeddingModel,
   ) {
+    this.SourceId = sourceId;
     this.FileName = fileName;
     this.SourcePath = sourcePath;
     this.ContentHash = contentHash;
@@ -47,7 +60,7 @@ class DocumentParser {
   constructor(collectionPath, collectionName) {
     this.collectionPath = collectionPath;
     this.collectionName = collectionName;
-    // Keys are lowercase filenames
+    // Keys are sourceIds (primary identity per the decision record)
     this.entries = new Map();
   }
 
@@ -66,7 +79,7 @@ class DocumentParser {
 
     const json = JSON.stringify(
       {
-        Version: "1.0",
+        Version: MANIFEST_VERSION,
         Collection: this.collectionName,
         LastUpdated: new Date().toISOString(),
         EntryCount: entryList.length,
@@ -77,7 +90,6 @@ class DocumentParser {
     );
 
     try {
-      // Ensure directory exists
       await fs.mkdir(this.collectionPath, { recursive: true });
       await fs.writeFile(manifestPath, json, "utf8");
     } catch (err) {
@@ -98,7 +110,7 @@ class DocumentParser {
       if (!MANIFEST_KNOWN_VERSIONS.includes(loadedVersion)) {
         console.warn(
           `[Manifest Warn] Unsupported manifest version "${loadedVersion}". ` +
-          `Known: [${MANIFEST_KNOWN_VERSIONS.join(", ")}]. Entries will not be loaded.`,
+            `Known: [${MANIFEST_KNOWN_VERSIONS.join(", ")}]. Entries will not be loaded.`,
         );
         return;
       }
@@ -107,6 +119,8 @@ class DocumentParser {
       const startIdx = MANIFEST_KNOWN_VERSIONS.indexOf(loadedVersion);
       const endIdx = MANIFEST_KNOWN_VERSIONS.indexOf(MANIFEST_VERSION);
       let workingJson = json;
+      // Inject collection name in case the manifest lacks it (legacy)
+      if (!workingJson.Collection) workingJson = { ...workingJson, Collection: this.collectionName };
       for (let i = startIdx + 1; i <= endIdx; i++) {
         const targetVersion = MANIFEST_KNOWN_VERSIONS[i];
         const fn = MANIFEST_MIGRATIONS[targetVersion];
@@ -122,6 +136,7 @@ class DocumentParser {
       this.entries.clear();
       for (const raw of workingJson.Entries) {
         const entry = new ManifestEntry(
+          raw.SourceId,
           raw.FileName,
           raw.SourcePath,
           raw.ContentHash,
@@ -131,8 +146,8 @@ class DocumentParser {
         );
         entry.LastIngested = raw.LastIngested;
 
-        // Use lowercase for case-insensitive lookup
-        this.entries.set(entry.FileName.toLowerCase(), entry);
+        // Key by sourceId (primary identity)
+        this.entries.set(entry.SourceId, entry);
       }
     } catch (err) {
       if (err.code !== "ENOENT") {
@@ -157,11 +172,43 @@ class DocumentParser {
 
   // --- CRUD ---
 
-  getEntry(fileName) {
-    return this.entries.get(fileName.toLowerCase()) || null;
+  /**
+   * Primary lookup by sourceId.
+   * @param {string} sourceId
+   * @returns {ManifestEntry|null}
+   */
+  getEntry(sourceId) {
+    return this.entries.get(sourceId) ?? null;
   }
 
+  /**
+   * Auxiliary lookup by FileName (case-insensitive).
+   * Not the primary key — use only when sourceId is not yet known.
+   * @param {string} fileName
+   * @returns {ManifestEntry|null}
+   */
+  getEntryByFileName(fileName) {
+    const lower = fileName.toLowerCase();
+    for (const entry of this.entries.values()) {
+      if (entry.FileName.toLowerCase() === lower) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Create or replace a manifest entry. Key is sourceId.
+   * @param {string} sourceId
+   * @param {string} fileName
+   * @param {string} sourcePath
+   * @param {string} contentHash
+   * @param {number} chunkCount
+   * @param {number} fileSize
+   * @param {string} embeddingModel
+   */
   addOrUpdate(
+    sourceId,
     fileName,
     sourcePath,
     contentHash,
@@ -170,6 +217,7 @@ class DocumentParser {
     embeddingModel,
   ) {
     const entry = new ManifestEntry(
+      sourceId,
       fileName,
       sourcePath,
       contentHash,
@@ -177,15 +225,40 @@ class DocumentParser {
       fileSize,
       embeddingModel,
     );
-    this.entries.set(fileName.toLowerCase(), entry);
+    this.entries.set(sourceId, entry);
   }
 
-  remove(fileName) {
-    this.entries.delete(fileName.toLowerCase());
+  /**
+   * Mutates an existing entry in-place (e.g. on rename).
+   * Only updates the fields supplied in `updates`; sourceId and other fields
+   * are preserved.
+   * @param {string} sourceId
+   * @param {{ FileName?: string, SourcePath?: string, ContentHash?: string, ChunkCount?: number }} updates
+   */
+  updateEntry(sourceId, updates) {
+    const entry = this.entries.get(sourceId);
+    if (!entry) return;
+    if (updates.FileName !== undefined) entry.FileName = updates.FileName;
+    if (updates.SourcePath !== undefined) entry.SourcePath = updates.SourcePath;
+    if (updates.ContentHash !== undefined) entry.ContentHash = updates.ContentHash;
+    if (updates.ChunkCount !== undefined) entry.ChunkCount = updates.ChunkCount;
+  }
+
+  /**
+   * Remove an entry by sourceId.
+   * @param {string} sourceId
+   */
+  remove(sourceId) {
+    this.entries.delete(sourceId);
   }
 
   // --- Smart Detection ---
 
+  /**
+   * Find the entry whose ContentHash matches. Used for rename detection.
+   * @param {string} contentHash
+   * @returns {ManifestEntry|null}
+   */
   findByHash(contentHash) {
     for (const entry of this.entries.values()) {
       if (entry.ContentHash === contentHash) {
@@ -195,13 +268,16 @@ class DocumentParser {
     return null;
   }
 
-  getOrphans(currentFileNames) {
-    const currentSet = new Set(currentFileNames.map((f) => f.toLowerCase()));
+  /**
+   * Returns the sourceIds of manifest entries that are not in `activeSourceIds`.
+   * @param {Set<string>} activeSourceIds - Set of sourceIds still present on disk
+   * @returns {string[]} orphan sourceIds
+   */
+  getOrphans(activeSourceIds) {
     const orphans = [];
-
-    for (const [lowerName, entry] of this.entries.entries()) {
-      if (!currentSet.has(lowerName)) {
-        orphans.push(entry.FileName);
+    for (const sourceId of this.entries.keys()) {
+      if (!activeSourceIds.has(sourceId)) {
+        orphans.push(sourceId);
       }
     }
     return orphans;
@@ -209,8 +285,15 @@ class DocumentParser {
 
   // --- Utilities ---
 
+  /**
+   * Returns true if the named file has not changed since last ingest.
+   * Uses auxiliary filename lookup — prefer findByHash for full disambiguation.
+   * @param {string} fileName
+   * @param {string} contentHash
+   * @returns {boolean}
+   */
   isUnchanged(fileName, contentHash) {
-    const entry = this.getEntry(fileName);
+    const entry = this.getEntryByFileName(fileName);
     if (!entry) return false;
     return entry.ContentHash === contentHash;
   }

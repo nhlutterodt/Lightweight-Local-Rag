@@ -17,6 +17,10 @@ function buildMockResults() {
   return [
     {
       _distance: 0.1, // LanceDB returns distance, not score directly
+      SourceId: "src_doc1id1234567890",
+      ChunkHash: "abc1234567890123",
+      chunkOrdinal: 0,
+      LocatorType: "section",
       FileName: "doc1.md",
       FileType: "markdown",
       ChunkIndex: 0,
@@ -30,6 +34,10 @@ function buildMockResults() {
     },
     {
       _distance: 0.5,
+      SourceId: "src_doc2id1234567890",
+      ChunkHash: "def1234567890123",
+      chunkOrdinal: 0,
+      LocatorType: "section",
       FileName: "doc2.md",
       FileType: "markdown",
       ChunkIndex: 0,
@@ -43,6 +51,10 @@ function buildMockResults() {
     },
     {
       _distance: 0.9,
+      SourceId: "src_ps1id12345678901",
+      ChunkHash: "ghi1234567890123",
+      chunkOrdinal: 1,
+      LocatorType: "declaration",
       FileName: "script.ps1",
       FileType: "powershell",
       ChunkIndex: 1,
@@ -149,6 +161,31 @@ describe("VectorStore (LanceDB Wrapper)", () => {
       for (const r of results) {
         expect(typeof r.ChunkIndex).toBe("number");
       }
+    });
+
+    it("results should pass through SourceId from stored row", () => {
+      expect(results[0].SourceId).toBe("src_doc1id1234567890");
+      expect(results[1].SourceId).toBe("src_doc2id1234567890");
+      expect(results[2].SourceId).toBe("src_ps1id12345678901");
+    });
+
+    it("results should pass through ChunkHash from stored row", () => {
+      expect(results[0].ChunkHash).toBe("abc1234567890123");
+      expect(results[1].ChunkHash).toBe("def1234567890123");
+      expect(results[2].ChunkHash).toBe("ghi1234567890123");
+    });
+
+    it("results should expose chunkOrdinal, preferring stored chunkOrdinal over ChunkIndex", () => {
+      for (const r of results) {
+        expect(typeof r.chunkOrdinal).toBe("number");
+      }
+      expect(results[2].chunkOrdinal).toBe(1);
+    });
+
+    it("results should pass through LocatorType from stored row", () => {
+      expect(results[0].LocatorType).toBe("section");
+      expect(results[1].LocatorType).toBe("section");
+      expect(results[2].LocatorType).toBe("declaration");
     });
 
     it("results should have HeaderContext (string)", () => {

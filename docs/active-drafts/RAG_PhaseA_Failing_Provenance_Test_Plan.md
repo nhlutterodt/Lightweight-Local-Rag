@@ -5,85 +5,111 @@ canonical_ref: docs/active-drafts/RAG_Grounding_Provenance_Hardening_Plan.md
 last_reviewed: 2026-03-16
 audience: engineering
 ---
-# Phase A Failing Provenance Test Plan
+# Phase A Provenance Test Plan — Executed and Green
 
-## Purpose
+## Status
 
-Start Phase A in test-first mode with intentionally failing provenance gates before schema or runtime implementation changes.
+Phase A baseline is **complete and green** as of 2026-03-16.
 
-This plan operationalizes the approved decisions in:
+All originally-failing provenance gates have been implemented and converted to
+passing tests.  This document now records the executed baseline, the current
+green gates, and the next regression blockers for identity migration (Slices B–D).
 
-1. docs/active-drafts/RAG_Chunk_Identity_Decision_Record.md
-2. docs/active-drafts/RAG_Grounding_Stream_Contract_Decision_Record.md
+---
 
-## Red-Baseline Status
-
-Current status is intentionally red.
+## Executed Baseline (Originally Red, Now Green)
 
 ### Server Provenance Contract Suite
 
-File:
+File: `gui/server/tests/provenance.phaseA.test.js`
 
-1. gui/server/tests/provenance.phaseA.test.js
+Run command:
 
-Command:
-
-```powershell
-Set-Location "gui/server"
-npm test -- tests/provenance.phaseA.test.js
+```sh
+cd gui/server && npm test -- tests/provenance.phaseA.test.js
 ```
 
-Expected red assertions (current runtime):
+Originally-red assertions now green:
 
-1. `metadata.citations[*].chunkId` missing
-2. `metadata.citations[*].sourceId` missing
-3. final `answer_references` event not emitted
-4. subset rule cannot be validated because `answer_references` is absent
+1. `metadata.citations[*].chunkId` — present, non-empty string ✓
+2. `metadata.citations[*].sourceId` — present, non-empty string ✓
+3. final `answer_references` event emitted after all token events ✓
+4. `answer_references.references[*].chunkId` all contained in citation set ✓
+5. stored `SourceId` field used as-is (not re-derived from FileName) ✓
+6. stored `ChunkHash` field used as chunkId token (not re-minted at chat time) ✓
+7. no-evidence path emits empty `answer_references` **and** deterministic
+   `grounding_warning` with `code` and `message` ✓
 
 ### Client Provenance Contract Suites
 
 Files:
 
-1. gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx
-2. gui/client/react-client/src/state/__tests__/chatStateMachine.test.js
+- `gui/client/react-client/src/hooks/__tests__/useRagApi.test.jsx`
+- `gui/client/react-client/src/state/__tests__/chatStateMachine.test.js`
 
-Command:
+Originally-red assertions now green:
 
-```powershell
-Set-Location "gui/client/react-client"
-npm test -- src/hooks/__tests__/useRagApi.test.jsx src/state/__tests__/chatStateMachine.test.js
-```
+1. stream parser emits `answer_references` event ✓
+2. stream parser emits `grounding_warning` event ✓
+3. `CHAT_ACTIONS` defines explicit grounding action constants ✓
+4. reducer persists answer references separately from citations ✓
+5. reducer persists grounding warning payload separately from transport errors ✓
 
-Expected red assertions (current client):
+---
 
-1. stream parser does not emit `answer_references`
-2. stream parser does not emit `grounding_warning`
-3. `CHAT_ACTIONS` lacks explicit grounding action constants
-4. reducer does not persist answer references or grounding warning state
+## Current Green Gates (Regression Blockers)
 
-## Gate Definition
+These must stay green on every PR.  Any failure is a release blocker.
 
-Phase A may proceed only through implementation slices that convert these red assertions to green without violating additive stream compatibility.
+### Identity contract gates
 
-Required gate outcomes:
+| Gate                                                | File                        | What it locks                        |
+| --------------------------------------------------- | --------------------------- | ------------------------------------ |
+| `SourceId` stored at ingest, read at chat           | `IngestionQueue.test.js`    | Rename-stable source identity        |
+| `ChunkHash` stored at ingest, read as `chunkId`     | `IngestionQueue.test.js`    | Ingest-time canonical chunk identity |
+| Stored `SourceId` used verbatim, not re-derived     | `provenance.phaseA.test.js` | No FileName-collision regression     |
+| Stored `ChunkHash` used verbatim as `chunkId` token | `provenance.phaseA.test.js` | No chat-time drift                   |
 
-1. `chunkId` and `sourceId` appear in metadata citations
-2. final `answer_references` SSE event exists and references approved chunks only
-3. client stream hook emits `answer_references` and `grounding_warning`
-4. reducer stores answer references separately from citations
-5. reducer stores grounding warning payload separately from transport errors
+### Stream contract gates
 
-## Execution Order
+| Gate                                                    | File                                                      | What it locks                    |
+| ------------------------------------------------------- | --------------------------------------------------------- | -------------------------------- |
+| `answer_references` emitted after last token            | `sse.contract.test.js`                                    | SSE ordering                     |
+| `answer_references` ids subset of citation ids          | `provenance.phaseA.test.js`                               | No phantom references            |
+| No-evidence path emits `grounding_warning`              | `sse.contract.test.js`, `provenance.phaseA.test.js`       | Deterministic warning signal     |
+| `grounding_warning` has non-empty `code` and `message`  | both above                                                | Client-parseable warning shape   |
 
-1. Maintain current red baseline tests unchanged.
-2. Implement smallest backend slice to satisfy server provenance tests.
-3. Implement smallest client parsing and state slice to satisfy client provenance tests.
-4. Re-run both targeted suites.
-5. Only then extend broader suites (`sse.contract`, `api.e2e`) for compatibility and regression coverage.
+### Telemetry gate
 
-## Non-Negotiables
+| Gate                                                  | File                      | What it locks          |
+| ----------------------------------------------------- | ------------------------- | ---------------------- |
+| Query log includes `chunkId` and `sourceId` per result | `queryLogger.test.js` (add) | Post-hoc traceability |
+
+---
+
+## Next Regression Blockers to Add (Slices C–D)
+
+The following tests should be added before the next identity migration ships:
+
+1. **Slice C — grounding_warning determinism end-to-end**: `api.e2e.test.js`
+   test that a live no-evidence request always produces a `grounding_warning`
+   event (not just the unit-level mock test).
+
+2. **Slice D — telemetry hardening**: Add a `queryLogger` integration test that
+   verifies a logged entry for an approved-context query includes both `chunkId`
+   and `sourceId` per result, and that an emitted `answer_references` set is
+   recorded alongside the retrieved candidates.
+
+3. **FileName-fallback audit test**: Once all rows in the corpus have been
+   re-ingested with `SourceId`, add a contract test asserting that
+   `deriveSourceId` never emits the `[Provenance] SourceId absent` warning
+   during normal operation (i.e., zero legacy rows remain).
+
+---
+
+## Non-Negotiables (Preserved from Original Plan)
 
 1. No schema-first changes without preserving failing-test evidence.
-2. No replacement of existing SSE events in first rollout.
+2. No replacement of existing SSE events.
 3. No answer references to chunks outside approved context.
 4. No promotion of prompt-only inline tags as authoritative grounding evidence.

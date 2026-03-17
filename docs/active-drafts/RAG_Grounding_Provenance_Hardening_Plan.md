@@ -111,9 +111,11 @@ Why this is not yet safe enough:
 Required analysis:
 
 1. Compare three candidate identity models:
+
   - path-derived identity
   - content-derived identity
   - composite identity with persistent source lineage and current path
+
 2. Evaluate each model against rename detection, orphan cleanup, duplicate basenames, root relocation, and integrity scanning.
 3. Document the chosen source-identity contract and the rejected alternatives.
 
@@ -385,6 +387,11 @@ At completion, the runtime should work as follows:
 
 ## WS1: Stable Source Identity
 
+> **Note:** The `sourceId` derivation rule in this workstream has been superseded by
+> `RAG_Source_Identity_Decision_Record.md` (Option C — Persistent Lineage, approved 2026-03-16).
+> The identity semantics below reflect that decision. The remaining WS1 items (persistence,
+> LanceDB key usage, orphan cleanup) are unchanged.
+
 ### Problem
 
 The current system treats `FileName` as the effective identity key in the manifest and in LanceDB row mutation paths. That is unsafe for any corpus containing duplicate basenames.
@@ -392,11 +399,14 @@ The current system treats `FileName` as the effective identity key in the manife
 ### Required Changes
 
 1. Introduce `sourceId` as the primary source identity.
-2. Define `sourceId` deterministically as a normalized absolute path hash, for example `sha256(normalizedCanonicalSourcePath)`.
+2. Mint `sourceId` **once at first-ingest time** via `mintSourceId(collection, canonicalPath)`
+   (see `gui/server/lib/sourceIdentity.js`). Persist it in the manifest and in every LanceDB
+   row. Never recompute it from the current path, filename, or file content after minting.
 3. Persist both `sourceId` and `sourcePath` in the manifest.
 4. Persist `sourceId` and `sourcePath` in every LanceDB row.
 5. Use `sourceId` for deletes, updates, rename handling, and orphan cleanup.
-6. Preserve `FileName` as display metadata only.
+6. Preserve `FileName` as display metadata only; `sourcePath` holds the current canonical
+   location (mutable on rename); `contentHash` tracks the current revision.
 7. Add optional `sourceRelativePath` when the ingestion root is known and stable.
 
 ### Primary Files
@@ -404,24 +414,29 @@ The current system treats `FileName` as the effective identity key in the manife
 1. `gui/server/lib/documentParser.js`
 2. `gui/server/IngestionQueue.js`
 3. `gui/server/lib/integrityCheck.js`
-4. `gui/server/scripts/check-integrity.js`
+4. `gui/server/lib/sourceIdentity.js`
+5. `gui/server/scripts/check-integrity.js`
 
 ### Data Model Additions
 
 ```json
 {
-  "sourceId": "sha256:c14d...",
+  "sourceId": "src_c14d9f2a8b3e1d07",
   "sourcePath": "C:/Users/Owner/RAG_Documents/docs/guide.md",
   "sourceRelativePath": "docs/guide.md",
   "fileName": "guide.md"
 }
 ```
 
+`sourceId` is an opaque `src_<16-hex>` token minted at first ingest. It does not encode the
+path or content hash and does not change when the file is renamed or edited.
+
 ### Acceptance Criteria
 
 1. Ingesting `A/spec.md` and `B/spec.md` into the same collection produces two distinct manifest entries and two distinct row sets.
 2. Re-ingesting one source does not delete or overwrite the other.
-3. Rename detection updates only the matching `sourceId` lineage.
+3. Rename detection updates `sourcePath` only; `sourceId` is unchanged.
+4. `integrityCheck.js` groups, scans, and deletes exclusively by `sourceId` — never by `FileName`.
 
 ## WS2: Stable Chunk Identity and Locator Schema
 

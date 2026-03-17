@@ -8,6 +8,7 @@ class SmartChunk {
     chunkType = "content",
     fileType = "unknown",
     structuralPath = null,
+    locatorType = "none",
   ) {
     this.text = text;
     this.headerContext = headerContext;
@@ -15,6 +16,7 @@ class SmartChunk {
     this.chunkType = chunkType;
     this.fileType = fileType;
     this.structuralPath = structuralPath || headerContext;
+    this.locatorType = locatorType || "none";
   }
 }
 
@@ -123,6 +125,7 @@ class SmartTextChunker {
           fileType: "javascript",
           chunkType: "javascript-preamble",
           structuralPath: `${fileName} > Preamble`,
+          locatorType: "declaration",
         });
       }
     }
@@ -145,6 +148,7 @@ class SmartTextChunker {
         fileType: "javascript",
         chunkType: "javascript-block",
         structuralPath: context,
+        locatorType: "declaration",
       });
     }
 
@@ -192,6 +196,7 @@ class SmartTextChunker {
           fileType: "powershell",
           chunkType: "powershell-preamble",
           structuralPath: `${fileName} > Preamble`,
+          locatorType: "declaration",
         });
       }
     }
@@ -222,6 +227,7 @@ class SmartTextChunker {
             ? "powershell-param-block"
             : `powershell-${item.kind}`,
         structuralPath: context,
+        locatorType: "declaration",
       });
     }
 
@@ -251,6 +257,7 @@ class SmartTextChunker {
           fileType: "xml",
           chunkType: "xml-logentry",
           structuralPath: "PowerShellLog > LogEntry",
+          locatorType: "xml-element",
         });
         index += 1;
       }
@@ -288,6 +295,7 @@ class SmartTextChunker {
           fileType: "xml",
           chunkType: "xml-element",
           structuralPath: `<${m.tag}>`,
+          locatorType: "xml-element",
         });
       }
       lastEnd = elementEnd;
@@ -301,6 +309,7 @@ class SmartTextChunker {
           fileType: "xml",
           chunkType: "xml-trailing",
           structuralPath: `${fileName} > Trailing`,
+          locatorType: "none",
         });
       }
     }
@@ -319,6 +328,7 @@ class SmartTextChunker {
       fileType,
       chunkType: "text-block",
       structuralPath: fileName,
+      locatorType: "none",
     });
     return chunks;
   }
@@ -344,6 +354,7 @@ class SmartTextChunker {
           fileType: "markdown",
           chunkType: "markdown-preamble",
           structuralPath: "Introduction",
+          locatorType: "section",
         });
       }
     }
@@ -395,6 +406,7 @@ class SmartTextChunker {
         fileType: "markdown",
         chunkType: "markdown-section",
         structuralPath: pathStr,
+        locatorType: "section",
       });
     }
 
@@ -404,6 +416,7 @@ class SmartTextChunker {
         fileType: "markdown",
         chunkType: "markdown-section",
         structuralPath: "Markdown Document",
+        locatorType: "section",
       });
     }
 
@@ -451,6 +464,7 @@ class SmartTextChunker {
     const fileType = metadata.fileType || "unknown";
     const chunkType = metadata.chunkType || "content";
     const structuralPath = metadata.structuralPath || context;
+    const locatorType = metadata.locatorType || "none";
 
     // Fits in one chunk — emit directly
     if (text.length <= this.maxChunkSize) {
@@ -462,6 +476,7 @@ class SmartTextChunker {
           chunkType,
           fileType,
           structuralPath,
+          locatorType,
         ),
       );
       return;
@@ -486,6 +501,7 @@ class SmartTextChunker {
               chunkType,
               fileType,
               structuralPath,
+              locatorType,
             ),
           );
 
@@ -526,6 +542,7 @@ class SmartTextChunker {
                 chunkType,
                 fileType,
                 structuralPath,
+                locatorType,
               ),
             );
 
@@ -549,6 +566,7 @@ class SmartTextChunker {
           chunkType,
           fileType,
           structuralPath,
+          locatorType,
         ),
       );
     }

@@ -9,6 +9,7 @@ audience: contributors
 
 ## Canonical
 - docs/Architecture_Design.md
+- docs/Domain_Boundary_Assessment.md
 - docs/Technical_Component_Design.md
 - docs/DEVELOPER_ONBOARDING.md
 - docs/Observability_Analysis.md
@@ -30,6 +31,7 @@ audience: contributors
 - docs/Forced_Colors_Validation_Checklist.md
 
 ## Active Drafts (Authoritative Locations)
+## Active Drafts (Authoritative Locations)
 - docs/active-drafts/Phase8_RAG_Design.md
 - docs/active-drafts/Phase9_Chat_Design.md
 - docs/active-drafts/Phase10_WebUI_Design.md
@@ -37,6 +39,7 @@ audience: contributors
 - docs/active-drafts/RAG_Grounding_Stream_Contract_Decision_Record.md
 - docs/active-drafts/RAG_Pipeline_Backend_Assessment.md
 - docs/active-drafts/RAG_PhaseA_Failing_Provenance_Test_Plan.md
+- docs/active-drafts/RAG_PhaseB_Plan.md
 - docs/active-drafts/RAG_Grounding_Provenance_Hardening_Plan.md
 - docs/active-drafts/RAG_Locator_Support_Analysis.md
 - docs/active-drafts/RAG_Retrieval_Redesign_Execution_Plan.md

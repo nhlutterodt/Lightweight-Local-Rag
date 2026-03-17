@@ -4,7 +4,6 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { createHash } from "crypto";
 import { fileURLToPath } from "url";
 import axios from "axios";
 import { loadConfig } from "./lib/configLoader.js";
@@ -22,6 +21,10 @@ import { bridgeLogger } from "./lib/xmlLogger.js";
 import * as lancedb from "@lancedb/lancedb";
 import { DocumentParser } from "./lib/documentParser.js";
 import { triggerModelMigration } from "./lib/modelMigration.js";
+import {
+  stableIdentityHash,
+  computeChunkHash,
+} from "./lib/sourceIdentity.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,19 +53,27 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
 const ingestQueue = new IngestionQueue();
 if (config) ingestQueue.setConfig(config);
 
-function stableIdentityHash(parts) {
-  const raw = parts
-    .map((part) => (part === undefined || part === null ? "" : String(part)))
-    .join("||");
-  return createHash("sha256").update(raw).digest("hex").slice(0, 16);
-}
-
 function deriveSourceId(result) {
+  // Prefer ingest-time canonical identity (rename-stable, content-anchored).
+  if (result?.SourceId && typeof result.SourceId === "string") {
+    return result.SourceId;
+  }
+  // Legacy fallback for records ingested before the v2 identity migration.
+  // Logs an auditable warning; re-ingesting the collection will eliminate these.
+  // Once all collections are on v2 manifests this branch can be removed.
   const fileName = result?.FileName || "unknown";
+  console.warn(
+    `[Provenance] SourceId absent for "${fileName}" — falling back to FileName hash. Re-ingest collection to migrate to canonical sourceId.`,
+  );
   return `src_${stableIdentityHash([fileName])}`;
 }
 
 function deriveChunkId(result, sourceId) {
+  // Prefer ingest-time canonical chunk hash stored in the record.
+  if (result?.ChunkHash && typeof result.ChunkHash === "string") {
+    return `chk_${result.ChunkHash}`;
+  }
+  // Legacy fallback for records written before ChunkHash was stored.
   return `chk_${stableIdentityHash([
     sourceId,
     result?.ChunkIndex,
@@ -790,14 +801,6 @@ app.post("/api/chat", async (req, res) => {
             .join("\n\n")
         : "No relevant local documents found.";
 
-    const logResults = approvedResults.map((r) => ({
-      score: r.score,
-      fileName: r.FileName,
-      chunkIndex: r.ChunkIndex,
-      headerContext: r.HeaderContext,
-      preview: r.TextPreview,
-    }));
-
     const citations = approvedResults.map((r) => {
       const sourceId = deriveSourceId(r);
       const chunkId = deriveChunkId(r, sourceId);
@@ -806,10 +809,20 @@ app.post("/api/chat", async (req, res) => {
         sourceId,
         fileName: r.FileName,
         headerContext: r.HeaderContext,
+        locatorType: r.LocatorType || "none",
         score: r.score,
         preview: r.TextPreview,
       };
     });
+
+    const logResults = citations.map((c) => ({
+      score: c.score,
+      chunkId: c.chunkId,
+      sourceId: c.sourceId,
+      fileName: c.fileName,
+      headerContext: c.headerContext,
+      preview: c.preview,
+    }));
 
     // 3. Compute Logging Data
     const topScore = approvedResults.length > 0 ? approvedResults[0].score : 0;
@@ -832,8 +845,6 @@ app.post("/api/chat", async (req, res) => {
       results: logResults,
       lowConfidence: lowConfidence,
     };
-
-    logger.log(logEntry).catch((err) => console.error("[QueryLogger]", err));
 
     // 4. Output Headers, Server-Timing, & System Prompt
     const embedMs = Number(tEmbedEnd - tEmbedStart) / 1e6;
@@ -882,9 +893,22 @@ app.post("/api/chat", async (req, res) => {
       sourceId: citation.sourceId,
       fileName: citation.fileName,
     }));
+    logEntry.answerReferences = answerReferences;
+    logger.log(logEntry).catch((err) => console.error("[QueryLogger]", err));
     res.write(
       `data: ${JSON.stringify({ type: "answer_references", references: answerReferences })}\n\n`,
     );
+
+    if (approvedResults.length === 0) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "grounding_warning",
+          code: "NO_APPROVED_CONTEXT",
+          message:
+            "No approved context was available. The answer is not grounded in retrieved documents.",
+        })}\n\n`,
+      );
+    }
 
     res.end();
   } catch (err) {

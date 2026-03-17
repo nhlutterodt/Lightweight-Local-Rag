@@ -3,6 +3,10 @@ import { jest } from "@jest/globals";
 const mockResults = [
   {
     _distance: 0.1,
+    SourceId: "src_doc1id1234567890",
+    ChunkHash: "abc1234567890123",
+    chunkOrdinal: 0,
+    LocatorType: "section",
     FileName: "doc1.md",
     FileType: "markdown",
     ChunkIndex: 0,
@@ -16,6 +20,10 @@ const mockResults = [
   },
   {
     _distance: 0.5,
+    SourceId: "src_doc2id1234567890",
+    ChunkHash: "def1234567890123",
+    chunkOrdinal: 0,
+    LocatorType: "section",
     FileName: "doc2.md",
     FileType: "markdown",
     ChunkIndex: 0,
@@ -29,6 +37,10 @@ const mockResults = [
   },
   {
     _distance: 0.9,
+    SourceId: "src_ps1id12345678901",
+    ChunkHash: "ghi1234567890123",
+    chunkOrdinal: 1,
+    LocatorType: "declaration",
     FileName: "script.ps1",
     FileType: "powershell",
     ChunkIndex: 1,

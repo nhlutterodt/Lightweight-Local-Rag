@@ -10,7 +10,10 @@ const findNearestMock = jest.fn(async () => [
     ChunkText: "Evidence chunk alpha.",
     TextPreview: "Evidence chunk alpha.",
     FileName: "alpha.md",
+    SourceId: "src_alphaid1234567890",
+    ChunkHash: "alphachunkhash12345",
     ChunkIndex: 0,
+    LocatorType: "section",
     HeaderContext: "Alpha > Section",
   },
   {
@@ -18,7 +21,10 @@ const findNearestMock = jest.fn(async () => [
     ChunkText: "Evidence chunk beta.",
     TextPreview: "Evidence chunk beta.",
     FileName: "beta.md",
+    SourceId: "src_betaid12345678901",
+    ChunkHash: "betachunkhash123456",
     ChunkIndex: 1,
+    LocatorType: "section",
     HeaderContext: "Beta > Section",
   },
 ]);
@@ -100,6 +106,9 @@ describe("Phase A provenance contract (test-first)", () => {
       expect(citation).toHaveProperty("sourceId");
       expect(typeof citation.sourceId).toBe("string");
       expect(citation.sourceId.length).toBeGreaterThan(0);
+      expect(citation).toHaveProperty("locatorType");
+      expect(typeof citation.locatorType).toBe("string");
+      expect(citation.locatorType.length).toBeGreaterThan(0);
     }
   });
 
@@ -157,6 +166,69 @@ describe("Phase A provenance contract (test-first)", () => {
     }
   });
 
+  it("uses stored ChunkHash from retrieval result as chunkId (ingest-time canonical chunk identity)", async () => {
+    findNearestMock.mockResolvedValueOnce([
+      {
+        score: 0.91,
+        ChunkText: "Evidence with stored chunk hash.",
+        TextPreview: "Evidence with stored chunk hash.",
+        FileName: "doc.md",
+        SourceId: "src_aabbccdd11223344",
+        ChunkHash: "deadbeef12345678",
+        ChunkIndex: 0,
+        HeaderContext: "Header",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/chat")
+      .send({
+        messages: [{ role: "user", content: "Use stored chunk hash" }],
+        collection: "TestIngest",
+      });
+
+    expect(response.status).toBe(200);
+
+    const events = parseSSEEvents(response.text);
+    const metadataEvent = events.find((e) => e.type === "metadata");
+
+    expect(metadataEvent).toBeDefined();
+    expect(metadataEvent.citations).toHaveLength(1);
+    // chunkId must be built from the stored ChunkHash, not re-derived at chat time
+    expect(metadataEvent.citations[0].chunkId).toBe("chk_deadbeef12345678");
+  });
+
+  it("uses stored SourceId from retrieval result directly (rename-stable pass-through)", async () => {
+    findNearestMock.mockResolvedValueOnce([
+      {
+        score: 0.92,
+        ChunkText: "Evidence with stored identity.",
+        TextPreview: "Evidence with stored identity.",
+        FileName: "renamed-to-something-else.md",
+        SourceId: "src_storedid12345678",
+        ChunkIndex: 0,
+        HeaderContext: "Header > Section",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/chat")
+      .send({
+        messages: [{ role: "user", content: "Use stored identity" }],
+        collection: "TestIngest",
+      });
+
+    expect(response.status).toBe(200);
+
+    const events = parseSSEEvents(response.text);
+    const metadataEvent = events.find((e) => e.type === "metadata");
+
+    expect(metadataEvent).toBeDefined();
+    expect(metadataEvent.citations).toHaveLength(1);
+    // Must use the stored SourceId, not re-derive from FileName
+    expect(metadataEvent.citations[0].sourceId).toBe("src_storedid12345678");
+  });
+
   it("emits empty answer_references for no-approved-context and allows optional grounding_warning", async () => {
     findNearestMock.mockResolvedValueOnce([]);
 
@@ -186,11 +258,10 @@ describe("Phase A provenance contract (test-first)", () => {
     expect(Array.isArray(answerReferences.references)).toBe(true);
     expect(answerReferences.references).toHaveLength(0);
 
-    if (groundingWarning) {
-      expect(typeof groundingWarning.code).toBe("string");
-      expect(groundingWarning.code.length).toBeGreaterThan(0);
-      expect(typeof groundingWarning.message).toBe("string");
-      expect(groundingWarning.message.length).toBeGreaterThan(0);
-    }
+    expect(groundingWarning).toBeDefined();
+    expect(typeof groundingWarning.code).toBe("string");
+    expect(groundingWarning.code.length).toBeGreaterThan(0);
+    expect(typeof groundingWarning.message).toBe("string");
+    expect(groundingWarning.message.length).toBeGreaterThan(0);
   });
 });

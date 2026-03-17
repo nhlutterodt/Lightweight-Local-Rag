@@ -22,6 +22,19 @@ jest.unstable_mockModule("../lib/ollamaClient.js", () => ({
 const appModule = await import("../server.js");
 const app = appModule.default;
 
+function parseSSEEvents(rawText) {
+  return rawText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)));
+}
+
+async function runChatStream(body) {
+  const response = await request(app).post("/api/chat").send(body);
+  return parseSSEEvents(response.text);
+}
+
 describe("Backend API Integration Flow (No Browser)", () => {
   const collectionName = "e2e_test_" + Date.now();
 
@@ -94,64 +107,76 @@ describe("Backend API Integration Flow (No Browser)", () => {
   });
 
   it("Step D: Should fetch citations and a streamed answer via SSE chat", async () => {
-    return new Promise((resolve, reject) => {
-      // Because this is an SSE endpoint, we consume it differently than normal JSON
-      const req = request(app)
-        .post("/api/chat")
-        .send({
-          messages: [
-            {
-              role: "user",
-              content: "What does the dummy document say about X?",
-            },
-          ],
-          collection: collectionName,
-        })
-        .buffer(false) // Handle stream
-        .parse((res, cb) => {
-          let data = "";
-          res.on("data", (chunk) => {
-            const lines = chunk.toString().split("\n\n");
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const jsonStr = line.substring(6);
-                if (!jsonStr) continue;
-
-                try {
-                  const payload = JSON.parse(jsonStr);
-
-                  // 1. Assert Metadata/Citations match our dummy file
-                  if (payload.type === "metadata") {
-                    expect(payload.citations).toBeDefined();
-                    expect(payload.citations.length).toBeGreaterThan(0);
-                    expect(payload.citations[0].fileName).toBe("dummy.txt");
-                  }
-
-                  // 2. Assert Message content gets streamed correctly
-                  if (payload.message && payload.message.content) {
-                    expect(payload.message.content).toContain("dummy document");
-                    resolve(); // Complete the test once we get the message chunk
-                  }
-                } catch (e) {
-                  // Ignore parse errors on incomplete chunks if any
-                }
-              }
-            }
-          });
-
-          res.on("end", () => {
-            cb(null, data);
-          });
-
-          res.on("error", (err) => {
-            reject(err);
-          });
-        });
-
-      // Trigger the request
-      req.end((err) => {
-        if (err) reject(err);
-      });
+    const events = await runChatStream({
+      messages: [
+        {
+          role: "user",
+          content: "What does the dummy document say about X?",
+        },
+      ],
+      collection: collectionName,
     });
+
+    const metadataIndex = events.findIndex((event) => event.type === "metadata");
+    const answerReferencesIndex = events.findIndex(
+      (event) => event.type === "answer_references",
+    );
+    const lastTokenIndex = events.reduce(
+      (lastIndex, event, index) =>
+        event.message?.content ? index : lastIndex,
+      -1,
+    );
+    const metadataEvent = events[metadataIndex];
+    const answerReferencesEvent = events[answerReferencesIndex];
+
+    expect(metadataEvent).toBeDefined();
+    expect(metadataEvent.citations).toBeDefined();
+    expect(metadataEvent.citations.length).toBeGreaterThan(0);
+    expect(metadataEvent.citations.every((citation) => typeof citation.fileName === "string")).toBe(true);
+    expect(metadataEvent.citations.every((citation) => citation.fileName.length > 0)).toBe(true);
+    expect(metadataEvent.citations.every((citation) => citation.chunkId)).toBe(true);
+    expect(metadataEvent.citations.every((citation) => citation.sourceId)).toBe(true);
+
+    const tokenEvents = events.filter((event) => event.message?.content);
+    expect(tokenEvents.length).toBeGreaterThan(0);
+    expect(tokenEvents[0].message.content).toContain("dummy document");
+
+    expect(answerReferencesEvent).toBeDefined();
+    expect(Array.isArray(answerReferencesEvent.references)).toBe(true);
+    expect(answerReferencesEvent.references.length).toBeGreaterThan(0);
+    expect(answerReferencesIndex).toBeGreaterThan(lastTokenIndex);
+
+    const citationChunkIds = new Set(
+      metadataEvent.citations.map((citation) => citation.chunkId),
+    );
+    for (const reference of answerReferencesEvent.references) {
+      expect(citationChunkIds.has(reference.chunkId)).toBe(true);
+    }
+  });
+
+  it("Step E: Should emit grounding_warning when no approved evidence exists", async () => {
+    const events = await runChatStream({
+      messages: [
+        {
+          role: "user",
+          content: "What does the missing collection say?",
+        },
+      ],
+      collection: "collection_that_does_not_exist",
+    });
+
+    const answerReferencesEvent = events.find(
+      (event) => event.type === "answer_references",
+    );
+    const groundingWarningEvent = events.find(
+      (event) => event.type === "grounding_warning",
+    );
+
+    expect(answerReferencesEvent).toBeDefined();
+    expect(Array.isArray(answerReferencesEvent.references)).toBe(true);
+    expect(groundingWarningEvent).toBeDefined();
+    expect(groundingWarningEvent.code).toBe("NO_APPROVED_CONTEXT");
+    expect(typeof groundingWarningEvent.message).toBe("string");
+    expect(groundingWarningEvent.message.length).toBeGreaterThan(0);
   });
 });

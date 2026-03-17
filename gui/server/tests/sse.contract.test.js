@@ -274,10 +274,11 @@ describe("SSE Contract — /api/chat", () => {
     expect(Array.isArray(answerReferencesEvent.references)).toBe(true);
     expect(answerReferencesEvent.references).toEqual([]);
 
-    if (groundingWarningEvent) {
-      expect(typeof groundingWarningEvent.code).toBe("string");
-      expect(typeof groundingWarningEvent.message).toBe("string");
-    }
+    expect(groundingWarningEvent).toBeDefined();
+    expect(typeof groundingWarningEvent.code).toBe("string");
+    expect(groundingWarningEvent.code.length).toBeGreaterThan(0);
+    expect(typeof groundingWarningEvent.message).toBe("string");
+    expect(groundingWarningEvent.message.length).toBeGreaterThan(0);
   });
 
   // ── Server-Timing Header ──

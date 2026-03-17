@@ -292,6 +292,9 @@ export class VectorStore {
         const mappedResult = {
           score,
           rankingScore,
+          SourceId: r.SourceId,
+          ChunkHash: r.ChunkHash,
+          chunkOrdinal: r.chunkOrdinal ?? r.ChunkIndex,
           ChunkText: r.Text || r.ChunkText,
           TextPreview:
             r.TextPreview || (r.Text ? r.Text.substring(0, 150) + "..." : ""),
@@ -300,6 +303,7 @@ export class VectorStore {
           HeaderContext: r.HeaderContext,
           FileType: r.FileType,
           ChunkType: r.ChunkType,
+          LocatorType: r.LocatorType,
           StructuralPath: r.StructuralPath,
         };
 

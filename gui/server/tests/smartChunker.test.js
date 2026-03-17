@@ -99,6 +99,7 @@ class World {
       expect(chunks[3].headerContext).toBe("test.js > World");
       expect(chunks[1].chunkType).toBe("javascript-block");
       expect(chunks[1].fileType).toBe("javascript");
+      expect(chunks.every((chunk) => chunk.locatorType === "declaration")).toBe(true);
     });
 
     it("should fallback to plain text if no code boundaries exist", () => {
@@ -143,6 +144,7 @@ filter Normalize-Value {
       expect(contexts).toContain("test.ps1 > class:Worker");
       expect(contexts).toContain("test.ps1 > filter:Normalize-Value");
       expect(chunks.every((c) => c.fileType === "powershell")).toBe(true);
+      expect(chunks.every((c) => c.locatorType === "declaration")).toBe(true);
     });
 
     it("should fallback to plain text when no declaration boundaries are found", () => {
@@ -163,6 +165,7 @@ filter Normalize-Value {
       expect(chunks[0].headerContext).toBe("test.xml > LogEntry:0");
       expect(chunks[1].headerContext).toBe("test.xml > LogEntry:1");
       expect(chunks[0].chunkType).toBe("xml-logentry");
+      expect(chunks.every((chunk) => chunk.locatorType === "xml-element")).toBe(true);
     });
 
     it("should chunk remaining text as trailing context", () => {
@@ -191,6 +194,7 @@ filter Normalize-Value {
       expect(chunks[0].text).toBe("Hello world");
       expect(chunks[0].fileType).toBe("text");
       expect(chunks[0].chunkType).toBe("text-block");
+      expect(chunks[0].locatorType).toBe("none");
     });
 
     it("should handle empty text", () => {
@@ -216,6 +220,7 @@ Body 3
       expect(chunks[1].headerContext).toBe("Header 1");
       expect(chunks[2].headerContext).toBe("Header 1 > Header 2");
       expect(chunks[3].headerContext).toBe("Header 3");
+      expect(chunks.every((chunk) => chunk.locatorType === "section")).toBe(true);
     });
 
     it("should fallback to plain text if no headers found", () => {

@@ -7,6 +7,10 @@ import * as ollamaClient from "./lib/ollamaClient.js";
 
 import { SmartTextChunker } from "./lib/smartChunker.js";
 import { DocumentParser } from "./lib/documentParser.js";
+import {
+  mintSourceId,
+  computeChunkHash,
+} from "./lib/sourceIdentity.js";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 import PDFParser from "pdf2json";
@@ -166,13 +170,15 @@ class IngestionQueue extends EventEmitter {
       throw new Error(`Source path contains no eligible files: ${job.path}`);
     }
 
-    const currentFileNames = files.map((f) => path.basename(f));
-
     job.progress = `Processing 0 / ${files.length} files`;
     this._throttledSave();
 
     // 4. Processing Loop
+    // activeSourceIds accumulates every sourceId that was seen on disk this run.
+    // It is used for orphan detection at the end of the loop.
+    const activeSourceIds = new Set();
     let processedCount = 0;
+
     for (const filePath of files) {
       const fileName = path.basename(filePath);
       job.progress = `Processing ${fileName} (${processedCount + 1}/${files.length})`;
@@ -180,37 +186,57 @@ class IngestionQueue extends EventEmitter {
 
       const fileHash = await DocumentParser.getFileHash(filePath);
 
-      // Check Manifest (Skip Unchanged)
-      if (parser.isUnchanged(fileName, fileHash)) {
-        processedCount++;
-        continue;
-      }
-
-      // Check Manifest (Rename Detection)
+      // Single hash lookup handles both "unchanged" and "rename" checks.
       const hashMatch = parser.findByHash(fileHash);
-      if (hashMatch && hashMatch.FileName !== fileName) {
-        if (tables.includes(job.collection)) {
-          if (!table) table = await db.openTable(job.collection);
-          // Update metadata in LanceDB to point to the new filename
-          const safeOldFileName = hashMatch.FileName.replace(/'/g, "''");
-          await table.update({
-            where: `FileName = '${safeOldFileName}'`,
-            values: { FileName: fileName },
-          });
-        }
 
-        parser.remove(hashMatch.FileName);
-        parser.addOrUpdate(
-          fileName,
-          filePath,
-          fileHash,
-          hashMatch.ChunkCount,
-          hashMatch.FileSize,
-          model,
-        );
-        processedCount++;
-        continue;
+      if (hashMatch) {
+        // Disambiguate by source path before treating as lineage continuity.
+        // Two distinct files with identical content must not be collapsed into
+        // one sourceId — Option B was rejected for exactly this reason
+        // (see RAG_Source_Identity_Decision_Record, WS1 AC#1+#2).
+        //
+        // sameSource = the matched entry refers to the same logical source:
+        //   - exact path match                  → unchanged file at same location
+        //   - no SourcePath stored (legacy)      → preserve old rename behaviour
+        //   - matched source path absent from    → genuine rename candidate
+        //     the current active file scan
+        const originalPath = hashMatch.SourcePath;
+        const sameSource =
+          originalPath === filePath ||
+          !originalPath ||
+          !files.includes(originalPath);
+
+        if (sameSource) {
+          if (hashMatch.FileName === fileName && (!originalPath || originalPath === filePath)) {
+            // Unchanged: same path, same basename, same content — skip re-embedding.
+            activeSourceIds.add(hashMatch.SourceId);
+            processedCount++;
+            continue;
+          } else {
+            // Rename: original path is gone from the active scan; same hash at new path.
+            // Preserve the existing sourceId; only update display metadata.
+            const sourceId = hashMatch.SourceId;
+            if (tables.includes(job.collection)) {
+              if (!table) table = await db.openTable(job.collection);
+              await table.update({
+                where: `SourceId = '${sourceId}'`,
+                values: { FileName: fileName, SourcePath: filePath },
+              });
+            }
+            parser.updateEntry(sourceId, {
+              FileName: fileName,
+              SourcePath: filePath,
+            });
+            activeSourceIds.add(sourceId);
+            processedCount++;
+            continue;
+          }
+        }
+        // sameSource = false: different file with coincidentally identical content.
+        // Ignore the hash match and fall through to new-ingest path below.
       }
+
+      // New content: either a genuinely new source or an edited existing file.
 
       // Enforce file size limits to prevent Memory Exhaustion / DoS
       const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -244,7 +270,7 @@ class IngestionQueue extends EventEmitter {
             pdfParser.on("pdfParser_dataError", (errData) =>
               reject(errData.parserError),
             );
-            pdfParser.on("pdfParser_dataReady", (pdfData) => {
+            pdfParser.on("pdfParser_dataReady", () => {
               const rawText = pdfParser.getRawTextContent();
               resolve(rawText);
             });
@@ -267,11 +293,19 @@ class IngestionQueue extends EventEmitter {
         continue;
       }
 
-      // Remove existing vectors for this file before re-embedding
+      // Resolve sourceId: preserve lineage if an entry exists for this filename
+      // (content-changed edit-in-place); otherwise mint a new stable identity.
+      const existingEntry = parser.getEntryByFileName(fileName);
+      const sourceId = existingEntry
+        ? existingEntry.SourceId
+        : mintSourceId(job.collection, filePath);
+
+      activeSourceIds.add(sourceId);
+
+      // Remove existing chunks for this sourceId before re-embedding
       if (tables.includes(job.collection)) {
         if (!table) table = await db.openTable(job.collection);
-        const safeFileName = fileName.replace(/'/g, "''");
-        await table.delete(`FileName = '${safeFileName}'`);
+        await table.delete(`SourceId = '${sourceId}'`);
       }
 
       // Chunk and Embed
@@ -289,7 +323,10 @@ class IngestionQueue extends EventEmitter {
           const record = {
             vector: Array.from(vector), // Convert Float32Array to standard array for LanceDB
             FileName: fileName,
-            ChunkIndex: i,
+            SourceId: sourceId,
+            ChunkHash: computeChunkHash(sourceId, i, smartChunk.text),
+            ChunkIndex: i,    // kept for migration compatibility
+            chunkOrdinal: i,  // authoritative sequencing field (Decision Record §3)
             Text: smartChunk.text,
             HeaderContext: smartChunk.headerContext || "None",
             FileType:
@@ -297,6 +334,7 @@ class IngestionQueue extends EventEmitter {
               path.extname(fileName).replace(".", "") ||
               "text",
             ChunkType: smartChunk.chunkType || "content",
+            LocatorType: smartChunk.locatorType || "none",
             StructuralPath:
               smartChunk.structuralPath || smartChunk.headerContext || "None",
             EmbeddingModel: model,
@@ -318,9 +356,10 @@ class IngestionQueue extends EventEmitter {
         }
       }
 
-      // Update Manifest
+      // Update Manifest (keyed by sourceId)
       const stats = await fs.promises.stat(filePath);
       parser.addOrUpdate(
+        sourceId,
         fileName,
         filePath,
         fileHash,
@@ -332,18 +371,17 @@ class IngestionQueue extends EventEmitter {
       processedCount++;
     }
 
-    // 5. Orphan Cleanup
+    // 5. Orphan Cleanup — compare by sourceId, delete by sourceId
     job.progress = "Cleaning up orphans...";
     this._throttledSave();
 
-    const orphans = parser.getOrphans(currentFileNames);
-    for (const orphan of orphans) {
+    const orphanSourceIds = parser.getOrphans(activeSourceIds);
+    for (const orphanSourceId of orphanSourceIds) {
       if (tables.includes(job.collection)) {
         if (!table) table = await db.openTable(job.collection);
-        const safeOrphan = orphan.replace(/'/g, "''");
-        await table.delete(`FileName = '${safeOrphan}'`);
+        await table.delete(`SourceId = '${orphanSourceId}'`);
       }
-      parser.remove(orphan);
+      parser.remove(orphanSourceId);
     }
 
     // 6. Save State

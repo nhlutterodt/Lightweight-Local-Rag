@@ -113,4 +113,140 @@ describe("QueryLogger", () => {
     await logger.flush();
     consoleErrorSpy.mockRestore();
   });
+
+  // ── Phase A telemetry gate ────────────────────────────────────────────────
+  // RAG_PhaseA_Failing_Provenance_Test_Plan.md — Current Green Gates table:
+  // "Query log includes chunkId and sourceId per result | queryLogger.test.js (add)"
+  // Verifies that the logger preserves chunkId and sourceId provenance fields
+  // in logged result entries so post-hoc traceability is never silently dropped.
+  it("preserves chunkId and sourceId provenance fields in logged query result entries", async () => {
+    const logger = new QueryLogger(logPath);
+    await logger.initPromise;
+
+    await logger.log({
+      query: "which documents relate to topic X?",
+      results: [
+        {
+          chunkId: "chk_abc1234567890123",
+          sourceId: "src_doc1id1234567890",
+          score: 0.9,
+          fileName: "guide.md",
+          headerContext: "Introduction",
+        },
+        {
+          chunkId: "chk_def1234567890123",
+          sourceId: "src_doc2id1234567890",
+          score: 0.7,
+          fileName: "spec.md",
+          headerContext: "Overview",
+        },
+      ],
+      answerReferences: ["chk_abc1234567890123"],
+    });
+
+    await logger.flush();
+
+    const content = await fs.readFile(logPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+
+    expect(Array.isArray(parsed.results)).toBe(true);
+    expect(parsed.results).toHaveLength(2);
+
+    expect(parsed.results[0].chunkId).toBe("chk_abc1234567890123");
+    expect(parsed.results[0].sourceId).toBe("src_doc1id1234567890");
+
+    expect(parsed.results[1].chunkId).toBe("chk_def1234567890123");
+    expect(parsed.results[1].sourceId).toBe("src_doc2id1234567890");
+
+    expect(parsed.answerReferences).toEqual(["chk_abc1234567890123"]);
+  });
+
+  it("preserves provenance fields even when other result fields are absent", async () => {
+    const logger = new QueryLogger(logPath);
+    await logger.initPromise;
+
+    // Minimal payload — only identity fields present
+    await logger.log({
+      query: "minimal test",
+      results: [{ chunkId: "chk_min1234567890123", sourceId: "src_min1234567890" }],
+    });
+
+    await logger.flush();
+
+    const content = await fs.readFile(logPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+
+    expect(parsed.results[0].chunkId).toBe("chk_min1234567890123");
+    expect(parsed.results[0].sourceId).toBe("src_min1234567890");
+  });
+
+  it("round-trips answerReferences with chunkId and sourceId fields", async () => {
+    const logger = new QueryLogger(logPath);
+    await logger.initPromise;
+
+    await logger.log({
+      query: "ground this answer",
+      results: [
+        {
+          chunkId: "chk_abc1234567890123",
+          sourceId: "src_doc1id1234567890",
+          fileName: "guide.md",
+        },
+      ],
+      answerReferences: [
+        {
+          chunkId: "chk_abc1234567890123",
+          sourceId: "src_doc1id1234567890",
+          fileName: "guide.md",
+        },
+      ],
+    });
+
+    await logger.flush();
+
+    const content = await fs.readFile(logPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+
+    expect(parsed.results[0].chunkId).toBe("chk_abc1234567890123");
+    expect(parsed.results[0].sourceId).toBe("src_doc1id1234567890");
+    expect(Array.isArray(parsed.answerReferences)).toBe(true);
+    expect(parsed.answerReferences[0].chunkId).toBe("chk_abc1234567890123");
+    expect(parsed.answerReferences[0].sourceId).toBe("src_doc1id1234567890");
+  });
+
+  it("keeps answerReferences as a subset of logged result chunkIds when results are present", async () => {
+    const logger = new QueryLogger(logPath);
+    await logger.initPromise;
+
+    await logger.log({
+      query: "subset test",
+      results: [
+        {
+          chunkId: "chk_alpha1234567890",
+          sourceId: "src_alpha1234567890",
+        },
+        {
+          chunkId: "chk_beta12345678901",
+          sourceId: "src_beta12345678901",
+        },
+      ],
+      answerReferences: [
+        {
+          chunkId: "chk_alpha1234567890",
+          sourceId: "src_alpha1234567890",
+        },
+      ],
+    });
+
+    await logger.flush();
+
+    const content = await fs.readFile(logPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+    const resultChunkIds = new Set(parsed.results.map((result) => result.chunkId));
+
+    expect(parsed.answerReferences.length).toBeGreaterThan(0);
+    for (const reference of parsed.answerReferences) {
+      expect(resultChunkIds.has(reference.chunkId)).toBe(true);
+    }
+  });
 });
