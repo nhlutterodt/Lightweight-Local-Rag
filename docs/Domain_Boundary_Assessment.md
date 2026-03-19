@@ -199,8 +199,8 @@ Severity: high
 Evidence:
 
 - canonical architecture docs say Node owns live querying and ingestion, while PowerShell is for diagnostics (`docs/Architecture_Design.md:32-50`, `docs/DEVELOPER_ONBOARDING.md:50-60`)
-- canonical `docs/RAG_Copilot_Instructions.md` still describes a PowerShell ingestion runtime with `/api/ingest`, `PowerShellRunner.js`, `.vectors.bin`, `.metadata.json`, `Ingest-Documents.ps1`, `SourceManifest.ps1`, and `SmartTextChunker.ps1` (`docs/RAG_Copilot_Instructions.md:26-31`, `docs/RAG_Copilot_Instructions.md:52-89`)
-- the live server explicitly deprecates `/api/ingest` (`gui/server/server.js:939-942`)
+- canonical `docs/RAG_Copilot_Instructions.md` still describes a legacy PowerShell-first ingestion runtime with a deprecated ingest route, a legacy runner module, and flat-file vector artifacts (`docs/RAG_Copilot_Instructions.md:26-31`, `docs/RAG_Copilot_Instructions.md:52-89`)
+- the live server explicitly deprecates the legacy ingest route (`gui/server/server.js:939-942`)
 - `LocalRagUtils.psd1` still references `SourceManifest.ps1` and `SmartTextChunker.ps1`, but those files are not present in the workspace (`PowerShell Scripts/LocalRagUtils/LocalRagUtils.psd1:29-53`)
 
 Why this is a leak:

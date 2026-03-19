@@ -249,4 +249,135 @@ describe("QueryLogger", () => {
       expect(resultChunkIds.has(reference.chunkId)).toBe(true);
     }
   });
+
+  it("round-trips retrieval trace sets with dropped candidate reasons", async () => {
+    const logger = new QueryLogger(logPath);
+    await logger.initPromise;
+
+    await logger.log({
+      query: "trace split test",
+      retrievedCandidates: [
+        {
+          chunkId: "chk_alpha1234567890",
+          sourceId: "src_alpha1234567890",
+          fileName: "alpha.md",
+          score: 0.9,
+        },
+        {
+          chunkId: "chk_beta12345678901",
+          sourceId: "src_beta12345678901",
+          fileName: "beta.md",
+          score: 0.8,
+        },
+      ],
+      approvedContext: [
+        {
+          chunkId: "chk_alpha1234567890",
+          sourceId: "src_alpha1234567890",
+          fileName: "alpha.md",
+          score: 0.9,
+        },
+      ],
+      droppedCandidates: [
+        {
+          chunkId: "chk_beta12345678901",
+          sourceId: "src_beta12345678901",
+          fileName: "beta.md",
+          score: 0.8,
+          dropReason: "context_budget_exceeded",
+        },
+      ],
+    });
+
+    await logger.flush();
+
+    const content = await fs.readFile(logPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+
+    expect(parsed.retrievedCandidates).toHaveLength(2);
+    expect(parsed.approvedContext).toHaveLength(1);
+    expect(parsed.droppedCandidates).toHaveLength(1);
+    expect(parsed.droppedCandidates[0].dropReason).toBe(
+      "context_budget_exceeded",
+    );
+  });
+
+  it("round-trips score schema metadata fields", async () => {
+    const logger = new QueryLogger(logPath);
+    await logger.initPromise;
+
+    await logger.log({
+      query: "score schema test",
+      scoreSchemaVersion: "v1",
+      scoreType: "normalized-relevance",
+      results: [
+        {
+          chunkId: "chk_alpha1234567890",
+          sourceId: "src_alpha1234567890",
+          score: 0.91,
+        },
+      ],
+    });
+
+    await logger.flush();
+
+    const content = await fs.readFile(logPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+
+    expect(parsed.scoreSchemaVersion).toBe("v1");
+    expect(parsed.scoreType).toBe("normalized-relevance");
+  });
+
+  it("rotates legacy query_log.jsonl to archive when initializing query_log.v1.jsonl", async () => {
+    const logsDir = path.join(tempDir, `logs-${Date.now()}`);
+    const legacyPath = path.join(logsDir, "query_log.jsonl");
+    const activeV1Path = path.join(logsDir, "query_log.v1.jsonl");
+    const fixedTime = new Date("2026-03-17T12:34:56.000Z");
+
+    await fs.mkdir(logsDir, { recursive: true });
+    await fs.writeFile(legacyPath, '{"query":"legacy"}\n', "utf-8");
+
+    const logger = new QueryLogger(activeV1Path, {
+      clock: () => fixedTime,
+    });
+    await logger.initPromise;
+    await logger.flush();
+
+    await expect(fs.access(legacyPath)).rejects.toThrow();
+
+    const archivePath = path.join(
+      logsDir,
+      "archive",
+      "query_log.legacy.20260317-123456.jsonl",
+    );
+    const archivedContent = await fs.readFile(archivePath, "utf-8");
+    expect(archivedContent).toContain('"query":"legacy"');
+  });
+
+  it("writes only to query_log.v1.jsonl after legacy rotation", async () => {
+    const logsDir = path.join(tempDir, `logs-${Date.now()}`);
+    const legacyPath = path.join(logsDir, "query_log.jsonl");
+    const activeV1Path = path.join(logsDir, "query_log.v1.jsonl");
+
+    await fs.mkdir(logsDir, { recursive: true });
+    await fs.writeFile(legacyPath, '{"query":"legacy"}\n', "utf-8");
+
+    const logger = new QueryLogger(activeV1Path, {
+      clock: () => new Date("2026-03-17T12:34:56.000Z"),
+    });
+    await logger.initPromise;
+    await logger.log({ query: "new schema row", scoreSchemaVersion: "v1" });
+    await logger.flush();
+
+    const activeContent = await fs.readFile(activeV1Path, "utf-8");
+    expect(activeContent).toContain('"query":"new schema row"');
+    expect(activeContent).toContain('"scoreSchemaVersion":"v1"');
+
+    await expect(fs.access(legacyPath)).rejects.toThrow();
+    const archivedContent = await fs.readFile(
+      path.join(logsDir, "archive", "query_log.legacy.20260317-123456.jsonl"),
+      "utf-8",
+    );
+    expect(archivedContent).toContain('"query":"legacy"');
+  });
 });

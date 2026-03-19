@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: architecture
 canonical_ref: docs/Architecture_Design.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-18
 audience: engineering
 ---
 # Architecture Design
@@ -37,7 +37,7 @@ The application is strictly separated into three concerns:
   - **Hot Path Querying:** Embeds prompts, queries LanceDB, and streams LLM responses over SSE.
   - **Ingestion Orchestration:** Manages queue state, document scanning, chunking, embedding, and LanceDB writes through the native Node ingestion pipeline.
   - **Operational APIs:** Serves `/api/health`, `/api/index/metrics`, `/api/models`, `/api/queue`, and `/api/log`.
-  - **Observability:** Asynchronously writes query telemetry to `logs/query_log.jsonl`, emits `Server-Timing` headers for chat requests, and appends bridge XML logs for UI-originated events.
+  - **Observability:** Asynchronously writes query telemetry to `logs/query_log.v1.jsonl`, emits `Server-Timing` headers for chat requests, emits grounding SSE events, and appends bridge XML logs for UI-originated events.
   - **Operational CLI:** `scripts/check-integrity.js` (manifest/DB diff and repair) and `scripts/snapshot.js` (LanceDB version list/rollback/prune) run out-of-process as maintenance tools sharing the same `lib/` modules as the live server.
 
 ### Tier 3: Utility and Diagnostics Layer
@@ -53,7 +53,8 @@ The application is strictly separated into three concerns:
 
 The current runtime exposes several local observability surfaces:
 
-- `logs/query_log.jsonl` for chat-query telemetry and retrieval results.
+- `logs/query_log.v1.jsonl` for chat-query telemetry, retrieval trace sets, and answer-reference emission.
+- `logs/archive/query_log.legacy.<yyyyMMdd-HHmmss>.jsonl` for rotated pre-v1 query telemetry.
 - `PowerShell Scripts/Data/bridge-log.xml` for bridge and UI-originated XML log entries.
 - PowerShell XML execution logs under `logs/` for script-level diagnostics.
 - `/api/health` for cached local dependency and disk readiness checks.
@@ -86,16 +87,21 @@ sequenceDiagram
     VStore-->>Node: Top 5 Relevant Chunks
 
     Node-->>UI: SSE: {type: "status", message: "Searching..."}
-    Node-->>UI: SSE: {type: "metadata", citations: [...]}
+    Node-->>UI: SSE: {type: "metadata", citations: [{chunkId, sourceId, locatorType, ...}]}
 
-    Node->>Ollama: POST /api/chat (Stream + Context)
+    Node->>Ollama: POST /api/chat (Stream + Structured [CHUNK] Context)
 
     loop Streaming LLM Response
         Ollama-->>Node: token chunk
         Node-->>UI: SSE: {message: {content: "token"}}
     end
 
-    Node-)Node: Async Write to query_log.jsonl
+    Node-->>UI: SSE: {type: "answer_references", references: [...]}
+    opt No approved evidence
+      Node-->>UI: SSE: {type: "grounding_warning", code: "NO_APPROVED_CONTEXT"}
+    end
+
+    Node-)Node: Async Write to query_log.v1.jsonl
     Node-->>UI: Server-Timing header (embed/search/total)
 ```
 
@@ -170,7 +176,8 @@ The persisted ingestion queue state.
 
 The application also persists local operational data alongside the content store.
 
-- `logs/query_log.jsonl` contains per-query retrieval telemetry.
+- `logs/query_log.v1.jsonl` contains per-query retrieval telemetry, score schema metadata, and retrieval trace sets.
+- rotated legacy rows are archived under `logs/archive/query_log.legacy.<yyyyMMdd-HHmmss>.jsonl`.
 - `bridge-log.xml` and PowerShell XML logs capture structured debugging and utility output.
-- Historical `.vectors.bin` and companion files may still exist in the workspace, but they are not the primary runtime storage model for the current Node-first path.
+- Historical flat-file vector artifacts may still exist in the workspace, but they are not the primary runtime storage model for the current Node-first path.
 

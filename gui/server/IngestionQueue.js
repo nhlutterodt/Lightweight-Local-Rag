@@ -161,6 +161,26 @@ class IngestionQueue extends EventEmitter {
     await parser.load();
     const chunker = new SmartTextChunker(chunkSize, chunkOverlap);
 
+    // 2a. Schema migration guard: if the collection's LanceDB table predates the
+    //     SourceId column, drop it so this run re-creates it with the current schema.
+    //     We also clear the in-memory manifest entries to prevent hash-match skips
+    //     against a now-empty table (all files will be fully re-embedded).
+    if (tables.includes(job.collection)) {
+      const probeTable = await db.openTable(job.collection);
+      const schema = await probeTable.schema();
+      const hasSourceId = schema.fields.some((f) => f.name === "SourceId");
+      if (!hasSourceId) {
+        console.log(
+          `[Ingest] Collection "${job.collection}" has pre-SourceId schema — ` +
+            `dropping table for schema migration. All files will be re-embedded.`,
+        );
+        await db.dropTable(job.collection);
+        tables.splice(tables.indexOf(job.collection), 1);
+        // Wipe in-memory manifest so no stale hash matches skip re-embedding.
+        parser.entries.clear();
+      }
+    }
+
     job.progress = "Scanning directory...";
     this._throttledSave();
 
@@ -270,9 +290,8 @@ class IngestionQueue extends EventEmitter {
             pdfParser.on("pdfParser_dataError", (errData) =>
               reject(errData.parserError),
             );
-            pdfParser.on("pdfParser_dataReady", () => {
-              const rawText = pdfParser.getRawTextContent();
-              resolve(rawText);
+            pdfParser.on("pdfParser_dataReady", (pdfData) => {
+              resolve(pdfData);
             });
 
             pdfParser.parseBuffer(buffer);
@@ -288,7 +307,7 @@ class IngestionQueue extends EventEmitter {
         continue;
       }
 
-      if (!content || !content.trim()) {
+      if (!content || (typeof content === "string" && !content.trim())) {
         processedCount++;
         continue;
       }
@@ -338,6 +357,12 @@ class IngestionQueue extends EventEmitter {
             StructuralPath:
               smartChunk.structuralPath || smartChunk.headerContext || "None",
             EmbeddingModel: model,
+            ...(Number.isInteger(smartChunk.pageStart)
+              ? { PageStart: smartChunk.pageStart }
+              : {}),
+            ...(Number.isInteger(smartChunk.pageEnd)
+              ? { PageEnd: smartChunk.pageEnd }
+              : {}),
           };
 
           // Upsert into LanceDB immediately natively

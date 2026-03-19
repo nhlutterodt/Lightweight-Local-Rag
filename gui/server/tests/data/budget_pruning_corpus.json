@@ -1,0 +1,50 @@
+{
+  "query": "budget pruning fixture",
+  "collection": "TestIngest",
+  "searchOutput": {
+    "results": [
+      {
+        "score": 0.91,
+        "ChunkText": "alpha beta gamma",
+        "TextPreview": "alpha beta gamma",
+        "FileName": "fixture-keep.md",
+        "ChunkIndex": 0,
+        "HeaderContext": "Fixture > Keep"
+      },
+      {
+        "score": 0.87,
+        "ChunkText": "delta epsilon zeta",
+        "TextPreview": "delta epsilon zeta",
+        "FileName": "fixture-drop.md",
+        "ChunkIndex": 1,
+        "HeaderContext": "Fixture > Drop"
+      }
+    ],
+    "retrievedCandidates": [
+      {
+        "fileName": "fixture-keep.md",
+        "chunkId": "chk_fixture_keep",
+        "sourceId": "src_fixture_keep",
+        "score": 0.91,
+        "preview": "alpha beta gamma",
+        "locatorType": "none",
+        "headerContext": "Fixture > Keep"
+      },
+      {
+        "fileName": "fixture-drop.md",
+        "chunkId": "chk_fixture_drop",
+        "sourceId": "src_fixture_drop",
+        "score": 0.87,
+        "preview": "delta epsilon zeta",
+        "locatorType": "none",
+        "headerContext": "Fixture > Drop"
+      }
+    ],
+    "droppedCandidates": []
+  },
+  "expected": {
+    "approvedFileNames": ["fixture-keep.md"],
+    "droppedFileNames": ["fixture-drop.md"],
+    "dropReason": "context_budget_exceeded"
+  }
+}

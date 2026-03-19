@@ -65,11 +65,17 @@ const mockQuery = jest
   .fn()
   .mockReturnValue({ limit: mockLimit, toArray: mockExecute });
 
+// Default schema mock: current schema has SourceId (no migration triggered).
+// Override per-test with mockTable.schema.mockResolvedValueOnce(...) for old-schema tests.
+const mockSchema = { fields: [{ name: "SourceId" }, { name: "FileName" }, { name: "vector" }] };
+
 const mockTable = {
   query: mockQuery,
   search: mockSearch,
   add: jest.fn().mockResolvedValue(true),
   delete: jest.fn().mockResolvedValue(true),
+  update: jest.fn().mockResolvedValue(true),
+  schema: jest.fn().mockResolvedValue(mockSchema),
   countRows: jest.fn().mockResolvedValue(10),
   // --- M4: Snapshot API ---
   version: 3,
@@ -88,4 +94,5 @@ export const connect = jest.fn().mockResolvedValue({
   tableNames: jest.fn().mockResolvedValue(["TestIngest", "TestCollection"]),
   openTable: jest.fn().mockResolvedValue(mockTable),
   createTable: jest.fn().mockResolvedValue(mockTable),
+  dropTable: jest.fn().mockResolvedValue(undefined),
 });

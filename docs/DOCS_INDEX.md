@@ -8,6 +8,7 @@ audience: contributors
 # Docs Index
 
 ## Canonical
+
 - docs/Architecture_Design.md
 - docs/Domain_Boundary_Assessment.md
 - docs/Technical_Component_Design.md
@@ -25,13 +26,14 @@ audience: contributors
 - docs/User_Configuration_Execution_Plan.md
 
 ## Reference Contracts
+
 - docs/API_REFERENCE.md
 - docs/SSE_CONTRACT.md
 - docs/SECURITY.md
 - docs/Forced_Colors_Validation_Checklist.md
 
 ## Active Drafts (Authoritative Locations)
-## Active Drafts (Authoritative Locations)
+
 - docs/active-drafts/Phase8_RAG_Design.md
 - docs/active-drafts/Phase9_Chat_Design.md
 - docs/active-drafts/Phase10_WebUI_Design.md
@@ -44,8 +46,14 @@ audience: contributors
 - docs/active-drafts/RAG_Locator_Support_Analysis.md
 - docs/active-drafts/RAG_Retrieval_Redesign_Execution_Plan.md
 - docs/active-drafts/RAG_Source_Identity_Decision_Record.md
+- docs/active-drafts/RAG_PhaseD_Trace_And_Schema_Execution_Plan.md
+- docs/active-drafts/PhaseD_Freeze_Report.md
+- docs/active-drafts/RAG_PhaseE_Documentation_And_Validator_Execution_Plan.md
+- docs/active-drafts/RAG_PhaseF_Migration_Closure_Evidence_Package.md
+- docs/active-drafts/RAG_PhaseF_ManifestInventory_Report.md
 
 ## Historical (Authoritative Locations)
+
 - docs/Frontend_Remediation_Execution_Template.md
 - docs/historical/Project_Critique.md
 - docs/historical/analysis_results.md
@@ -54,6 +62,7 @@ audience: contributors
 - docs/historical/test_smart.md
 
 ## Compatibility Stubs (Root Redirectors)
+
 - docs/Phase8_RAG_Design.md
 - docs/Phase9_Chat_Design.md
 - docs/Phase10_WebUI_Design.md
@@ -65,12 +74,14 @@ audience: contributors
 - docs/test_smart.md
 
 ## Archive
+
 - docs/archive/MERGED_DOCUMENTATION.md
 - docs/archive/legacy_xml_logging/DOCUMENTATION_STRUCTURED.md
 - docs/archive/legacy_xml_logging/Project Architecture Analysis.md
 - docs/archive/legacy_xml_logging/Project Features Present.md
 
 ## Operational Notes
+
 - Status taxonomy and governance are defined in docs/DOCS_GOVERNANCE.md.
 - Historical files are retained for context and audit trail.
 - Canonical and reference-contract files are authoritative for implementation and behavior.

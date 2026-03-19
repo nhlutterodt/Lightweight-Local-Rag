@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: architecture
 canonical_ref: docs/Observability_Analysis.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-18
 audience: engineering
 ---
 # Observability Analysis
@@ -39,7 +39,7 @@ For the current revision, the following anchors were reviewed directly:
 - `gui/client/react-client/src/hooks/useRagApi.js`
 - `PowerShell Scripts/XMLLogger.ps1`
 - `PowerShell Scripts/ExecutionContext.ps1`
-- `logs/query_log.jsonl`
+- `logs/query_log.v1.jsonl`
 - `logs/bridge-log.xml`
 - `PowerShell Scripts/Data/queue.json`
 - `logs/perf-baseline.json`
@@ -54,8 +54,11 @@ Primary source: `gui/server/server.js` and `gui/server/lib/queryLogger.js`
 
 Current behavior:
 
-- Every `/api/chat` request appends one JSONL record to `logs/query_log.jsonl`.
-- Entries include timestamp, truncated query, selected models, retrieval settings, result count, result previews, and a `lowConfidence` flag.
+- Every `/api/chat` request appends one JSONL record to `logs/query_log.v1.jsonl`.
+- On v1 initialization, legacy `logs/query_log.jsonl` is rotated to `logs/archive/query_log.legacy.<yyyyMMdd-HHmmss>.jsonl`.
+- Entries include timestamp, truncated query, `scoreSchemaVersion` (`v1`), `scoreType` (`normalized-relevance`), retrieval settings, and `lowConfidence`.
+- Entries now include retrieval trace sets: `retrievedCandidates`, `approvedContext`, and `droppedCandidates` with `dropReason`.
+- Entries include final `answerReferences` emitted after stream completion.
 - Logging is intentionally fire-and-forget and not awaited in the request path.
 
 Current strengths:
@@ -183,7 +186,7 @@ Current limits:
 
 Observed in the local workspace on 2026-03-15:
 
-- `logs/query_log.jsonl` exists and contains 41 query records.
+- legacy `logs/query_log.jsonl` exists and contains 41 historical query records.
 - 17 of those 41 records are marked `lowConfidence`.
 - Most existing records have blank `retrievalMode`, indicating a schema/version transition in the log history.
 - The workspace also contains XML logs, queue state, manifests, performance snapshots, and report artifacts under `logs/` and `PowerShell Scripts/Data/`.
@@ -196,7 +199,7 @@ This is enough signal to perform a real baseline review before adding new instru
 
 Current support:
 
-- Model usage can be estimated from `query_log.jsonl`.
+- Model usage can be estimated from current `query_log.v1.jsonl` rows and legacy archives when historical comparison is needed.
 - Retrieval confidence can be approximated using `lowConfidence`, `resultCount`, and top scores.
 - Collection/index readiness can be checked with `/api/index/metrics`.
 
@@ -267,7 +270,7 @@ This matters because observability decisions depend on understanding the true si
 Deliverables:
 
 - observability matrix of sources, fields, sinks, retention, and consumers
-- baseline summary from current `query_log.jsonl`, XML logs, queue state, and vector metrics
+- baseline summary from current `query_log.v1.jsonl`, legacy query-log archives when needed, XML logs, queue state, and vector metrics
 - list of schema/version inconsistencies
 
 Questions to answer:
@@ -376,7 +379,7 @@ The observability model is good enough when the team can reliably answer:
 2. Keep `docs/API_REFERENCE.md`, `docs/Architecture_Design.md`, and the observability docs synchronized when implementation anchors change.
 3. Define a shared telemetry contract for query, queue, ingestion, and error events.
 4. Decide whether XML remains the debug format while JSONL becomes the reporting format, or whether a unified structured event format is preferred.
-5. Add a small baseline-report script that summarizes current `query_log.jsonl` and queue/index state.
+5. Add a small baseline-report script that summarizes current `query_log.v1.jsonl`, legacy archives when needed, and queue/index state.
 
 ## References
 

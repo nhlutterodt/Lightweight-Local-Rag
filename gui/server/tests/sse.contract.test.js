@@ -19,6 +19,9 @@ const findNearestMock = jest.fn(() => [
     FileName: "test_doc.md",
     ChunkIndex: 0,
     HeaderContext: "Test > Section A",
+    LocatorType: "page-range",
+    PageStart: 3,
+    PageEnd: 3,
     index: 0,
   },
   {
@@ -28,6 +31,7 @@ const findNearestMock = jest.fn(() => [
     FileName: "test_doc2.md",
     ChunkIndex: 1,
     HeaderContext: "Test > Section B",
+    LocatorType: "section",
     index: 1,
   },
 ]);
@@ -127,6 +131,9 @@ describe("SSE Contract — /api/chat", () => {
         FileName: "test_doc.md",
         ChunkIndex: 0,
         HeaderContext: "Test > Section A",
+        LocatorType: "page-range",
+        PageStart: 3,
+        PageEnd: 3,
         index: 0,
       },
       {
@@ -136,6 +143,7 @@ describe("SSE Contract — /api/chat", () => {
         FileName: "test_doc2.md",
         ChunkIndex: 1,
         HeaderContext: "Test > Section B",
+        LocatorType: "section",
         index: 1,
       },
     ]);
@@ -197,6 +205,34 @@ describe("SSE Contract — /api/chat", () => {
       expect(typeof citation.headerContext).toBe("string");
       expect(typeof citation.preview).toBe("string");
     }
+  });
+
+  it("page-range citations may include optional pageStart and pageEnd fields only for structured page locators", () => {
+    const metaEvent = sseResult.events.find((e) => e.type === "metadata");
+    const pageCitation = metaEvent.citations.find(
+      (citation) => citation.fileName === "test_doc.md",
+    );
+    const nonPageCitation = metaEvent.citations.find(
+      (citation) => citation.fileName === "test_doc2.md",
+    );
+
+    expect(pageCitation).toBeDefined();
+    expect(pageCitation).toEqual(
+      expect.objectContaining({
+        locatorType: "page-range",
+        pageStart: 3,
+        pageEnd: 3,
+      }),
+    );
+
+    expect(nonPageCitation).toBeDefined();
+    expect(nonPageCitation).toEqual(
+      expect.objectContaining({
+        locatorType: "section",
+      }),
+    );
+    expect(nonPageCitation).not.toHaveProperty("pageStart");
+    expect(nonPageCitation).not.toHaveProperty("pageEnd");
   });
 
   // ── Token Events: message.content ──

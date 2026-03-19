@@ -5,6 +5,12 @@ import { performance } from "perf_hooks";
 import { loadConfig } from "../lib/configLoader.js";
 import { VectorStore } from "../lib/vectorStore.js";
 import { embed } from "../lib/ollamaClient.js";
+import {
+  enforceQueryLogSchema,
+  resolveQueryLogPath,
+  SCORE_SCHEMA_VERSION,
+  SCORE_TYPE,
+} from "../lib/evalLogSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -207,6 +213,8 @@ async function runEvaluation(options) {
   const run = {
     createdAt: new Date().toISOString(),
     mode: options.mode,
+    scoreSchemaVersion: SCORE_SCHEMA_VERSION,
+    scoreType: SCORE_TYPE,
     embeddingModel,
     collection: defaultCollection,
     summary: summarizeRun(entries),
@@ -258,6 +266,20 @@ async function runEvaluation(options) {
   }
 
   const baselineRun = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+  if (
+    !options.allowLegacySchema &&
+    baselineRun.scoreSchemaVersion !== SCORE_SCHEMA_VERSION
+  ) {
+    throw new Error(
+      `Baseline scoreSchemaVersion mismatch. Expected ${SCORE_SCHEMA_VERSION}, found ${baselineRun.scoreSchemaVersion || "<missing>"}. Regenerate baseline.`,
+    );
+  }
+  if (!options.allowLegacySchema && baselineRun.scoreType !== SCORE_TYPE) {
+    throw new Error(
+      `Baseline scoreType mismatch. Expected ${SCORE_TYPE}, found ${baselineRun.scoreType || "<missing>"}. Regenerate baseline.`,
+    );
+  }
+
   const comparison = compareRuns(run, baselineRun);
   const reportPath = path.join(
     reportDir,
@@ -304,7 +326,7 @@ async function runEvaluation(options) {
 
 function usage() {
   console.log(
-    "Usage: node scripts/run-golden-eval.js --mode baseline|compare [--golden tests/data/golden_queries.json] [--baseline TestResults/retrieval-eval/golden_baseline.json] [--collection NAME] [--min-score NUMBER]",
+    "Usage: node scripts/run-golden-eval.js --mode baseline|compare [--golden tests/data/golden_queries.json] [--baseline TestResults/retrieval-eval/golden_baseline.json] [--collection NAME] [--min-score NUMBER] [--query-log path] [--allow-legacy-schema]",
   );
 }
 
@@ -340,9 +362,32 @@ async function main() {
   const minScoreOverride = args.get("min-score")
     ? Number(args.get("min-score"))
     : null;
+  const allowLegacySchema = Boolean(args.get("allow-legacy-schema"));
+  const explicitQueryLogPath = args.get("query-log")
+    ? path.resolve(String(args.get("query-log")))
+    : null;
 
   if (minScoreOverride !== null && !Number.isFinite(minScoreOverride)) {
     throw new Error("--min-score must be a valid number");
+  }
+
+  const queryLogSelection = resolveQueryLogPath({
+    workspaceRoot,
+    explicitQueryLogPath,
+    allowLegacySchema,
+  });
+  const schemaCheck = enforceQueryLogSchema({
+    queryLogPath: queryLogSelection.queryLogPath,
+    allowLegacySchema,
+  });
+  if (schemaCheck.checked) {
+    console.log(
+      `[Eval] Query log schema validated at ${queryLogSelection.queryLogPath} (${schemaCheck.rowCount} rows).`,
+    );
+  } else {
+    console.log(
+      `[Eval] Query log not found at ${queryLogSelection.queryLogPath}; skipping query-log schema check.`,
+    );
   }
 
   const result = await runEvaluation({
@@ -351,6 +396,7 @@ async function main() {
     baselinePath,
     collection,
     minScoreOverride,
+    allowLegacySchema,
   });
 
   console.log(`Mode: ${mode}`);

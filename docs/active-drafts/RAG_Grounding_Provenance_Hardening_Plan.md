@@ -2,40 +2,79 @@
 doc_state: active-draft
 doc_owner: backend
 canonical_ref: docs/Technical_Component_Design.md
-last_reviewed: 2026-03-16
+last_reviewed: 2026-03-18
 audience: engineering
 ---
 # RAG Grounding and Provenance Hardening Plan
 
 ## Purpose
 
-This document is the implementation artifact for permanently closing the current grounding, provenance, observability, and documentation drift gaps in the local RAG runtime.
+This document is the active status and hardening umbrella for grounding,
+provenance, retrieval-trace observability, and documentation correctness in the
+local RAG runtime.
 
-The goal is not to make the system merely retrieve relevant chunks. The goal is to make the system able to prove, preserve, and expose exactly what source material was retrieved, what portion was promoted into the prompt, what the model was allowed to rely on, and what references can be emitted to the user without inventing unsupported attribution.
+It no longer describes a pre-implementation design space. It records what is
+already delivered through Phase D, what remains open after the current evidence
+pass, and what work is authorized next.
 
-This plan is intentionally stricter than the prior retrieval redesign work. It treats provenance and grounding as contract surfaces rather than best-effort metadata.
+The governing rule is unchanged: provenance and grounding are contract surfaces,
+not best-effort metadata. The system must be able to prove what source material
+was retrieved, what evidence entered the prompt, what references were actually
+emitted, and where the current runtime still lacks support for finer-grained
+claims.
+
+## Current Program Status
+
+Status at this revision:
+
+1. Phases A through D are delivered in the live runtime.
+2. Phase D is frozen with explicit gate evidence recorded in `docs/active-drafts/PhaseD_Freeze_Report.md`.
+3. Phase E is active as documentation realignment and validator hardening work.
+4. Phase F remains open as migration and release-closure work.
+
+This document is now the truthful high-level status artifact. Phase-specific
+execution details live in the dedicated phase plans and freeze report.
 
 ## Evidence Baseline
 
-The plan is driven by current implementation evidence, not by historical design assumptions.
+This status document is grounded in the current repository state, not in the
+obsolete pre-Phase-A assumptions that originally seeded the plan.
+
+### Evidence Anchors Reviewed For This Revision
+
+1. `gui/server/server.js`
+2. `gui/server/IngestionQueue.js`
+3. `gui/server/lib/vectorStore.js`
+4. `gui/server/lib/retrievalModes.js`
+5. `gui/server/lib/queryLogger.js`
+6. `gui/server/lib/evalLogSchema.js`
+7. `gui/server/lib/smartChunker.js`
+8. `gui/server/tests/retrieval.behavior.test.js`
+9. `gui/server/tests/sse.contract.test.js`
+10. `gui/server/tests/queryLogger.test.js`
+11. `gui/server/tests/pdfLocatorEvidence.test.js`
+12. `scripts/Validate-Docs.ps1`
+13. `docs/active-drafts/PhaseD_Freeze_Report.md`
+14. `docs/active-drafts/RAG_PhaseE_Documentation_And_Validator_Execution_Plan.md`
 
 ### Verified Runtime Facts
 
-1. Live ingestion is Node-native in `gui/server/IngestionQueue.js`; the deprecated `/api/ingest` route in `gui/server/server.js` returns `410` and points callers to `/api/queue`.
-2. Live retrieval and prompt assembly are Node-native in `gui/server/server.js`, `gui/server/lib/vectorStore.js`, and `gui/server/lib/retrievalModes.js`.
-3. The manifest currently keys entries by lowercase `FileName` rather than a stable source identifier in `gui/server/lib/documentParser.js`.
-4. LanceDB mutation and cleanup are currently performed by `FileName` equality in `gui/server/IngestionQueue.js`.
-5. The model receives one concatenated context string in `server.js`; citations are emitted separately and are not bound to generated claims.
-6. PDF ingestion currently flattens text via `pdf2json` raw extraction without page-level provenance being persisted.
-7. Query logging captures only approved prompt inputs, not the full retrieved candidate set or dropped-by-budget reasons.
-8. Canonical documentation is split between accurate Node-first runtime docs and stale PowerShell-ingestion narratives.
-9. Historic `Logs/query_log.jsonl` entries contain score values inconsistent with the current normalized score contract.
+1. Live ingestion is Node-native through `gui/server/IngestionQueue.js`; the legacy `/api/ingest` route is deprecated and the active intake path is `/api/queue`.
+2. Live retrieval, prompt assembly, SSE emission, and query logging are Node-native in `gui/server/server.js`.
+3. Stable `SourceId` and `ChunkHash`-derived chunk identity are present in the live ingestion, retrieval, citation, and telemetry paths, with legacy fallbacks still tolerated for older rows.
+4. Prompt assembly now uses structured `[CHUNK ...]` blocks rather than flat `[Source: ...]` headers.
+5. SSE emits `metadata`, token `message`, final `answer_references`, and conditional `grounding_warning` events.
+6. Query telemetry now writes to `logs/query_log.v1.jsonl` and includes `scoreSchemaVersion`, `scoreType`, `retrievedCandidates`, `approvedContext`, `droppedCandidates`, and `answerReferences`.
+7. Query-log initialization rotates a legacy `logs/query_log.jsonl` file into `logs/archive/query_log.legacy.<yyyyMMdd-HHmmss>.jsonl`.
+8. The docs validator blocks selected stale-runtime claims in canonical and reference-contract docs, including legacy ingestion ownership and active `query_log.jsonl` language.
+9. PDF page-aware provenance now exists only on the structured page-range path: `smartChunker.js` can emit per-page PDF chunks with `pageStart` and `pageEnd`, `IngestionQueue.js` persists those fields when present, and `server.js` only emits them on citations when `locatorType === "page-range"`.
+10. Fine-grained locator support is still incomplete overall: the runtime does not yet provide a universal locator contract for line, character, section, symbol, or page fidelity across all extractor types.
 
 ## Project Standards Baseline
 
 This plan must be executed inside the repository's existing standards, not alongside them.
 
-### Architecture and Runtime Standards
+### WS1 Architecture and Runtime Standards
 
 Verified against `docs/DEVELOPER_ONBOARDING.md`, `docs/Architecture_Design.md`, `docs/Technical_Component_Design.md`, and the live server code:
 
@@ -80,241 +119,48 @@ Verified against `docs/Observability_Analysis.md` and existing runtime seams:
 2. Query logs, health endpoints, queue state, and bridge logs are existing observability surfaces and must remain internally coherent.
 3. Timing and retrieval telemetry should be durable enough for offline analysis, not only visible in live headers or console output.
 
-## Pre-Phase-A Analysis Gate
+## Delivered Through Phase D
 
-Phase A must not start immediately. The current plan contains design intentions that still require direct repository-backed analysis and decision records before schema or contract changes begin.
+The following capabilities are live and should be treated as already delivered,
+not as future design intent.
 
-The purpose of this gate is to eliminate assumptions that would otherwise harden the wrong identity model, the wrong locator model, or the wrong stream contract.
+### Grounding and Provenance Delivery
 
-### Rule
+1. Stable source identity is present in the active ingestion and retrieval paths.
+2. Stable chunk identity is present in retrieval, citations, SSE grounding, and telemetry.
+3. `locatorType` is propagated end-to-end as the current coarse locator contract.
+4. Structured `[CHUNK ...]` prompt blocks are used in the active retrieval path.
+5. Final `answer_references` SSE emission is live.
+6. Deterministic `grounding_warning` SSE emission is live for no-approved-context answers.
 
-No Phase A implementation PR may merge until every item in the assumption register below has one of these outcomes:
+### Retrieval Trace and Telemetry Delivery
 
-1. verified by code and fixtures
-2. verified by a standards-backed decision record
-3. explicitly deferred with a justified boundary that does not block Phase A
+1. Query logging distinguishes `retrievedCandidates`, `approvedContext`, and `droppedCandidates`.
+2. Dropped candidates carry explicit `dropReason` values.
+3. The active query-log contract is versioned with `scoreSchemaVersion: "v1"` and `scoreType: "normalized-relevance"`.
+4. Eval tooling enforces the current schema by default and requires explicit opt-in for legacy schema input.
 
-## Assumption Register To Eliminate Before Phase A
+### Current PDF Provenance Delivery
 
-### A1. Source Identity Semantics
+1. The runtime now supports structured per-page PDF chunks on the page-aware path.
+2. Persisted `PageStart` and `PageEnd` are emitted only when the chunk was produced from the structured `page-range` path.
+3. Legacy or flattened PDF rows remain non-page citations and must not emit page fields.
 
-Current assumption in the plan:
+### Documentation and Validation Delivery So Far
 
-1. `sourceId` should be `sha256(normalizedCanonicalSourcePath)`.
+1. SSE contract documentation now includes `answer_references`, `grounding_warning`, and optional page-range citation fields.
+2. API and technical design docs now reflect the live additive page-range citation contract.
+3. Docs validation now blocks a bounded set of stale runtime claims in canonical and reference-contract docs.
 
-Why this is not yet safe enough:
+## Historical Record of Closed Design Questions
 
-1. Rename handling currently relies on content hash lineage, not path identity.
-2. A pure path-hash identity may break desired rename semantics.
-3. A pure path-hash identity may also make root relocation or portable corpus moves appear as entirely new sources.
+The original front half of this plan contained a pre-Phase-A assumption register
+and start gate. That material is no longer the current operating truth.
 
-Required analysis:
-
-1. Compare three candidate identity models:
-
-  - path-derived identity
-  - content-derived identity
-  - composite identity with persistent source lineage and current path
-
-2. Evaluate each model against rename detection, orphan cleanup, duplicate basenames, root relocation, and integrity scanning.
-3. Document the chosen source-identity contract and the rejected alternatives.
-
-Phase A blocker:
-
-1. Do not add `sourceId` until its semantics are explicitly chosen for both rename and relocation behavior.
-
-### A2. Chunk Identity Stability Semantics
-
-Current assumption in the plan:
-
-1. `chunkId` should be deterministic from `sourceId`, chunk index, and content hash.
-
-Why this is not yet safe enough:
-
-1. Small edits earlier in a document may shift all chunk indices.
-2. A chunk ID that overfits index position may create unnecessary churn in citations and traces.
-3. A chunk ID that overfits content hash may make small whitespace edits destroy useful continuity.
-
-Required analysis:
-
-1. Evaluate whether `chunkId` is required to be stable across re-ingests of lightly edited files, or only stable within a given index version.
-2. Define separate roles for `chunkId`, `chunkHash`, and `chunkOrdinal` if needed.
-3. Verify how integrity tooling and answer reference resolution should treat chunk churn.
-
-Phase A blocker:
-
-1. Do not finalize the chunk schema until chunk identity lifetime is explicitly defined.
-
-### A3. Locator Feasibility By File Type
-
-Current assumption in the plan:
-
-1. Markdown, PowerShell, XML, plain text, and PDF can all emit durable locators in the desired form.
-
-Why this is not yet safe enough:
-
-1. Current chunkers do not persist line or offset metadata.
-2. The active PDF extraction path uses `pdf2json` raw text flattening and may not expose the exact page or block fidelity assumed by the plan.
-3. XML locator quality depends on whether line mappings can be preserved without introducing a fragile parser path.
-
-Required analysis:
-
-1. Verify the actual extractor outputs available today for each supported file type.
-2. Produce a locator support matrix with `required`, `supported`, `unsupported`, and `fallback` states per file type.
-3. For each unsupported locator type, define the domain-safe fallback behavior.
-
-Phase A blocker:
-
-1. Do not promise `lineStart`, `lineEnd`, `pageStart`, or `pageEnd` universally until the support matrix is complete.
-
-### A4. Prompt and Answer Reference Reliability
-
-Current assumption in the plan:
-
-1. The model can be instructed to emit machine-readable `chunkId` references reliably enough for production use.
-
-Why this is not yet safe enough:
-
-1. The current SSE and client parsing model only assumes `status`, `metadata`, and token events.
-2. Model-emitted inline references may be noisy or malformed.
-3. The project standards require contract-backed behavior, not prompt optimism.
-
-Required analysis:
-
-1. Compare three grounding-reference designs:
-  - model emits inline chunk tags
-  - server post-processes explicit answer-reference blocks
-  - server emits approved citations only and treats references as UI-side evidence, not LLM-authored artifacts
-2. Evaluate each design for determinism, parseability, streaming compatibility, and client complexity.
-3. Define the minimum acceptable answer-reference contract for the first implementation slice.
-
-Phase A blocker:
-
-1. Do not change the SSE contract until the reference-emission design is selected and test strategy is written.
-
-### A5. Client Compatibility and Stream Migration Strategy
-
-Current assumption in the plan:
-
-1. The client can absorb new grounding events without breakage.
-
-Why this is not yet safe enough:
-
-1. `useRagApi.js` currently parses the existing SSE payload model.
-2. Contract tests currently assert the current event set and shapes.
-3. A breaking stream change can silently degrade chat UX even if the backend is correct.
-
-Required analysis:
-
-1. Audit the current client event parser and message reducer paths.
-2. Define whether grounding events will be additive, versioned, or breaking.
-3. Plan a compatibility window if both old and new event forms must coexist temporarily.
-
-Phase A blocker:
-
-1. No stream shape changes without a migration strategy that preserves current UI behavior.
-
-### A6. Telemetry Retention and Rotation Strategy
-
-Current assumption in the plan:
-
-1. Query log rotation and schema rollover can be introduced without conflicting with current logging and analysis workflows.
-
-Why this is not yet safe enough:
-
-1. Logging retention is configured centrally, but the JSONL logger currently appends directly.
-2. Eval scripts and offline analysis may implicitly assume a single file path.
-3. Historical mixed-schema logs already exist.
-
-Required analysis:
-
-1. Define the authoritative query-log path contract after schema versioning is introduced.
-2. Define archive naming, retention ownership, and eval-script discovery rules.
-3. Decide whether the logger or an operational maintenance routine owns rotation.
-
-Phase A blocker:
-
-1. Do not introduce `scoreSchemaVersion` without also defining the storage and discovery contract for new versus historical logs.
-
-### A7. Migration Burden and Re-index Strategy
-
-Current assumption in the plan:
-
-1. Existing collections can be re-indexed into the new provenance model as a later release step.
-
-Why this is not yet safe enough:
-
-1. Manifest migration, LanceDB row-shape migration, and integrity tooling updates are coupled.
-2. Some schema changes may be impractical to backfill without full re-ingestion.
-3. The project already uses migration tables for queue and manifest schema evolution.
-
-Required analysis:
-
-1. Distinguish fields that can be migrated in place from fields that require full re-ingest.
-2. Define manifest versioning and migration-table changes before Phase A code lands.
-3. Define rollout order so integrity tooling remains truthful during mixed-state transitions.
-
-Phase A blocker:
-
-1. No schema work should begin until the migration strategy is specified at manifest, DB, and tooling levels.
-
-### A8. Evaluation Floor and Success Metrics
-
-Current assumption in the plan:
-
-1. Existing eval scripts and datasets are sufficient to validate provenance and grounding changes.
-
-Why this is not yet safe enough:
-
-1. Current retrieval evals focus on retrieval quality and latency, not provenance correctness.
-2. There is no current corpus proving duplicate-basename safety, locator fidelity, or answer-reference validity.
-3. The repo’s standards require regression blockers, not informal confidence.
-
-Required analysis:
-
-1. Define new provenance-specific fixture corpora and assertion strategy.
-2. Define minimum acceptance metrics for provenance correctness separate from recall and MRR.
-3. Decide which tests are merge blockers from the first Phase A PR onward.
-
-Phase A blocker:
-
-1. Phase A must start by adding failing provenance tests, not by writing schema code first.
-
-## Required Pre-Phase-A Deliverables
-
-Before Phase A starts, the following artifacts must exist.
-
-1. A standards-backed decision record for source identity semantics.
-2. A chunk identity lifetime definition.
-3. A locator support matrix for all supported file types.
-4. A stream-contract migration note for grounding events.
-5. A telemetry rollover and score-schema note.
-6. A migration strategy note covering manifest, LanceDB, integrity tooling, and re-indexing.
-7. A provenance fixture plan with explicit failing tests to add first.
-
-## Pre-Phase-A Analysis Work Package
-
-This work package replaces assumption-driven design with repository-backed decisions.
-
-### Analysis Tasks
-
-1. Inspect all supported extractors and chunkers and record what locator fidelity they actually expose today.
-2. Inspect manifest, integrity, and queue code paths and document all places where identity semantics currently depend on `FileName`.
-3. Inspect the client stream parser and enumerate which SSE event additions are additive versus breaking.
-4. Inspect current eval scripts and identify what provenance correctness they do not yet measure.
-5. Inspect query-log consumers and decide how schema versioning and rollover will be discovered.
-
-### Analysis Outputs
-
-1. `Phase 0 decision record: source identity`
-2. `Phase 0 decision record: chunk identity and locator schema`
-3. `Phase 0 contract note: SSE grounding evolution`
-4. `Phase 0 migration note: schema and re-index strategy`
-5. `Phase 0 test plan: provenance fixtures and blocking assertions`
-
-### Exit Gate
-
-Phase A may begin only when the repository owners can point to direct evidence for the chosen identity model, locator model, migration model, and stream model, and when the first provenance regression tests are specified as merge blockers.
+At this point, those earlier questions are either already resolved in code and
+tests or superseded by dedicated phase plans and decision artifacts. They remain
+part of the repository history, but they are not the active blocker language for
+current work.
 
 ### Identified Gaps To Close
 
@@ -387,16 +233,20 @@ At completion, the runtime should work as follows:
 
 ## WS1: Stable Source Identity
 
-> **Note:** The `sourceId` derivation rule in this workstream has been superseded by
-> `RAG_Source_Identity_Decision_Record.md` (Option C — Persistent Lineage, approved 2026-03-16).
-> The identity semantics below reflect that decision. The remaining WS1 items (persistence,
-> LanceDB key usage, orphan cleanup) are unchanged.
+Status: delivered in the live runtime, with migration-sensitive fallbacks still
+present for legacy rows and manifests.
 
-### Problem
+> The `sourceId` derivation rule in this workstream has been superseded by
+> `RAG_Source_Identity_Decision_Record.md` (Option C — Persistent Lineage,
+> approved 2026-03-16). The identity semantics below reflect that decision.
+> Remaining work for source identity is now migration closure, not first-time
+> implementation.
+
+### WS1 Problem
 
 The current system treats `FileName` as the effective identity key in the manifest and in LanceDB row mutation paths. That is unsafe for any corpus containing duplicate basenames.
 
-### Required Changes
+### WS1 Required Changes
 
 1. Introduce `sourceId` as the primary source identity.
 2. Mint `sourceId` **once at first-ingest time** via `mintSourceId(collection, canonicalPath)`
@@ -409,7 +259,7 @@ The current system treats `FileName` as the effective identity key in the manife
    location (mutable on rename); `contentHash` tracks the current revision.
 7. Add optional `sourceRelativePath` when the ingestion root is known and stable.
 
-### Primary Files
+### WS1 Primary Files
 
 1. `gui/server/lib/documentParser.js`
 2. `gui/server/IngestionQueue.js`
@@ -417,7 +267,7 @@ The current system treats `FileName` as the effective identity key in the manife
 4. `gui/server/lib/sourceIdentity.js`
 5. `gui/server/scripts/check-integrity.js`
 
-### Data Model Additions
+### WS1 Data Model Additions
 
 ```json
 {
@@ -431,7 +281,7 @@ The current system treats `FileName` as the effective identity key in the manife
 `sourceId` is an opaque `src_<16-hex>` token minted at first ingest. It does not encode the
 path or content hash and does not change when the file is renamed or edited.
 
-### Acceptance Criteria
+### WS1 Acceptance Criteria
 
 1. Ingesting `A/spec.md` and `B/spec.md` into the same collection produces two distinct manifest entries and two distinct row sets.
 2. Re-ingesting one source does not delete or overwrite the other.
@@ -440,18 +290,23 @@ path or content hash and does not change when the file is renamed or edited.
 
 ## WS2: Stable Chunk Identity and Locator Schema
 
-### Problem
+Status: partially delivered.
+
+Stable chunk identity is live. Fine-grained locator fidelity remains incomplete
+and is still limited by extractor-specific evidence.
+
+### WS2 Problem
 
 Current chunk metadata is useful for retrieval ranking, but insufficient for durable references.
 
-### Required Changes
+### WS2 Required Changes
 
 1. Introduce `chunkId` as a stable identifier per chunk.
 2. Define `chunkId` deterministically from `sourceId`, chunk index, and a chunk-content hash.
 3. Add `chunkHash` to support integrity checking and future re-derivation.
 4. Expand the chunk schema to include domain-valid locators.
 
-### Required Locator Fields
+### WS2 Required Locator Fields
 
 | Field | Meaning | Required For |
 | --- | --- | --- |
@@ -462,7 +317,7 @@ Current chunk metadata is useful for retrieval ranking, but insufficient for dur
 | `sectionPath` | Breadcrumb path | Markdown, PowerShell, XML |
 | `symbolName` | Optional declaration identity | PowerShell and JavaScript where relevant |
 
-### Extractor Rules
+### WS2 Extractor Rules
 
 1. Markdown: persist heading path and line range.
 2. PowerShell: persist declaration path, symbol name, and line range.
@@ -470,14 +325,14 @@ Current chunk metadata is useful for retrieval ranking, but insufficient for dur
 4. Plain text: persist character offsets and line range if deterministic.
 5. PDF: persist page ranges from extractor output; if exact line ranges are unavailable, explicitly mark `locatorType = page-range` and do not invent lines.
 
-### Primary Files
+### WS2 Primary Files
 
 1. `gui/server/lib/smartChunker.js`
 2. `gui/server/IngestionQueue.js`
 3. `gui/server/lib/documentParser.js`
 4. PDF extraction wiring in `gui/server/IngestionQueue.js`
 
-### Acceptance Criteria
+### WS2 Acceptance Criteria
 
 1. Every LanceDB row includes `chunkId` and `locatorType`.
 2. PDF chunks include `pageStart` and `pageEnd` when the extractor exposes them.
@@ -485,18 +340,23 @@ Current chunk metadata is useful for retrieval ranking, but insufficient for dur
 
 ## WS3: Grounding Contract and Prompt Assembly
 
-### Problem
+Status: delivered for the current contract slice.
+
+Structured prompt blocks, final answer references, and deterministic no-evidence
+warnings are live. Future expansion is limited to additive refinements only.
+
+### WS3 Problem
 
 The current runtime supplies context but does not preserve answer-to-chunk binding.
 
-### Required Changes
+### WS3 Required Changes
 
 1. Replace the flat prompt context string with a structured context block format that includes `chunkId`, `sourceId`, `FileName`, and locators.
 2. Require the model instruction to cite supporting `chunkId` values in a machine-readable way.
 3. Separate citation rendering from retrieval previews.
 4. Emit a final answer event containing resolved references, not just token text.
 
-### Prompt Contract
+### WS3 Prompt Contract
 
 The model should see context blocks in a deterministic form such as:
 
@@ -513,7 +373,7 @@ The instruction layer should require one of these two behaviors:
 
 Preferred implementation is both: inline references for transparency plus a normalized final references array for the UI and logs.
 
-### SSE Contract Additions
+### WS3 SSE Contract Additions
 
 Add or revise event types so the stream can support grounding without overloading the current `metadata` event.
 
@@ -524,7 +384,7 @@ Add or revise event types so the stream can support grounding without overloadin
 | `answer_references` | Final normalized chunk references actually cited by the answer |
 | `grounding_warning` | Explicit signal when no approved evidence exists |
 
-### Primary Files
+### WS3 Primary Files
 
 1. `gui/server/server.js`
 2. `gui/server/lib/ollamaClient.js`
@@ -532,7 +392,7 @@ Add or revise event types so the stream can support grounding without overloadin
 4. `docs/API_REFERENCE.md`
 5. Client stream parser in `gui/client/react-client`
 
-### Acceptance Criteria
+### WS3 Acceptance Criteria
 
 1. Every answer reference resolves to an approved `chunkId`.
 2. The UI can render references with stable locators.
@@ -540,11 +400,13 @@ Add or revise event types so the stream can support grounding without overloadin
 
 ## WS4: Retrieval Trace Observability
 
-### Problem
+Status: delivered through Phase D.
+
+### WS4 Problem
 
 The current query log loses the distinction between retrieved candidates and prompt-approved context.
 
-### Required Changes
+### WS4 Required Changes
 
 Extend query telemetry with three explicit sets.
 
@@ -554,7 +416,7 @@ Extend query telemetry with three explicit sets.
 
 Each dropped candidate must include a `dropReason`.
 
-### Required Drop Reasons
+### WS4 Required Drop Reasons
 
 1. `below_min_score`
 2. `context_budget_exceeded`
@@ -562,14 +424,14 @@ Each dropped candidate must include a `dropReason`.
 4. `collection_not_ready`
 5. `embedding_model_mismatch`
 
-### Score Contract Hardening
+### WS4 Score Contract Hardening
 
 1. Add `scoreSchemaVersion` to every new query log entry.
 2. Add `scoreType = normalized-relevance`.
 3. Rotate the log file on deployment of the new schema, archiving prior mixed-format logs under a versioned historical path.
 4. Update evaluation scripts to reject entries missing the declared score schema.
 
-### Optional Diagnostic Artifact
+### WS4 Optional Diagnostic Artifact
 
 Add a per-query trace artifact in development mode:
 
@@ -584,7 +446,7 @@ Add a per-query trace artifact in development mode:
 }
 ```
 
-### Primary Files
+### WS4 Primary Files
 
 1. `gui/server/server.js`
 2. `gui/server/lib/queryLogger.js`
@@ -593,7 +455,7 @@ Add a per-query trace artifact in development mode:
 5. `docs/Observability_Analysis.md`
 6. `docs/Observability_Execution_Plan.md`
 
-### Acceptance Criteria
+### WS4 Acceptance Criteria
 
 1. A failed answer can be classified as retrieval miss, threshold loss, or budget pruning from telemetry alone.
 2. All new query logs declare one score schema.
@@ -601,11 +463,13 @@ Add a per-query trace artifact in development mode:
 
 ## WS5: Documentation and Contract Realignment
 
-### Problem
+Status: active in Phase E.
+
+### WS5 Problem
 
 Canonical docs still contain obsolete runtime descriptions.
 
-### Required Changes
+### WS5 Required Changes
 
 1. Update `docs/RAG_Copilot_Instructions.md` to match the live Node ingestion path.
 2. Remove obsolete references to `PowerShellRunner.js`, `/api/ingest` as the active path, `.vectors.bin`, and `.metadata.json` as current runtime storage.
@@ -614,7 +478,7 @@ Canonical docs still contain obsolete runtime descriptions.
 5. Update `docs/API_REFERENCE.md` and `docs/SSE_CONTRACT.md` with new event shapes.
 6. Mark stale legacy narratives historical if they still need to be preserved.
 
-### Validation Hardening
+### WS5 Validation Hardening
 
 Extend `scripts/Validate-Docs.ps1` so canonical docs fail validation if they contain known-obsolete runtime claims such as:
 
@@ -623,7 +487,7 @@ Extend `scripts/Validate-Docs.ps1` so canonical docs fail validation if they con
 3. `.vectors.bin` as current hot-path store
 4. `.metadata.json` as live citation source
 
-### Acceptance Criteria
+### WS5 Acceptance Criteria
 
 1. There is one authoritative narrative for live ingestion and retrieval.
 2. The validator blocks reintroduction of stale runtime claims.
@@ -631,11 +495,18 @@ Extend `scripts/Validate-Docs.ps1` so canonical docs fail validation if they con
 
 ## WS6: Regression and Evaluation Barrier
 
-### Problem
+Status: partially delivered.
+
+Core regression barriers are live for identity, grounding contract, PDF
+page-range citation truthfulness, retrieval trace accounting, and score-schema
+enforcement. Additional fixture expansion remains open where Phase E and Phase F
+plans call it out.
+
+### WS6 Problem
 
 Without explicit provenance test fixtures, drift will recur.
 
-### Required Test Corpus Additions
+### WS6 Required Test Corpus Additions
 
 1. Duplicate-basename fixture corpus: two files with the same filename under different directories.
 2. Locator fidelity corpus: markdown, PowerShell, XML, plain text, and PDF fixtures with expected line/page references.
@@ -643,7 +514,7 @@ Without explicit provenance test fixtures, drift will recur.
 4. Budget-pruning corpus: queries where the relevant chunk is retrieved but should be dropped for context budget reasons.
 5. Legacy-log schema corpus: verifies log rollover and score schema version behavior.
 
-### Required Automated Test Layers
+### WS6 Required Automated Test Layers
 
 | Layer | Required Coverage |
 | --- | --- |
@@ -654,7 +525,7 @@ Without explicit provenance test fixtures, drift will recur.
 | End-to-end | ingest, retrieve, answer, and cite with stable locators |
 | Docs validation | stale-runtime terminology rejection |
 
-### Required CI Gates
+### WS6 Required CI Gates
 
 1. Server tests must pass.
 2. SSE and API contract tests must pass.
@@ -664,82 +535,89 @@ Without explicit provenance test fixtures, drift will recur.
 
 ## Implementation Sequence
 
-## Phase 0: Standards Alignment and Analysis
-
-1. Re-verify the current runtime seams against code, contracts, and canonical docs.
-2. Resolve the assumption register into explicit decisions or documented deferrals.
-3. Produce the required pre-Phase-A decision records and fixture plan.
-4. Add the first failing provenance regression tests that define the intended Phase A behavior.
-
-### Gate
-
-No schema or contract implementation work begins until Phase 0 outputs exist and the first provenance regression tests are in place.
-
 ## Phase A: Schema and Identity Hardening
 
-1. Add `sourceId`, `sourcePath`, `chunkId`, `chunkHash`, and the locator fields approved by Phase 0.
+Status: complete.
+
+1. Add `sourceId`, `sourcePath`, `chunkId`, `chunkHash`, and the approved locator fields.
 2. Update manifest schema and migration logic.
 3. Update LanceDB write path and integrity check path.
 4. Add duplicate-basename regression tests.
 
-### Gate
+### Phase A Gate
 
 No DB mutation or cleanup path may still key on `FileName` alone.
 
 ## Phase B: Extractor and Chunker Provenance
 
-1. Upgrade chunkers to emit the Phase 0-approved line and offset metadata.
-2. Upgrade PDF ingestion to persist page ranges only if confirmed by the Phase 0 locator support matrix.
+Status: partially complete.
+
+Coarse locator support and structured PDF page-range support now exist on the
+implemented path, but universal fine-grained locator fidelity remains open.
+
+1. Upgrade chunkers to emit the approved line and offset metadata.
+2. Upgrade PDF ingestion to persist page ranges only if confirmed by the approved locator support matrix.
 3. Add locator fidelity fixtures and tests.
 
-### Gate
+### Phase B Gate
 
 Every emitted chunk must declare either a valid locator or an explicit `locatorType = none` with a justified extractor limitation.
 
 ## Phase C: Grounding Contract
 
-1. Rework prompt assembly to carry the Phase 0-approved chunk identity model.
-2. Add the Phase 0-selected answer reference contract.
-3. Update SSE and API contracts according to the Phase 0 stream migration note.
+Status: complete for the current approved contract.
+
+1. Rework prompt assembly to carry the approved chunk identity model.
+2. Add the approved answer reference contract.
+3. Update SSE and API contracts according to the approved stream migration note.
 4. Update client rendering to display structured references.
 
-### Gate
+### Phase C Gate
 
 The stream must expose a final machine-readable references payload that resolves only to approved chunks.
 
 ## Phase D: Retrieval Trace and Score Hardening
 
+Status: complete and frozen.
+
 1. Extend query logging schema.
-2. Add score schema versioning and log rollover using the Phase 0-approved retention and discovery rules.
+2. Add score schema versioning and log rollover using the approved retention and discovery rules.
 3. Add development retrieval trace artifacts.
 4. Update eval scripts and observability docs.
 
-### Gate
+### Phase D Gate
 
 An investigator must be able to tell whether a bad answer was caused by retrieval failure, thresholding, or context pruning without replaying the request manually.
 
 ## Phase E: Documentation and Validator Hardening
 
+Status: in progress.
+
 1. Update canonical docs.
 2. Relocate stale narratives to historical if still needed.
 3. Add stale-runtime term detection to docs validation.
 
-### Gate
+### Phase E Gate
 
 No canonical doc may describe obsolete runtime ownership or storage architecture.
 
 ## Phase F: Release and Migration
+
+Status: not complete.
+
+Phase F is now a migration-closure package, not a first-time provenance design
+phase.
 
 1. Rotate query logs.
 2. Re-index existing collections into the new provenance schema.
 3. Run integrity checks and provenance test corpus.
 4. Generate a migration note documenting schema version changes.
 
-### Gate
+### Phase F Gate
 
 No collection remains on the old basename-only operational identity model.
 
-## Acceptance Metrics
+## WS7 Acceptance Metrics
 
 The program is complete only when all of the following are true.
 
@@ -755,7 +633,7 @@ The program is complete only when all of the following are true.
 
 These are mandatory merge blockers once the implementation lands.
 
-1. `DocumentParser` tests covering duplicate basenames and source-ID migrations.
+1. `WS1 DocumentParser` tests covering duplicate basenames and source-ID migrations.
 2. `IngestionQueue` tests proving deletion and orphan cleanup run by `sourceId`.
 3. `VectorStore` and retrieval behavior tests proving approved/dropped evidence accounting.
 4. SSE contract tests for `answer_references` and grounding warnings.
@@ -782,10 +660,129 @@ The implementation should treat the following choices as locked unless a new app
 4. Citations are contract surfaces and must be test-covered.
 5. Documentation drift is a correctness issue, not a cosmetic issue.
 
-## Immediate Next Implementation Steps
+## Authorized Next Steps At This Revision
 
-1. Complete the Phase 0 assumption register and write the missing decision records.
-2. Produce the locator support matrix from actual extractor and chunker analysis.
-3. Add provenance fixtures and failing tests before any schema changes.
-4. Select and document the answer-reference and SSE migration strategy.
-5. Start Phase A only after the approved identity and migration semantics are locked.
+1. Complete the Phase E documentation realignment and validator-hardening inventory already recorded in `docs/active-drafts/RAG_PhaseE_Documentation_And_Validator_Execution_Plan.md`.
+2. Keep grounding and citation docs synchronized with the live SSE and query-log contracts.
+3. Finish the extractor-by-extractor locator evidence pass so remaining unsupported locator claims are explicit and test-backed.
+4. Prepare the Phase F migration-closure package for legacy fallback retirement and final re-ingest evidence.
+
+## Post-Phase-D Remaining Gaps and Evidence-First Planning Directive
+
+This section records the current program state after Phase D closure and defines the
+required evidence-first path for the remaining work. It is intentionally explicit:
+the remaining gaps are known, but they are not approved for implementation until the
+necessary granular evidence is collected and a phase-scoped execution plan is written.
+
+### Current Delivered State Through Phase D
+
+The repository now has the following program capabilities implemented and frozen:
+
+1. Stable source identity in the live ingestion and retrieval hot path.
+2. Stable chunk identity usage in retrieval, citations, SSE grounding, and telemetry.
+3. `locatorType` propagated end-to-end as the safe locator contract currently supported by the extractor evidence.
+4. Structured `[CHUNK ...]` prompt context blocks in the live retrieval path.
+5. Final `answer_references` and deterministic no-evidence `grounding_warning` SSE events.
+6. Retrieval trace logging with approved versus dropped evidence and explicit `dropReason` classification.
+7. Score-schema versioning, runtime rollover to `logs/query_log.v1.jsonl`, and strict eval enforcement.
+8. Phase D freeze evidence recorded in `docs/active-drafts/PhaseD_Freeze_Report.md`.
+
+### Remaining Gaps After Phase D
+
+The following gaps remain open and must be treated as active planning targets rather than
+immediate implementation tasks.
+
+#### Gap 1. Fine-Grained Locator Fidelity Is Still Incomplete
+
+Current state:
+
+1. The runtime emits `locatorType`, but not the full approved locator detail model.
+2. Exact fields such as `lineStart`, `lineEnd`, `pageStart`, `pageEnd`, `charStart`, `charEnd`, `sectionPath`, and `symbolName` are not fully implemented across supported extractors.
+3. PDF provenance remains limited by the current extraction path and must not claim page or line fidelity beyond verified evidence.
+
+Planning implication:
+
+1. No implementation work should begin until extractor-by-extractor evidence is re-collected from the live code paths.
+2. The next plan must distinguish what is safe to persist now from what requires extractor upgrades.
+
+#### Gap 2. Canonical Documentation Still Lags the Runtime
+
+Current state:
+
+1. Some canonical documents still contain obsolete runtime descriptions or stale terminology.
+2. Documentation updates performed during earlier phases closed only the directly affected contracts and observability anchors.
+3. Full narrative convergence between canonical docs and live runtime code has not yet been completed.
+
+Planning implication:
+
+1. Phase E must begin with a direct code-versus-docs audit, not with blind editing.
+2. Every canonical claim about ingestion ownership, retrieval ownership, SSE behavior, telemetry paths, and storage shape must be traced back to a current implementation anchor.
+
+#### Gap 3. Validator Hardening Is Not Yet Sufficiently Strict
+
+Current state:
+
+1. The docs validator currently enforces indexing and selected stale-runtime rules.
+2. The validator does not yet fully encode the complete stale-runtime rejection set required by this plan.
+3. Reintroduction risk remains until the validator blocks obsolete runtime ownership and storage claims comprehensively.
+
+Planning implication:
+
+1. Validator expansion must be planned from evidence of actual stale patterns found in canonical docs.
+2. New validation rules must be tied to explicit canonical/runtime terms and covered by deterministic tests where feasible.
+
+#### Gap 4. Release and Migration Closure Remains Open
+
+Current state:
+
+1. The runtime supports the new provenance and telemetry model, but repository-wide migration closure has not been formally completed.
+2. Existing collections may still contain legacy rows requiring re-ingest before the old fallback paths can be retired.
+3. A final migration note documenting closure of the basename-only operational identity model does not yet exist.
+
+Planning implication:
+
+1. Phase F must be treated as a distinct release-and-migration work package.
+2. No claim of total program closure is valid until the migration evidence shows no collection remains on the legacy identity model.
+
+### Directive: Evidence First, Plan Second, Implement Last
+
+The remaining work must proceed in this order only:
+
+1. Collect granular implementation evidence from the live codebase and runtime contracts.
+2. Record the remaining gaps with file-anchored findings, not assumptions.
+3. Produce a phase-scoped execution plan that resolves each gap with explicit in-scope, out-of-scope, acceptance criteria, and gates.
+4. Review the plan for correctness against the evidence.
+5. Only after that review may implementation begin.
+
+No remaining gap is approved for direct execution based on this document alone.
+The next implementation phase must be informed by fresh repository-backed evidence gathered after Phase D freeze.
+
+### Required Evidence Collection Before Phase E Planning
+
+The following evidence must be gathered before the Phase E execution plan is finalized:
+
+1. Trace the live ingestion path from queue intake through manifest persistence, LanceDB writes, and any remaining legacy fallbacks.
+2. Trace the live retrieval and grounding path from retrieval planning through approved context assembly, SSE emission, and query telemetry.
+3. Compare canonical docs line-by-line against current runtime ownership, storage, and contract behavior.
+4. Enumerate all stale runtime terms still present in canonical documents and classify them as remove, rewrite, relocate-to-historical, or retain-with-context.
+5. Inspect `scripts/Validate-Docs.ps1` and identify exactly which stale-runtime rules exist today versus which additional rules are required.
+6. Identify migration-sensitive fallback paths that still exist in code and determine what evidence is needed before their removal can be planned.
+
+### Required Planning Output Before Any New Implementation
+
+Before Phase E execution begins, the repository must contain a planning artifact that includes:
+
+1. A concrete inventory of remaining documentation drift with file-level anchors.
+2. A validator hardening rule set derived from observed stale patterns.
+3. A distinction between immediate canonical corrections and historical relocations.
+4. A defined Phase E gate set covering docs updates, validator hardening, and regression validation.
+5. A defined handoff into Phase F for migration closure items that are not documentation-only.
+
+### Execution Constraint
+
+Until that evidence-backed Phase E plan exists, the repository should treat the current state as:
+
+1. Phase D complete and frozen.
+2. Remaining gaps known but not yet implementation-approved.
+3. Analysis and planning authorized.
+4. Implementation deferred pending plan resolution.

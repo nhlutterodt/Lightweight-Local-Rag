@@ -64,7 +64,7 @@ These features structurally modify the pipeline architecture to accomplish expon
 ### 2. Database Disaggregation (Scale > 100k Vectors)
 
 - **Goal:** Overcome the inherent memory ceiling of mapping unstructured `Float32Arrays` dynamically inside V8.
-- **Implementation Strategy:** When collections cross the 100k boundary (roughly 300MB+ in raw float matrices), transition the `.vectors.bin` flat-file abstraction to a local specialized vector engine. The highest contender is **SQLite + `sqlite-vss` extension**, maintaining the strictly portable, zero-dependency environment ethos without sacrificing speed via HNSW graph algorithms.
+- **Implementation Strategy:** When collections cross the 100k boundary (roughly 300MB+ in raw float matrices), transition the current embedded LanceDB layout to a specialized local vector engine if needed. The highest contender is **SQLite + `sqlite-vss` extension**, maintaining the strictly portable, zero-dependency environment ethos without sacrificing speed via HNSW graph algorithms.
 
 ### 3. Voice / Speech Telemetry (STT / TTS)
 

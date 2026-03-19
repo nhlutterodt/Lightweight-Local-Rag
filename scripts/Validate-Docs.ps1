@@ -13,6 +13,21 @@ $requiredObservabilityHeading = "## Implementation Anchors Reviewed"
 $requiredObservabilityAnchorCount = 5
 $requiredObservabilityClientPrefix = "gui/client/"
 $requiredObservabilityServerPrefix = "gui/server/"
+$staleRuntimeStates = @("canonical", "reference-contract")
+$staleRuntimeRules = @(
+    @{ Pattern = '(?i)(^|[^a-z0-9_])/api/ingest($|[^a-z0-9_])'; Label = '/api/ingest' },
+    @{ Pattern = '(?i)\bPowerShellRunner\.js\b'; Label = 'PowerShellRunner.js' },
+    @{ Pattern = '(?i)\.vectors\.bin'; Label = '.vectors.bin' },
+    @{ Pattern = '(?i)\.metadata\.json'; Label = '.metadata.json' },
+    @{ Pattern = '(?i)Asynchronously writes query telemetry to `?logs/query_log\.jsonl`?'; Label = 'active query_log.jsonl path claim' },
+    @{ Pattern = '(?i)`?logs/query_log\.jsonl`?\s+for per-query telemetry'; Label = 'active query_log.jsonl telemetry reference' },
+    @{ Pattern = '(?i)Async Write to query_log\.jsonl'; Label = 'active query_log.jsonl diagram reference' },
+    @{ Pattern = '(?i)^##\s+Query Logging\s+[—-]\s+`?logs/query_log\.jsonl`?'; Label = 'active query_log.jsonl logging section' },
+    @{ Pattern = '(?i)appends one JSONL (entry|record)\.?.{0,80}?`?logs/query_log\.jsonl`?'; Label = 'active query_log.jsonl append claim' },
+    @{ Pattern = '(?i)PowerShell for ingestion, chunking, and file processing'; Label = 'PowerShell live ingestion ownership claim' },
+    @{ Pattern = '(?i)\*\*PowerShell 7\+ \(pwsh\):\*\*\s*ingestion pipeline only'; Label = 'PowerShell ingestion pipeline only claim' },
+    @{ Pattern = '(?i)^###\s+PowerShell\s+\(ingestion path'; Label = 'PowerShell ingestion-path section heading' }
+)
 $observabilityDocsForChangeReview = @(
     "docs/observability_analysis.md",
     "docs/observability_execution_plan.md"
@@ -173,10 +188,11 @@ foreach ($file in $docsFiles) {
         }
     }
 
+    $docState = $null
     if ($parsed.Fields.ContainsKey("doc_state")) {
-        $state = $parsed.Fields["doc_state"].ToLowerInvariant()
-        if ($allowedStates -notcontains $state) {
-            $violations.Add("$relativePath -> Invalid doc_state '$state'. Allowed: $($allowedStates -join ', ')")
+        $docState = $parsed.Fields["doc_state"].ToLowerInvariant()
+        if ($allowedStates -notcontains $docState) {
+            $violations.Add("$relativePath -> Invalid doc_state '$docState'. Allowed: $($allowedStates -join ', ')")
         }
     }
 
@@ -185,6 +201,16 @@ foreach ($file in $docsFiles) {
         $canonicalRefNormalized = Normalize-DocPath -Path $canonicalRef
         if (-not $canonicalRefNormalized.StartsWith("docs/")) {
             $violations.Add("$relativePath -> canonical_ref must be a docs/ path. Found: $canonicalRef")
+        }
+    }
+
+    if ($docState -and ($staleRuntimeStates -contains $docState)) {
+        foreach ($rule in $staleRuntimeRules) {
+            if ($content -match $rule.Pattern) {
+                $violations.Add(
+                    "$relativePath -> Stale runtime term '$($rule.Label)' found in $docState doc_state. Update to Node runtime path/contract language."
+                )
+            }
         }
     }
 

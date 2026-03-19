@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: architecture
 canonical_ref: docs/Observability_Execution_Plan.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-18
 audience: engineering
 ---
 # Observability Execution Plan
@@ -89,7 +89,10 @@ The execution plan is anchored to the following implementation seams.
 
 - `gui/server/server.js`
 - `gui/server/lib/queryLogger.js`
-- `logs/query_log.jsonl`
+- `logs/query_log.v1.jsonl`
+- legacy archive path `logs/archive/query_log.legacy.<yyyyMMdd-HHmmss>.jsonl`
+- schema fields include `scoreSchemaVersion` and `scoreType`
+- trace fields include `retrievedCandidates`, `approvedContext`, `droppedCandidates`, and `answerReferences`
 
 ### Bridge And UI Log Sink
 
@@ -148,11 +151,11 @@ The execution plan is anchored to the following implementation seams.
 
 ## Observed Artifact Evidence
 
-Observed in the workspace on 2026-03-15:
+Observed in the workspace on 2026-03-15 (historical baseline); schema additions from 2026-03-17 require score-schema-aware parsing for new rows:
 
 ### Query Telemetry Baseline
 
-- `logs/query_log.jsonl` contains 41 records.
+- legacy `logs/query_log.jsonl` contains 41 historical records.
 - 17 of 41 records are `lowConfidence`, or 41.5%.
 - 39 of 41 records have blank or missing `retrievalMode`, or 95.1%.
 - Average `resultCount` is 3.22.
@@ -337,7 +340,8 @@ Create a reliable starting point by formalizing the current observability baseli
 
 - `docs/Observability_Analysis.md`
 - new baseline or inventory script under `scripts/` or `gui/server/scripts/`
-- `logs/query_log.jsonl`
+- `logs/query_log.v1.jsonl`
+- legacy archive path `logs/archive/query_log.legacy.<yyyyMMdd-HHmmss>.jsonl` and any retained pre-v1 `logs/query_log.jsonl` baseline samples
 - `logs/bridge-log.xml`
 - `PowerShell Scripts/Data/queue.json`
 - `logs/perf-baseline.json`
@@ -360,7 +364,7 @@ Create a reliable starting point by formalizing the current observability baseli
 ## Concrete Repo Work
 
 1. Add a baseline-generation script that summarizes current query logs, bridge XML, queue state, and perf baseline.
-2. Capture the current field inventory for `query_log.jsonl`, `bridge-log.xml`, and `queue.json`.
+2. Capture the current field inventory for `query_log.v1.jsonl`, legacy query-log artifacts when present, `bridge-log.xml`, and `queue.json`.
 3. Run the integrity checker in read-only mode and capture its summary as part of the baseline evidence.
 4. Identify parse hazards in current data such as missing `retrievalMode` or mixed threshold values.
 5. Record the baseline snapshot in a stable document or generated artifact that future phases can compare against.
@@ -450,7 +454,7 @@ Define the canonical telemetry contract the runtime will use going forward.
 
 ## Evidence And Rationale
 
-- `query_log.jsonl` is already parse-friendly and should remain the easiest reporting source.
+- `query_log.v1.jsonl` is the active parse-friendly reporting source; legacy `query_log.jsonl` rows remain useful only as historical baseline input.
 - PowerShell XML logs are richer for execution tracing and should not be discarded casually.
 - The current bridge XML path is minimal; without a shared contract it will keep diverging from the rest of the runtime.
 
@@ -580,7 +584,7 @@ Upgrade the runtime to persist the most valuable missing signals without degradi
 
 ## Concrete Repo Work
 
-1. Extend `query_log.jsonl` entries to include:
+1. Extend `query_log.v1.jsonl` entries to include:
    - `requestId`
    - `outcome`
    - `errorCode`
@@ -644,7 +648,8 @@ Turn raw telemetry into repeatable summaries that support decision making and op
 ## Primary Files
 
 - new report script under `scripts/` or `gui/server/scripts/`
-- `logs/query_log.jsonl`
+- `logs/query_log.v1.jsonl`
+- legacy query-log archives when historical comparison is required
 - `PowerShell Scripts/Data/queue.json`
 - `logs/bridge-log.xml`
 - `logs/perf-baseline.json`
@@ -837,7 +842,7 @@ These are rollout gates, not aspirational suggestions.
 
 1. Baseline parser coverage:
    - current first-party artifacts parse with zero fatal errors
-   - at minimum this includes `query_log.jsonl`, `bridge-log.xml`, `queue.json`, and `perf-baseline.json`
+   - at minimum this includes `query_log.v1.jsonl`, any retained legacy query-log baseline artifacts, `bridge-log.xml`, `queue.json`, and `perf-baseline.json`
 
 2. Query telemetry completeness for new records after Phase 3:
    - 100% of newly written query records include `requestId`
@@ -882,7 +887,7 @@ The highest-value first deliverables are:
 1. a baseline summary script
 2. a shared telemetry contract
 3. correlation IDs on query and queue paths
-4. durable timing fields in `query_log.jsonl`
+4. durable timing fields in `query_log.v1.jsonl`
 5. a single offline rollup command
 
 These create the most leverage with the least product risk.
@@ -916,7 +921,8 @@ This plan was grounded in:
 - `PowerShell Scripts/XMLLogger.ps1`
 - `PowerShell Scripts/ExecutionContext.ps1`
 - `PowerShell Scripts/PathUtils.ps1`
-- `logs/query_log.jsonl`
+- `logs/query_log.v1.jsonl`
+- legacy query-log baseline samples where historical drift analysis is required
 - `logs/bridge-log.xml`
 - `PowerShell Scripts/Data/queue.json`
 - `logs/perf-baseline.json`

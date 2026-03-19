@@ -2,12 +2,12 @@
 doc_state: canonical
 doc_owner: backend
 canonical_ref: docs/Technical_Component_Design.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-18
 audience: engineering
 ---
 # Technical Design Components
 
-This document deep-dives into the current RAG runtime: LanceDB retrieval, corpus-aware chunking, ingestion queue behavior, and SSE contracts.
+This document deep-dives into the current RAG runtime: LanceDB retrieval, corpus-aware chunking, ingestion queue behavior, grounding contracts, SSE contracts, and query telemetry.
 
 ---
 
@@ -40,11 +40,19 @@ This value is the citation `score`, query log `score`, and threshold input (`Min
 
 Filtered-vector mode uses these for constraints and boosts. Hybrid mode additionally evaluates lexical overlap over text and metadata fields.
 
+Retrieval and grounding also rely on persisted provenance fields carried through the LanceDB row shape:
+
+1. `SourceId`
+2. `ChunkHash`
+3. `LocatorType`
+
 ---
 
 ## 2. Smart Chunking
 
 Historically, uniform character splits caused noisy context and boundary breakage. The current chunker dispatches by file type and emits metadata-rich chunks.
+
+Every emitted chunk now includes a safe `locatorType` classification. Fine-grained locator fields such as line ranges, page ranges, and character offsets remain intentionally deferred until extractor evidence supports them.
 
 ### Markdown (`.md`)
 
@@ -121,10 +129,21 @@ Transmits top retrieved citations before response token streaming begins.
 {
   "type": "metadata",
   "citations": [
-    { "fileName": "manual.md", "score": 0.8123, "preview": "..." }
+    {
+      "chunkId": "chk_deadbeef12345678",
+      "sourceId": "src_1234567890abcdef",
+      "fileName": "manual.pdf",
+      "locatorType": "page-range",
+      "pageStart": 3,
+      "pageEnd": 3,
+      "score": 0.8123,
+      "preview": "..."
+    }
   ]
 }
 ```
+
+`pageStart` and `pageEnd` are optional citation fields. They are emitted only when the retrieved chunk carries persisted page-aware provenance and `locatorType` is `page-range`.
 
 #### 3: Transmitting (`message`)
 
@@ -140,6 +159,49 @@ Ollama token chunks stream as incremental message events.
 { "message": { "content": " answer" } }
 ```
 
+#### 4: Grounding Resolution (`answer_references`)
+
+Sent after token streaming completes. Contains the normalized chunk references the answer is allowed to claim.
+
+```json
+// data:
+{
+  "type": "answer_references",
+  "references": [
+    {
+      "chunkId": "chk_deadbeef12345678",
+      "sourceId": "src_1234567890abcdef",
+      "fileName": "manual.md"
+    }
+  ]
+}
+```
+
+#### 5: No Approved Evidence (`grounding_warning`)
+
+Sent when the runtime has no approved context to ground the answer.
+
+```json
+// data:
+{
+  "type": "grounding_warning",
+  "code": "NO_APPROVED_CONTEXT",
+  "message": "No approved context was available for grounded references."
+}
+```
+
+### Query Telemetry v1
+
+The current runtime appends one JSONL record per `/api/chat` request to `logs/query_log.v1.jsonl`.
+
+Each record includes:
+
+1. `scoreSchemaVersion: "v1"`
+2. `scoreType: "normalized-relevance"`
+3. retrieval trace sets: `retrievedCandidates`, `approvedContext`, `droppedCandidates`
+4. explicit `dropReason` values for dropped candidates
+5. final `answerReferences` emitted after stream completion
+
 See the canonical contract in `docs/SSE_CONTRACT.md` for authoritative wire details.
 
 ---
@@ -149,16 +211,16 @@ See the canonical contract in `docs/SSE_CONTRACT.md` for authoritative wire deta
 `lib/integrityCheck.js` diffs the JSON manifest (`DocumentParser`) against the LanceDB
 table (`VectorStore`) and reports four issue types:
 
-| Type | Description |
-|------|-------------|
-| `MISSING_VECTORS` | File is in the manifest but has no chunks in the DB |
-| `CHUNK_COUNT_MISMATCH` | Manifest chunk count differs from actual DB row count |
-| `MODEL_MISMATCH` | Chunk was embedded with a different model than currently configured |
-| `ORPHANED_VECTORS` | Vectors exist in the DB but have no manifest entry |
+| Type                   | Description                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| `MISSING_VECTORS`      | File is in the manifest but has no chunks in the DB                |
+| `CHUNK_COUNT_MISMATCH` | Manifest chunk count differs from actual DB row count              |
+| `MODEL_MISMATCH`       | Chunk was embedded with a different model than the current config   |
+| `ORPHANED_VECTORS`     | Vectors exist in the DB but have no manifest entry                 |
 
 CLI:
 
-```
+```text
 npm run check:integrity           # read-only scan; exit 0 = clean
 npm run check:integrity:repair    # scan + delete orphaned vectors
 ```
@@ -188,11 +250,11 @@ to trigger a full re-embedding — no manual steps required.
 LanceDB creates a new immutable version on every write. `lib/snapshotManager.js` wraps
 the native version API for three maintenance operations:
 
-| Operation | npm script | What it does |
-|-----------|-----------|--------------|
-| List | `snapshot:list` | Shows all versions with timestamps and current-version marker |
-| Rollback | `snapshot:rollback --to N` | `checkout(N)` → `restore()` sequence; manifest NOT modified |
-| Prune | `snapshot:prune [--keep-last N]` | Calls `cleanupOldVersions(cutoff)` keeping N most recent |
+| Operation | npm script                 | What it does                                            |
+| --------- | -------------------------- | ------------------------------------------------------- |
+| List      | `snapshot:list`            | Shows all versions with timestamps and current marker   |
+| Rollback  | `snapshot:rollback --to N` | `checkout(N)` → `restore()`; manifest is not modified   |
+| Prune     | `snapshot:prune [--keep-last N]` | Removes older versions while keeping the newest N |
 
 **Prune cutoff:** versions sorted oldest-first; `cutoffIdx = total − keepLast`;
 `cutoff = sorted[cutoffIdx].timestamp`; `cleanupOldVersions` removes `timestamp < cutoff`.

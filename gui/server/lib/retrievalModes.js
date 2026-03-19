@@ -159,6 +159,7 @@ export function buildRetrievalPlan({
         overfetchFactor: hybridOverfetchFactor,
         metadataFilters,
         strictFilter: explicit.strictFilter,
+        strictBackfill: explicit.strictFilter ? false : undefined,
         boosts: constraintsActive
           ? {
               fileName: 0.1,
@@ -185,6 +186,7 @@ export function buildRetrievalPlan({
       overfetchFactor: adaptiveOverfetch,
       metadataFilters,
       strictFilter: explicit.strictFilter,
+      strictBackfill: explicit.strictFilter ? false : undefined,
       boosts: constraintsActive
         ? {
             fileName: 0.2,

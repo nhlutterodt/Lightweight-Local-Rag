@@ -12,6 +12,9 @@ const MOCK_STATE = {
   entryByFileName: null,
   // sourceIds returned by getOrphans (not filenames)
   orphanSourceIds: ["src_orphan12345678"],
+  chunkerResult: [
+    { text: "Chunk 1", headerContext: "Ctx", locatorType: "section" },
+  ],
 };
 
 // --- Mocks ---
@@ -26,7 +29,7 @@ jest.unstable_mockModule("../lib/ollamaClient.js", () => ({
 jest.unstable_mockModule("../lib/documentParser.js", () => {
   return {
     DocumentParser: class MockDocParser {
-      constructor() {}
+      constructor() { this.entries = new Map(); }
       async load() {}
       async save() {}
       findByHash() {
@@ -60,7 +63,7 @@ jest.unstable_mockModule("../lib/smartChunker.js", () => {
   return {
     SmartTextChunker: class MockChunker {
       dispatchByExtension() {
-        return [{ text: "Chunk 1", headerContext: "Ctx", locatorType: "section" }];
+        return MOCK_STATE.chunkerResult;
       }
     },
   };
@@ -98,16 +101,23 @@ describe("IngestionQueue", () => {
     MOCK_STATE.hashMatch = null;
     MOCK_STATE.entryByFileName = null;
     MOCK_STATE.orphanSourceIds = ["src_orphan12345678"];
+    MOCK_STATE.chunkerResult = [
+      { text: "Chunk 1", headerContext: "Ctx", locatorType: "section" },
+    ];
 
     mockTable = {
       update: jest.fn(),
       delete: jest.fn(),
       add: jest.fn(),
+      schema: jest.fn().mockResolvedValue({
+        fields: [{ name: "SourceId" }, { name: "FileName" }, { name: "vector" }],
+      }),
     };
     mockDb = {
       tableNames: jest.fn().mockResolvedValue(["my_collection"]),
       openTable: jest.fn().mockResolvedValue(mockTable),
       createTable: jest.fn().mockResolvedValue(mockTable),
+      dropTable: jest.fn().mockResolvedValue(undefined),
     };
     lancedb.connect.mockResolvedValue(mockDb);
     ollamaClient.embed.mockResolvedValue(new Float32Array([0.5, 0.6]));
@@ -521,6 +531,37 @@ describe("IngestionQueue", () => {
       expect(writtenRecord.LocatorType).toBe("section");
     });
 
+    it("persists page bounds when chunk metadata includes pdf page ranges", async () => {
+      const testFilePath = path.join(tempDir, "file_pdf_like.md");
+      fs.writeFileSync(testFilePath, "pdf-like content");
+      MOCK_STATE.files = [testFilePath];
+      MOCK_STATE.chunkerResult = [
+        {
+          text: "Page-bounded chunk",
+          headerContext: "sample.pdf > Page 3",
+          locatorType: "page-range",
+          fileType: "pdf",
+          chunkType: "pdf-page",
+          structuralPath: "sample.pdf > Page 3",
+          pageStart: 3,
+          pageEnd: 3,
+        },
+      ];
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      expect(mockTable.add).toHaveBeenCalledWith([
+        expect.objectContaining({
+          LocatorType: "page-range",
+          PageStart: 3,
+          PageEnd: 3,
+          FileType: "pdf",
+          ChunkType: "pdf-page",
+        }),
+      ]);
+    });
+
     it("ChunkHash is stable: same inputs yield same ChunkHash across separate ingest runs", async () => {
       const testFilePath = path.join(tempDir, "file_chunkhash_stable.md");
       fs.writeFileSync(testFilePath, "stable chunk content");
@@ -748,6 +789,57 @@ describe("IngestionQueue", () => {
 
       expect(ollamaClient.embed).toHaveBeenCalled();
       expect(mockTable.add).not.toHaveBeenCalled(); // Failed to embed, so not added
+    });
+
+    it("drops pre-SourceId LanceDB table and clears manifest entries before re-embedding", async () => {
+      // Simulate a table that exists but has no SourceId column (old schema).
+      const oldSchemaTable = {
+        ...mockTable,
+        schema: jest.fn().mockResolvedValue({
+          fields: [{ name: "FileName" }, { name: "vector" }], // no SourceId
+        }),
+      };
+      mockDb.tableNames.mockResolvedValue(["my_collection"]);
+      mockDb.openTable.mockResolvedValueOnce(oldSchemaTable); // probe open
+      // Second openTable call (if any, e.g. for add) returns current mockTable
+      mockDb.openTable.mockResolvedValue(mockTable);
+
+      const testFilePath = path.join(tempDir, "migrated.md");
+      fs.writeFileSync(testFilePath, "content after migration");
+      MOCK_STATE.files = [testFilePath];
+
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const job = queue.enqueue(tempDir, "my_collection");
+        await queue.executeNodeIngest(job);
+
+        // Table was dropped
+        expect(mockDb.dropTable).toHaveBeenCalledWith("my_collection");
+        // After drop the file is treated as new content — embed is called
+        expect(ollamaClient.embed).toHaveBeenCalled();
+        // Log message identifies the migration action
+        const migrationLogs = logSpy.mock.calls.filter(
+          (args) => typeof args[0] === "string" && args[0].includes("pre-SourceId schema"),
+        );
+        expect(migrationLogs.length).toBeGreaterThan(0);
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("does NOT drop table when existing table already has SourceId column", async () => {
+      // Table exists and already has SourceId — no migration needed.
+      mockDb.tableNames.mockResolvedValue(["my_collection"]);
+      mockDb.openTable.mockResolvedValue(mockTable); // mockTable.schema returns SourceId
+
+      const testFilePath = path.join(tempDir, "already_v2.md");
+      fs.writeFileSync(testFilePath, "v2 content");
+      MOCK_STATE.files = [testFilePath];
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      expect(mockDb.dropTable).not.toHaveBeenCalled();
     });
   });
 

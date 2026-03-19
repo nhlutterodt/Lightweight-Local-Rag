@@ -6,6 +6,12 @@ import { loadConfig } from "../lib/configLoader.js";
 import { VectorStore } from "../lib/vectorStore.js";
 import { embed } from "../lib/ollamaClient.js";
 import { buildRetrievalPlan, RETRIEVAL_MODES } from "../lib/retrievalModes.js";
+import {
+  enforceQueryLogSchema,
+  resolveQueryLogPath,
+  SCORE_SCHEMA_VERSION,
+  SCORE_TYPE,
+} from "../lib/evalLogSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,6 +127,15 @@ async function runModeEvaluation({ mode, queries, config, store, dbDir }) {
         retrievalPlan.vectorOptions,
       );
       const latencyMs = performance.now() - t0;
+      for (const item of results) {
+        const score = item?.score;
+        if (!Number.isFinite(score) || score < 0 || score > 1) {
+          throw new Error(
+            `Score contract violation for query ${query.id} in mode ${mode}: expected normalized score in [0,1], got ${score}`,
+          );
+        }
+      }
+
       const topMatchRank = getTopMatchRank(
         results,
         query.expectedAnyFileNames,
@@ -179,6 +194,30 @@ function buildDeltas(baseSummary, otherSummary) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const allowLegacySchema = Boolean(args.get("allow-legacy-schema"));
+  const explicitQueryLogPath = args.get("query-log")
+    ? path.resolve(String(args.get("query-log")))
+    : null;
+
+  const queryLogSelection = resolveQueryLogPath({
+    workspaceRoot,
+    explicitQueryLogPath,
+    allowLegacySchema,
+  });
+  const schemaCheck = enforceQueryLogSchema({
+    queryLogPath: queryLogSelection.queryLogPath,
+    allowLegacySchema,
+  });
+  if (schemaCheck.checked) {
+    console.log(
+      `[Eval] Query log schema validated at ${queryLogSelection.queryLogPath} (${schemaCheck.rowCount} rows).`,
+    );
+  } else {
+    console.log(
+      `[Eval] Query log not found at ${queryLogSelection.queryLogPath}; skipping query-log schema check.`,
+    );
+  }
+
   const queriesPath = path.resolve(
     serverRoot,
     String(args.get("queries") || "tests/data/targeted_retrieval_queries.json"),
@@ -268,6 +307,8 @@ async function main() {
     JSON.stringify(
       {
         createdAt: new Date().toISOString(),
+        scoreSchemaVersion: SCORE_SCHEMA_VERSION,
+        scoreType: SCORE_TYPE,
         queriesPath,
         summaries: {
           vector: vectorSummary,

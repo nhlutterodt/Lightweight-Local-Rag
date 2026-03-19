@@ -46,6 +46,12 @@ describe("SmartTextChunker", () => {
   });
 
   describe("File-Type Dispatching", () => {
+    it("should route pdf files to splitPdfDocument", () => {
+      const spy = jest.spyOn(chunker, "splitPdfDocument").mockReturnValue([]);
+      chunker.dispatchByExtension("sample.pdf", { Pages: [] });
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
     it("should route powershell files to splitPowerShell", () => {
       const spy = jest.spyOn(chunker, "splitPowerShell").mockReturnValue([]);
       chunker.dispatchByExtension("test.ps1", "function a() {}");
@@ -199,6 +205,89 @@ filter Normalize-Value {
 
     it("should handle empty text", () => {
       expect(chunker.splitPlainText("  ", "test")).toEqual([]);
+    });
+  });
+
+  describe("PDF Chunker", () => {
+    it("should create page-bounded chunks from structured pdf page data", () => {
+      const pdfData = {
+        Pages: [
+          {
+            Texts: [
+              {
+                R: [
+                  { T: "Page%201%20intro%20text." },
+                  { T: "%20Still%20page%201." },
+                ],
+              },
+            ],
+          },
+          {
+            Texts: [
+              {
+                R: [
+                  { T: "Page%202%20body%20text." },
+                  { T: "%20Still%20page%202." },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const chunks = chunker.dispatchByExtension("sample.pdf", pdfData);
+
+      expect(chunks.length).toBe(2);
+      expect(chunks[0].fileType).toBe("pdf");
+      expect(chunks[0].chunkType).toBe("pdf-page");
+      expect(chunks[0].locatorType).toBe("page-range");
+      expect(chunks[0].pageStart).toBe(1);
+      expect(chunks[0].pageEnd).toBe(1);
+      expect(chunks[0].headerContext).toBe("sample.pdf > Page 1");
+      expect(chunks[0].text).toContain("Page 1 intro text.");
+      expect(chunks[1].pageStart).toBe(2);
+      expect(chunks[1].pageEnd).toBe(2);
+    });
+
+    it("should keep oversized pdf chunks within one page", () => {
+      const smallChunker = new SmartTextChunker(60, 10);
+      const pdfData = {
+        Pages: [
+          {
+            Texts: [
+              {
+                R: [
+                  {
+                    T: encodeURIComponent(
+                      "Sentence one on page one. Sentence two on page one. Sentence three on page one.",
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            Texts: [
+              {
+                R: [
+                  {
+                    T: encodeURIComponent(
+                      "Sentence one on page two. Sentence two on page two. Sentence three on page two.",
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const chunks = smallChunker.dispatchByExtension("oversized.pdf", pdfData);
+
+      expect(chunks.length).toBeGreaterThan(2);
+      expect(chunks.every((chunk) => chunk.locatorType === "page-range")).toBe(true);
+      expect(chunks.every((chunk) => chunk.pageStart === chunk.pageEnd)).toBe(true);
+      expect(new Set(chunks.map((chunk) => chunk.pageStart))).toEqual(new Set([1, 2]));
     });
   });
 

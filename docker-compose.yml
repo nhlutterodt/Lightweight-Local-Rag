@@ -10,13 +10,15 @@ services:
       - OLLAMA_URL=http://ollama:11434
       - SERVER_HOST=0.0.0.0
       - CORS_ORIGINS=http://localhost:5173;http://localhost:8080
-      # Allow the backend to browse the /data mounted volume
-      - ALLOWED_BROWSE_ROOTS=/data
+      # Allow the backend to browse both the /data ingest volume and /docs (re-ingest migration path)
+      - ALLOWED_BROWSE_ROOTS=/data;/docs
     volumes:
       # Named volume for persistent Vector Store DB
       - db_data:/app/PowerShell Scripts/Data
       # Bind mount for the /api/browse root
       - ./ingest_data:/data
+      # Read-only bind mount for Phase F v1.0->v2.0 re-ingest migration
+      - ./docs:/docs:ro
     depends_on:
       ollama:
         condition: service_healthy

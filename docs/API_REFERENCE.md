@@ -2,7 +2,7 @@
 doc_state: reference-contract
 doc_owner: api
 canonical_ref: docs/API_REFERENCE.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-17
 audience: engineering
 ---
 # Local RAG API Reference
@@ -147,7 +147,7 @@ Creates a Server-Sent Event stream that natively pushes an array of the queue jo
 
 **Payload Event:**
 
-```
+```json
 data: [{"id": "123", "status": "processing", "progress": 50}]
 ```
 
@@ -217,6 +217,24 @@ The primary RAG inference capability. It embeds the message natively, retrieves 
 2. `filtered-vector`: embedding ranking with optional metadata constraints and boosts.
 3. `hybrid`: weighted fusion of embedding relevance and lightweight lexical evidence.
 4. `semantic`: alias of `hybrid` for API compatibility.
+
+**SSE event sequence and payload highlights:**
+
+1. `status`
+2. `metadata` with `citations[]` including `chunkId`, `sourceId`, `fileName`, `headerContext`, `locatorType`, `score`, `preview`, and optional `pageStart` / `pageEnd` for `page-range` citations
+3. token events (`message.content`)
+4. `answer_references` (final grounding references)
+5. optional `grounding_warning` with `code` and `message` when no approved context exists
+
+**Server query telemetry schema highlights (`logs/query_log.v1.jsonl`):**
+
+- `scoreSchemaVersion: "v1"`
+- `scoreType: "normalized-relevance"`
+- `retrievedCandidates[]`
+- `approvedContext[]`
+- `droppedCandidates[]` (with `dropReason`, for example `context_budget_exceeded`)
+- `results[]` (approved-context projection retained for backward compatibility)
+- `answerReferences[]`
 
 **Recent Upgrades:**
 

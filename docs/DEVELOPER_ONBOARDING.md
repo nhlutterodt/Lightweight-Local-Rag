@@ -2,7 +2,7 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/DEVELOPER_ONBOARDING.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-18
 audience: contributors
 ---
 # Junior Developer Onboarding FAQ
@@ -15,17 +15,18 @@ Read this before touching the codebase.
 
 ## 1. Why are we using PowerShell instead of Python?
 
-**Q: Every AI project in the world uses Python. Why does this project use PowerShell for ingestion, chunking, and file processing?**
+**Q: Every AI project in the world uses Python. Why are we not building this around a Python runtime?**
 
 **A:** You are correct that Python is the industry standard. However, the exact goal of this project is to be a **zero-dependency, native desktop utility for Windows**.
 
 - Python requires installing interpreters, managing `venv` environments, compiling `pip` native dependencies (like `sqlite` or `hnswlib`), and polluting the user's system `PATH`.
-- PowerShell 7+ is pre-installed or strictly easier to distribute natively on Windows infrastructures.
+- Node.js owns the live ingestion and retrieval runtime because it avoids request-path cold starts and keeps queue orchestration, LanceDB access, and SSE behavior in one process.
+- PowerShell remains valuable for diagnostics, reporting, standalone tooling, and XML logging, and it is still easier to distribute natively on Windows infrastructures than a Python dependency stack.
 - _Rule:_ **Do not suggest migrating the backend to Python.** We are trading ecosystem convenience for zero-friction user distribution.
 
 ## 2. Why don't we use a real Vector Database like ChromaDB?
 
-**Q: I saw LanceDB in the codebase, but there's also a custom binary `.vectors.bin` store. Why didn't we just use a Dockerized Vector database or SQLite-vss?**
+**Q: I saw LanceDB in the codebase, but there are also legacy flat-file vector artifacts in older notes. Why didn't we just use a Dockerized Vector database or SQLite-vss?**
 
 **A:** Remember the premise: **Zero Dependencies.**
 
@@ -68,7 +69,7 @@ Read this before touching the codebase.
 1. `docs/API_REFERENCE.md` for the current endpoint contracts.
 2. `/api/health` for Ollama, vector-store, and local disk readiness.
 3. `/api/index/metrics` for collection and vector index state.
-4. `logs/query_log.jsonl` for per-query telemetry, retrieval results, and `lowConfidence` signals.
+4. `logs/query_log.v1.jsonl` for per-query telemetry, retrieval trace sets, score schema metadata, and `lowConfidence` signals.
 5. `PowerShell Scripts/Data/bridge-log.xml` for bridge and UI-originated XML log entries.
 6. PowerShell XML logs in `logs/` for utility and script execution details.
 

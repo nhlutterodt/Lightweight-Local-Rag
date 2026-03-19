@@ -149,7 +149,7 @@ initializeVectorStore();
 
 // Query Logger Setup
 const logger = new QueryLogger(
-  path.join(__dirname, "..", "..", "logs", "query_log.jsonl"),
+  path.join(__dirname, "..", "..", "logs", "query_log.v1.jsonl"),
 );
 
 const shutdown = async () => {
@@ -718,12 +718,56 @@ app.post("/api/chat", async (req, res) => {
     hybridLexicalWeight: config?.RAG?.HybridLexicalWeight || 0.35,
   });
 
+  const createFailureLogEntry = ({ reason, message, minScore }) => ({
+    timestamp: new Date().toISOString(),
+    query: lastUserMessage.substring(0, 500),
+    scoreSchemaVersion: "v1",
+    scoreType: "normalized-relevance",
+    embeddingModel: config?.RAG?.EmbeddingModel || "nomic-embed-text",
+    chatModel: model,
+    topK: config?.RAG?.TopK || 5,
+    minScore,
+    retrievalMode: resolvedRetrievalMode,
+    constraintsActive: retrievalPlan.constraintsActive,
+    retrievalOverfetchFactor: retrievalPlan.appliedOverfetchFactor || 1,
+    resultCount: 0,
+    results: [],
+    retrievedCandidates: [],
+    approvedContext: [],
+    droppedCandidates: [
+      {
+        score: 0,
+        chunkId: "",
+        sourceId: "",
+        fileName: collection,
+        headerContext: "None",
+        locatorType: "none",
+        preview: message || "",
+        dropReason: reason,
+      },
+    ],
+    lowConfidence: true,
+    answerReferences: [],
+  });
+
   try {
     console.log(
       `[RAG] Query: "${lastUserMessage}" | Collection: ${collection}`,
     );
 
+    const minScoreThresh = config?.RAG?.MinScore || 0.5;
+    const preDroppedCandidates = [];
+
     if (!store) {
+      logger
+        .log(
+          createFailureLogEntry({
+            reason: "collection_not_ready",
+            message: "No documents ingested yet.",
+            minScore: minScoreThresh,
+          }),
+        )
+        .catch((err) => console.error("[QueryLogger]", err));
       return res.status(503).json({ error: "No documents ingested yet." });
     }
 
@@ -757,15 +801,43 @@ app.post("/api/chat", async (req, res) => {
         `[RAG Warning] Error loading collection ${collection}:`,
         err.message,
       );
+      if (/does not exist yet|collection not found|failed to load/i.test(err.message)) {
+        preDroppedCandidates.push({
+          score: 0,
+          chunkId: "",
+          sourceId: "",
+          fileName: collection,
+          headerContext: "None",
+          locatorType: "none",
+          preview: err.message,
+          dropReason: "collection_not_ready",
+        });
+      }
     }
 
     // store.findNearest is now an async LanceDB projection
-    const results = await store.findNearest(
+    const searchOutput = await store.findNearest(
       queryVector,
       config.RAG.TopK,
       config.RAG.MinScore,
-      retrievalPlan.vectorOptions,
+      {
+        ...retrievalPlan.vectorOptions,
+        includeDropTrace: true,
+      },
     );
+    const results = Array.isArray(searchOutput)
+      ? searchOutput
+      : Array.isArray(searchOutput?.results)
+        ? searchOutput.results
+        : [];
+    const searchRetrievedCandidates =
+      !Array.isArray(searchOutput) && Array.isArray(searchOutput?.retrievedCandidates)
+        ? searchOutput.retrievedCandidates
+        : null;
+    const searchDroppedCandidates =
+      !Array.isArray(searchOutput) && Array.isArray(searchOutput?.droppedCandidates)
+        ? searchOutput.droppedCandidates
+        : [];
     const searchMs = performance.now() - tSearchStart;
 
     // 2. Build Context with pre-flight token budget enforcement
@@ -776,6 +848,7 @@ app.post("/api/chat", async (req, res) => {
     );
     let currentTokenEstimate = 0;
     const approvedResults = [];
+    const droppedResults = [];
 
     for (const r of results) {
       const chunkWords = (r.ChunkText || r.TextPreview || "").split(" ").length;
@@ -785,6 +858,7 @@ app.post("/api/chat", async (req, res) => {
         console.warn(
           `[RAG Context] Dropped citation ${r.FileName} to enforce token budget limit.`,
         );
+        droppedResults.push(r);
         continue;
       }
 
@@ -795,9 +869,20 @@ app.post("/api/chat", async (req, res) => {
     const contextText =
       approvedResults.length > 0
         ? approvedResults
-            .map(
-              (r) => `[Source: ${r.FileName}]\n${r.ChunkText || r.TextPreview}`,
-            )
+            .map((r) => {
+              const sid = deriveSourceId(r);
+              const cid = deriveChunkId(r, sid);
+              const locator = r.LocatorType || "none";
+              const headerAttr =
+                r.HeaderContext && r.HeaderContext !== "None"
+                  ? ` header="${r.HeaderContext}"`
+                  : "";
+              return (
+                `[CHUNK chunkId=${cid} sourceId=${sid} file=${r.FileName} locator=${locator}${headerAttr}]\n` +
+                `${r.ChunkText || r.TextPreview}\n` +
+                `[/CHUNK]`
+              );
+            })
             .join("\n\n")
         : "No relevant local documents found.";
 
@@ -812,21 +897,54 @@ app.post("/api/chat", async (req, res) => {
         locatorType: r.LocatorType || "none",
         score: r.score,
         preview: r.TextPreview,
+        ...((r.LocatorType === "page-range" &&
+          Number.isInteger(r.PageStart) &&
+          Number.isInteger(r.PageEnd))
+          ? {
+              pageStart: r.PageStart,
+              pageEnd: r.PageEnd,
+            }
+          : {}),
       };
     });
 
-    const logResults = citations.map((c) => ({
-      score: c.score,
-      chunkId: c.chunkId,
-      sourceId: c.sourceId,
-      fileName: c.fileName,
-      headerContext: c.headerContext,
-      preview: c.preview,
+    const toTraceCandidate = (r, extra = {}) => {
+      const sourceId = deriveSourceId(r);
+      const chunkId = deriveChunkId(r, sourceId);
+      return {
+        score: r.score,
+        chunkId,
+        sourceId,
+        fileName: r.FileName,
+        headerContext: r.HeaderContext || "None",
+        locatorType: r.LocatorType || "none",
+        preview: r.TextPreview || r.ChunkText || "",
+        ...extra,
+      };
+    };
+
+    const retrievedCandidates =
+      searchRetrievedCandidates || results.map((r) => toTraceCandidate(r));
+    const approvedContext = approvedResults.map((r) => toTraceCandidate(r));
+    const droppedCandidates = [
+      ...searchDroppedCandidates,
+      ...preDroppedCandidates,
+      ...droppedResults.map((r) =>
+        toTraceCandidate(r, { dropReason: "context_budget_exceeded" }),
+      ),
+    ];
+
+    const logResults = approvedContext.map((candidate) => ({
+      score: candidate.score,
+      chunkId: candidate.chunkId,
+      sourceId: candidate.sourceId,
+      fileName: candidate.fileName,
+      headerContext: candidate.headerContext,
+      preview: candidate.preview,
     }));
 
     // 3. Compute Logging Data
     const topScore = approvedResults.length > 0 ? approvedResults[0].score : 0;
-    const minScoreThresh = config?.RAG?.MinScore || 0.5;
     const lowConfidence =
       approvedResults.length === 0 ||
       topScore < Math.min(1, minScoreThresh + 0.1);
@@ -834,6 +952,8 @@ app.post("/api/chat", async (req, res) => {
     const logEntry = {
       timestamp: new Date().toISOString(),
       query: lastUserMessage.substring(0, 500),
+      scoreSchemaVersion: "v1",
+      scoreType: "normalized-relevance",
       embeddingModel: config?.RAG?.EmbeddingModel || "nomic-embed-text",
       chatModel: model,
       topK: config?.RAG?.TopK || 5,
@@ -843,6 +963,9 @@ app.post("/api/chat", async (req, res) => {
       retrievalOverfetchFactor: retrievalPlan.appliedOverfetchFactor || 1,
       resultCount: approvedResults.length,
       results: logResults,
+      retrievedCandidates,
+      approvedContext,
+      droppedCandidates,
       lowConfidence: lowConfidence,
     };
 
@@ -913,6 +1036,15 @@ app.post("/api/chat", async (req, res) => {
     res.end();
   } catch (err) {
     if (err.message.includes("mismatch")) {
+      logger
+        .log(
+          createFailureLogEntry({
+            reason: "embedding_model_mismatch",
+            message: err.message,
+            minScore: config?.RAG?.MinScore || 0.5,
+          }),
+        )
+        .catch((logErr) => console.error("[QueryLogger]", logErr));
       // If we haven't sent headers yet, we can return 500
       if (!res.headersSent) {
         return res

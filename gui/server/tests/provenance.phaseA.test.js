@@ -265,3 +265,104 @@ describe("Phase A provenance contract (test-first)", () => {
     expect(groundingWarning.message.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression test: "[Provenance] SourceId absent" warning must NOT fire when
+// every retrieval result carries a populated SourceId field.
+//
+// This guards against re-introducing the pre-v2 fallback path for any
+// collection that has been properly re-ingested with the v2 manifest schema.
+// ---------------------------------------------------------------------------
+describe("Provenance regression — no SourceId-absent warning on v2 results", () => {
+  let warnSpy;
+
+  beforeEach(() => {
+    // Capture console.warn calls so we can assert on provenance warnings.
+    warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    findNearestMock.mockClear();
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it("does not emit [Provenance] SourceId absent when all results carry SourceId", async () => {
+    // All chunks have SourceId and ChunkHash — fully migrated v2 rows.
+    findNearestMock.mockResolvedValueOnce([
+      {
+        score: 0.95,
+        ChunkText: "Chunk from v2 collection.",
+        TextPreview: "Chunk from v2 collection.",
+        FileName: "api_reference.md",
+        SourceId: "src_11c776ffa553c345",
+        ChunkHash: "abcdef1234567890",
+        chunkOrdinal: 0,
+        ChunkIndex: 0,
+        LocatorType: "section",
+        HeaderContext: "API > Reference",
+      },
+      {
+        score: 0.88,
+        ChunkText: "Second chunk from v2 collection.",
+        TextPreview: "Second chunk from v2 collection.",
+        FileName: "roadmap.md",
+        SourceId: "src_22d887ffb664d456",
+        ChunkHash: "fedcba9876543210",
+        chunkOrdinal: 1,
+        ChunkIndex: 1,
+        LocatorType: "section",
+        HeaderContext: "Roadmap > Phase 1",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/chat")
+      .send({
+        messages: [{ role: "user", content: "Describe the API reference." }],
+        collection: "TestIngest",
+      });
+
+    expect(response.status).toBe(200);
+
+    // No [Provenance] SourceId absent warning should have fired.
+    const provenanceWarnings = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === "string" && args[0].includes("[Provenance] SourceId absent"),
+    );
+    expect(provenanceWarnings).toHaveLength(0);
+  });
+
+  it("does emit [Provenance] SourceId absent for legacy rows missing SourceId (fallback still works)", async () => {
+    // Simulate a row from a pre-v2 collection that has no SourceId yet.
+    findNearestMock.mockResolvedValueOnce([
+      {
+        score: 0.75,
+        ChunkText: "Legacy chunk without SourceId.",
+        TextPreview: "Legacy chunk without SourceId.",
+        FileName: "legacy_doc.md",
+        // SourceId intentionally absent
+        ChunkHash: "legacy1234567890ab",
+        ChunkIndex: 0,
+        LocatorType: "section",
+        HeaderContext: "Legacy > Section",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/chat")
+      .send({
+        messages: [{ role: "user", content: "Legacy collection query." }],
+        collection: "TestIngest",
+      });
+
+    expect(response.status).toBe(200);
+
+    // The fallback path MUST have emitted at least one warning for the missing row.
+    // (deriveSourceId is called once per chunk context - SSE path may invoke it
+    // multiple times per result, so we only assert >= 1 and validate content.)
+    const provenanceWarnings = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === "string" && args[0].includes("[Provenance] SourceId absent"),
+    );
+    expect(provenanceWarnings.length).toBeGreaterThanOrEqual(1);
+    expect(provenanceWarnings[0][0]).toContain("legacy_doc.md");
+  });
+});

@@ -233,6 +233,7 @@ export class VectorStore {
       const shouldEvaluateMetadata = hasMetadataFilters || boosts !== null;
       const strictBackfillEnabled =
         strictFilter && hasMetadataFilters && options.strictBackfill !== false;
+      const includeDropTrace = options.includeDropTrace === true;
       const mode = VectorStore.normalizeString(options.mode) || "vector";
       const lexicalQueryTerms = VectorStore.tokenizeLexicalQuery(
         options.lexicalQuery,
@@ -255,10 +256,52 @@ export class VectorStore {
       const results = [];
       const strictMatches = [];
       const strictBackfillPool = [];
+      const traceRetrievedCandidates = [];
+      const traceDroppedCandidates = [];
+
+      const mapResult = (row, score, rankingScore = score) => ({
+        score,
+        rankingScore,
+        SourceId: row.SourceId,
+        ChunkHash: row.ChunkHash,
+        chunkOrdinal: row.chunkOrdinal ?? row.ChunkIndex,
+        ChunkText: row.Text || row.ChunkText,
+        TextPreview:
+          row.TextPreview || (row.Text ? row.Text.substring(0, 150) + "..." : ""),
+        FileName: row.FileName,
+        ChunkIndex: row.ChunkIndex,
+        HeaderContext: row.HeaderContext,
+        FileType: row.FileType,
+        ChunkType: row.ChunkType,
+        LocatorType: row.LocatorType,
+        StructuralPath: row.StructuralPath,
+        PageStart: row.PageStart,
+        PageEnd: row.PageEnd,
+      });
+
+      const toTraceCandidate = (mapped, extra = {}) => ({
+        score: mapped.score,
+        chunkId: mapped.ChunkHash ? `chk_${mapped.ChunkHash}` : "",
+        sourceId: mapped.SourceId || "",
+        fileName: mapped.FileName,
+        headerContext: mapped.HeaderContext || "None",
+        locatorType: mapped.LocatorType || "none",
+        preview: mapped.TextPreview || mapped.ChunkText || "",
+        ...extra,
+      });
 
       for (const r of rawResults) {
         const score = VectorStore.distanceToScore(r._distance);
+        const mappedBase = mapResult(r, score, score);
+        if (includeDropTrace) {
+          traceRetrievedCandidates.push(toTraceCandidate(mappedBase));
+        }
         if (score < minRelevance) {
+          if (includeDropTrace) {
+            traceDroppedCandidates.push(
+              toTraceCandidate(mappedBase, { dropReason: "below_min_score" }),
+            );
+          }
           continue;
         }
 
@@ -273,6 +316,13 @@ export class VectorStore {
 
           if (strictFilter && hasMetadataFilters && !matched) {
             if (!strictBackfillEnabled) {
+              if (includeDropTrace) {
+                traceDroppedCandidates.push(
+                  toTraceCandidate(mappedBase, {
+                    dropReason: "strict_filter_excluded",
+                  }),
+                );
+              }
               continue;
             }
           }
@@ -289,23 +339,7 @@ export class VectorStore {
         }
 
         // Map LanceDB generic response into the strict format expected by server.js / main.js
-        const mappedResult = {
-          score,
-          rankingScore,
-          SourceId: r.SourceId,
-          ChunkHash: r.ChunkHash,
-          chunkOrdinal: r.chunkOrdinal ?? r.ChunkIndex,
-          ChunkText: r.Text || r.ChunkText,
-          TextPreview:
-            r.TextPreview || (r.Text ? r.Text.substring(0, 150) + "..." : ""),
-          FileName: r.FileName,
-          ChunkIndex: r.ChunkIndex,
-          HeaderContext: r.HeaderContext,
-          FileType: r.FileType,
-          ChunkType: r.ChunkType,
-          LocatorType: r.LocatorType,
-          StructuralPath: r.StructuralPath,
-        };
+        const mappedResult = mapResult(r, score, rankingScore);
 
         if (strictBackfillEnabled) {
           if (isMetadataMatch) {
@@ -329,15 +363,31 @@ export class VectorStore {
         const backfilled = needed > 0 ? strictBackfillPool.slice(0, needed) : [];
         results.push(...strictMatches, ...backfilled);
 
-        return results
+        const finalResults = results
           .slice(0, requestedTopK)
           .map(({ rankingScore, ...result }) => result);
+        if (includeDropTrace) {
+          return {
+            results: finalResults,
+            retrievedCandidates: traceRetrievedCandidates,
+            droppedCandidates: traceDroppedCandidates,
+          };
+        }
+        return finalResults;
       }
 
-      return results
+      const finalResults = results
         .sort((left, right) => right.rankingScore - left.rankingScore)
         .slice(0, requestedTopK)
         .map(({ rankingScore, ...result }) => result);
+      if (includeDropTrace) {
+        return {
+          results: finalResults,
+          retrievedCandidates: traceRetrievedCandidates,
+          droppedCandidates: traceDroppedCandidates,
+        };
+      }
+      return finalResults;
     } catch (err) {
       console.error("[VectorStore] Search Error:", err);
       return [];

@@ -2,15 +2,15 @@
 doc_state: canonical
 doc_owner: maintainers
 canonical_ref: docs/RAG_Copilot_Instructions.md
-last_reviewed: 2026-03-15
+last_reviewed: 2026-03-18
 audience: engineering
 ---
 # RAG Pipeline — Copilot Instructions
 
 ## Project Overview
 
-A PowerShell + Node.js RAG (Retrieval-Augmented Generation) pipeline.
-Core flow: Ingest → Embed (Ollama) → Store (LanceDB + metadata) → Query → Augment → Generate.
+A Node.js-owned local RAG (Retrieval-Augmented Generation) runtime with PowerShell utility and standalone tooling.
+Core flow: Queue → Ingest → Embed (Ollama) → Store (LanceDB + metadata) → Query → Ground → Generate.
 
 Current retrieval runtime is Node.js + LanceDB with explicit retrieval modes:
 
@@ -23,8 +23,8 @@ Use this terminology consistently in all docs and API contracts.
 
 ## Tech Stack
 
-- **PowerShell 7+ (pwsh):** ingestion pipeline only — chunking, embedding, vector store writes
-- **Node.js 18+ (ESM):** HTTP server, hot query path, logging, ingestion queue
+- **PowerShell 7+ (pwsh):** utility layer, standalone tooling, XML diagnostics, and offline maintenance workflows
+- **Node.js 18+ (ESM):** HTTP server, hot query path, live ingestion queue, chunking, logging, and LanceDB writes
 - **C# (Add-Type inline):** `VectorMath.ps1` accelerator — cosine similarity, TopK sort
   (used by PowerShell ingestion path only — not in the Node.js hot path)
 - **Ollama:** local LLM and embedding model server (`config.RAG.OllamaUrl`)
@@ -36,12 +36,11 @@ Use this terminology consistently in all docs and API contracts.
 
 | File                  | Responsibility                                                   |
 | --------------------- | ---------------------------------------------------------------- |
-| `server.js`           | Express HTTP API, VectorStore boot, QueryLogger, SSE streaming   |
-| `lib/vectorStore.js`  | LanceDB retrieval wrapper with normalized score contract and retrieval modes |
-| `lib/ollamaClient.js` | Native fetch wrappers for Ollama embed + chat stream APIs        |
-| `lib/queryLogger.js`  | JSONL append logger, fire-and-forget, graceful flush on shutdown |
-| `IngestionQueue.js`   | FIFO queue with persistence and interrupted-job recovery         |
-| `PowerShellRunner.js` | Process spawning, JSON stream parsing, shell-injection guard     |
+| `server.js`                 | Express HTTP API, VectorStore boot, QueryLogger, SSE streaming |
+| `lib/vectorStore.js`        | LanceDB retrieval wrapper with normalized score contract and retrieval modes |
+| `lib/ollamaClient.js`       | Native fetch wrappers for Ollama embed + chat stream APIs |
+| `lib/queryLogger.js`        | JSONL append logger, fire-and-forget, graceful flush on shutdown |
+| `IngestionQueue.js`         | FIFO queue with persistence and interrupted-job recovery |
 | `lib/configLoader.js`       | Parses `config/project-config.psd1`; applies env-var overrides; exposes `config.RAG.*` |
 | `lib/documentParser.js`     | Manifest read/write, `schemaVersion` migrations, SHA256 change detection |
 | `lib/smartChunker.js`       | JS-native chunker dispatching by file type; emits `SmartChunk` objects with metadata |
@@ -49,11 +48,11 @@ Use this terminology consistently in all docs and API contracts.
 | `lib/modelMigration.js`     | Triggers full re-embedding queue when `EmbeddingModel` changes between restarts |
 | `lib/snapshotManager.js`    | LanceDB version list / rollback / prune via `checkout()` + `restore()` sequence |
 
-### PowerShell (ingestion path — do not move to Node.js)
+### PowerShell (utility and standalone tools — do not move live ingestion ownership back here)
 
 | File                    | Responsibility                                                            |
 | ----------------------- | ------------------------------------------------------------------------- |
-| `Ingest-Documents.ps1`  | Ingestion entry point, config loading, VectorStore hydration              |
+| `Ingest-Documents.ps1`  | Standalone ingestion utility and compatibility path, not the live queue-owned runtime |
 | `SmartTextChunker.ps1`  | `DispatchByExtension()`, sliding-window overlap, `FindSentenceBoundary()` |
 | `TextChunker.ps1`       | Base chunker with wired overlap                                           |
 | `VectorStore.ps1`       | Binary format read/write including model-name header                      |
@@ -71,20 +70,22 @@ Use this terminology consistently in all docs and API contracts.
 POST /api/chat
   → lib/ollamaClient.embed()        # native fetch → Ollama /api/embeddings
   → lib/vectorStore.findNearest()   # LanceDB vector retrieval (+ filtered/hybrid options)
-  → context from ChunkText          # full chunk content, not TextPreview
-  → event: citations SSE            # TextPreview + score + source metadata to client
+  → structured [CHUNK] context      # chunkId/sourceId/locatorType annotated prompt blocks
+  → event: metadata SSE             # preview + score + source metadata to client
   → lib/ollamaClient.chatStream()   # native fetch, SSE token stream to client
+  → event: answer_references SSE    # final normalized grounding references
+  → optional grounding_warning SSE  # deterministic no-approved-context signal
   → lib/queryLogger.log()           # fire-and-forget JSONL append, zero latency impact
 ```
 
-## Ingestion Path (PowerShell — no Node.js logic here)
+## Ingestion Path (Node queue + JS chunking)
 
 ```
-POST /api/ingest
+POST /api/queue
   → IngestionQueue.js
-  → PowerShellRunner.js → Ingest-Documents.ps1
-  → SmartTextChunker.DispatchByExtension()
-  → OllamaClient.ps1 → VectorStore.ps1 → .vectors.bin + .metadata.json
+  → SmartTextChunker.dispatchByExtension() in Node.js
+  → lib/ollamaClient.embed() for vector generation
+  → LanceDB table writes via lib/vectorStore.js compatible records
   → server.js hot-reloads store on completion
 ```
 
@@ -97,15 +98,15 @@ This project uses the following canonical retrieval terms:
 3. Hybrid search: vector relevance fused with lexical match evidence over retrieved chunk text and metadata.
 4. Semantic search: reserved alias of `hybrid`; do not use as a synonym for pure vector search.
 
-## Metadata Format — `.metadata.json`
+## Chunk Row Metadata (LanceDB row schema)
 
-Array of objects. Key fields consumed by the hot path:
+Per-row metadata fields consumed by the hot path:
 
-- `ChunkText` — full chunk content, used for RAG grounding (added P0)
-- `TextPreview` — first 100 chars, used for citations and query logs only
-- `FileName`, `ChunkIndex`, `HeaderContext` — source attribution
-- `IngestedAt` — timestamp, used by `Get-VectorMetrics.ps1`
-  Do not remove or rename these fields.
+- `ChunkText` / `TextPreview` — full context and citation preview
+- `SourceId`, `ChunkHash`, `chunkOrdinal` — provenance identity fields
+- `FileName`, `HeaderContext`, `LocatorType` — source attribution fields
+- `EmbeddingModel`, `IngestedAt` — compatibility and telemetry fields
+  Do not remove or rename these fields without synchronized migration updates.
 
 ## Configuration — `project-config.psd1`
 
@@ -129,7 +130,7 @@ RAG = @{
 - Node.js reads it via `loadProjectConfig()` in `server.js` — `config.RAG.*`
 - CLI parameter overrides still work — config sets defaults, args override them
 
-## Query Logging — `logs/query_log.jsonl`
+## Query Logging — `logs/query_log.v1.jsonl`
 
 Every `/api/chat` request appends one JSONL entry. Schema:
 
@@ -137,21 +138,28 @@ Every `/api/chat` request appends one JSONL entry. Schema:
 {
   "timestamp": "ISO-8601",
   "query": "truncated to 500 chars",
+  "scoreSchemaVersion": "v1",
+  "scoreType": "normalized-relevance",
   "embeddingModel": "nomic-embed-text",
   "chatModel": "llama3.1:8b",
   "topK": 5,
   "minScore": 0.003,
   "resultCount": 3,
   "lowConfidence": false,
-  "results": [
+  "retrievedCandidates": [
     {
       "score": 0.847,
+      "chunkId": "chk_deadbeef12345678",
+      "sourceId": "src_1234567890abcdef",
       "fileName": "...",
-      "chunkIndex": 2,
+      "locatorType": "section",
       "headerContext": "...",
       "preview": "..."
     }
-  ]
+  ],
+  "approvedContext": [],
+  "droppedCandidates": [],
+  "answerReferences": []
 }
 ```
 
@@ -216,7 +224,7 @@ Treat failures in either command as blockers.
 - `VectorMath.ps1` C# accelerator — correct and performant, not part of the hot path
 - `SourceManifest.ps1` change detection and orphan cleanup logic
 - `IngestionQueue.js` FIFO persistence and interrupted-job recovery
-- `PowerShellRunner.js` process spawning and JSON stream parsing
+- `IngestionQueue.js` queue persistence, migration guards, and interrupted-job recovery
 
 ## Deferred — Finding #3 (Vector Index Pre-filtering)
 

@@ -9,6 +9,7 @@ class SmartChunk {
     fileType = "unknown",
     structuralPath = null,
     locatorType = "none",
+    metadata = {},
   ) {
     this.text = text;
     this.headerContext = headerContext;
@@ -17,6 +18,7 @@ class SmartChunk {
     this.fileType = fileType;
     this.structuralPath = structuralPath || headerContext;
     this.locatorType = locatorType || "none";
+    Object.assign(this, metadata);
   }
 }
 
@@ -36,6 +38,8 @@ class SmartTextChunker {
     switch (ext) {
       case ".md":
         return "markdown";
+      case ".pdf":
+        return "pdf";
       case ".ps1":
       case ".psm1":
         return "powershell";
@@ -81,6 +85,8 @@ class SmartTextChunker {
     const fileType = SmartTextChunker.deriveFileType(ext);
 
     switch (ext) {
+      case ".pdf":
+        return this.splitPdfDocument(content, fileName);
       case ".ps1":
       case ".psm1":
         return this.splitPowerShell(content, fileName);
@@ -94,6 +100,65 @@ class SmartTextChunker {
         // .txt and all others — paragraph-split
         return this.splitPlainText(content, fileName, fileType);
     }
+  }
+
+  static decodePdfTextRun(value) {
+    try {
+      return decodeURIComponent(value || "");
+    } catch {
+      return value || "";
+    }
+  }
+
+  static extractPdfPageText(page) {
+    if (!page || !Array.isArray(page.Texts)) {
+      return "";
+    }
+
+    return page.Texts.map((textBlock) =>
+      (textBlock?.R || [])
+        .map((run) => SmartTextChunker.decodePdfTextRun(run?.T))
+        .join(""),
+    )
+      .join("\n")
+      .trim();
+  }
+
+  splitPdfDocument(pdfData, fileName) {
+    if (!pdfData) return [];
+
+    if (typeof pdfData === "string") {
+      return this.splitPlainText(pdfData, fileName, "pdf");
+    }
+
+    const pages = Array.isArray(pdfData.Pages) ? pdfData.Pages : [];
+    if (pages.length === 0) {
+      return [];
+    }
+
+    const chunks = [];
+
+    for (let index = 0; index < pages.length; index += 1) {
+      const pageNumber = index + 1;
+      const pageText = SmartTextChunker.extractPdfPageText(pages[index]);
+      if (!pageText) {
+        continue;
+      }
+
+      const context = `${fileName} > Page ${pageNumber}`;
+      this.processSection(pageText, context, chunks, {
+        fileType: "pdf",
+        chunkType: "pdf-page",
+        structuralPath: context,
+        locatorType: "page-range",
+        chunkMetadata: {
+          pageStart: pageNumber,
+          pageEnd: pageNumber,
+        },
+      });
+    }
+
+    return chunks;
   }
 
   // --- Code Chunker (JS) ---
@@ -465,6 +530,7 @@ class SmartTextChunker {
     const chunkType = metadata.chunkType || "content";
     const structuralPath = metadata.structuralPath || context;
     const locatorType = metadata.locatorType || "none";
+    const chunkMetadata = metadata.chunkMetadata || {};
 
     // Fits in one chunk — emit directly
     if (text.length <= this.maxChunkSize) {
@@ -477,6 +543,7 @@ class SmartTextChunker {
           fileType,
           structuralPath,
           locatorType,
+          chunkMetadata,
         ),
       );
       return;
@@ -502,6 +569,7 @@ class SmartTextChunker {
               fileType,
               structuralPath,
               locatorType,
+              chunkMetadata,
             ),
           );
 
@@ -543,6 +611,7 @@ class SmartTextChunker {
                 fileType,
                 structuralPath,
                 locatorType,
+                chunkMetadata,
               ),
             );
 
@@ -567,6 +636,7 @@ class SmartTextChunker {
           fileType,
           structuralPath,
           locatorType,
+          chunkMetadata,
         ),
       );
     }
