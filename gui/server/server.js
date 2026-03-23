@@ -21,10 +21,6 @@ import { bridgeLogger } from "./lib/xmlLogger.js";
 import * as lancedb from "@lancedb/lancedb";
 import { DocumentParser } from "./lib/documentParser.js";
 import { triggerModelMigration } from "./lib/modelMigration.js";
-import {
-  stableIdentityHash,
-  computeChunkHash,
-} from "./lib/sourceIdentity.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,32 +49,24 @@ const PS_SCRIPTS_DIR = config?.Paths?.ScriptsDirectory
 const ingestQueue = new IngestionQueue();
 if (config) ingestQueue.setConfig(config);
 
-function deriveSourceId(result) {
-  // Prefer ingest-time canonical identity (rename-stable, content-anchored).
-  if (result?.SourceId && typeof result.SourceId === "string") {
-    return result.SourceId;
+function readCanonicalIds(result) {
+  if (
+    typeof result?.SourceId === "string" &&
+    result.SourceId &&
+    typeof result?.ChunkHash === "string" &&
+    result.ChunkHash
+  ) {
+    return {
+      sourceId: result.SourceId,
+      chunkId: `chk_${result.ChunkHash}`,
+    };
   }
-  // Legacy fallback for records ingested before the v2 identity migration.
-  // Logs an auditable warning; re-ingesting the collection will eliminate these.
-  // Once all collections are on v2 manifests this branch can be removed.
+
   const fileName = result?.FileName || "unknown";
   console.warn(
-    `[Provenance] SourceId absent for "${fileName}" — falling back to FileName hash. Re-ingest collection to migrate to canonical sourceId.`,
+    `[Provenance] Dropping non-canonical row for "${fileName}" (missing SourceId/ChunkHash). Re-ingest collection to canonical schema.`,
   );
-  return `src_${stableIdentityHash([fileName])}`;
-}
-
-function deriveChunkId(result, sourceId) {
-  // Prefer ingest-time canonical chunk hash stored in the record.
-  if (result?.ChunkHash && typeof result.ChunkHash === "string") {
-    return `chk_${result.ChunkHash}`;
-  }
-  // Legacy fallback for records written before ChunkHash was stored.
-  return `chk_${stableIdentityHash([
-    sourceId,
-    result?.ChunkIndex,
-    result?.ChunkText || result?.TextPreview || "",
-  ])}`;
+  return null;
 }
 
 // ==========================================
@@ -866,12 +854,24 @@ app.post("/api/chat", async (req, res) => {
       currentTokenEstimate += chunkTokens;
     }
 
+    const canonicalApprovedResults = approvedResults
+      .map((r) => {
+        const canonicalIds = readCanonicalIds(r);
+        if (!canonicalIds) return null;
+        return {
+          ...r,
+          __canonicalSourceId: canonicalIds.sourceId,
+          __canonicalChunkId: canonicalIds.chunkId,
+        };
+      })
+      .filter(Boolean);
+
     const contextText =
-      approvedResults.length > 0
-        ? approvedResults
+      canonicalApprovedResults.length > 0
+        ? canonicalApprovedResults
             .map((r) => {
-              const sid = deriveSourceId(r);
-              const cid = deriveChunkId(r, sid);
+              const sid = r.__canonicalSourceId;
+              const cid = r.__canonicalChunkId;
               const locator = r.LocatorType || "none";
               const headerAttr =
                 r.HeaderContext && r.HeaderContext !== "None"
@@ -886,9 +886,9 @@ app.post("/api/chat", async (req, res) => {
             .join("\n\n")
         : "No relevant local documents found.";
 
-    const citations = approvedResults.map((r) => {
-      const sourceId = deriveSourceId(r);
-      const chunkId = deriveChunkId(r, sourceId);
+    const citations = canonicalApprovedResults.map((r) => {
+      const sourceId = r.__canonicalSourceId;
+      const chunkId = r.__canonicalChunkId;
       return {
         chunkId,
         sourceId,
@@ -897,6 +897,12 @@ app.post("/api/chat", async (req, res) => {
         locatorType: r.LocatorType || "none",
         score: r.score,
         preview: r.TextPreview,
+        ...(typeof r.SectionPath === "string" && r.SectionPath
+          ? { sectionPath: r.SectionPath }
+          : {}),
+        ...(typeof r.SymbolName === "string" && r.SymbolName
+          ? { symbolName: r.SymbolName }
+          : {}),
         ...((r.LocatorType === "page-range" &&
           Number.isInteger(r.PageStart) &&
           Number.isInteger(r.PageEnd))
@@ -909,8 +915,11 @@ app.post("/api/chat", async (req, res) => {
     });
 
     const toTraceCandidate = (r, extra = {}) => {
-      const sourceId = deriveSourceId(r);
-      const chunkId = deriveChunkId(r, sourceId);
+      const canonicalIds = readCanonicalIds(r);
+      if (!canonicalIds) return null;
+
+      const sourceId = canonicalIds.sourceId;
+      const chunkId = canonicalIds.chunkId;
       return {
         score: r.score,
         chunkId,
@@ -918,21 +927,29 @@ app.post("/api/chat", async (req, res) => {
         fileName: r.FileName,
         headerContext: r.HeaderContext || "None",
         locatorType: r.LocatorType || "none",
+        ...(typeof r.SectionPath === "string" && r.SectionPath
+          ? { sectionPath: r.SectionPath }
+          : {}),
+        ...(typeof r.SymbolName === "string" && r.SymbolName
+          ? { symbolName: r.SymbolName }
+          : {}),
         preview: r.TextPreview || r.ChunkText || "",
         ...extra,
       };
     };
 
     const retrievedCandidates =
-      searchRetrievedCandidates || results.map((r) => toTraceCandidate(r));
-    const approvedContext = approvedResults.map((r) => toTraceCandidate(r));
+      searchRetrievedCandidates || results.map((r) => toTraceCandidate(r)).filter(Boolean);
+    const approvedContext = canonicalApprovedResults
+      .map((r) => toTraceCandidate(r))
+      .filter(Boolean);
     const droppedCandidates = [
       ...searchDroppedCandidates,
       ...preDroppedCandidates,
       ...droppedResults.map((r) =>
         toTraceCandidate(r, { dropReason: "context_budget_exceeded" }),
       ),
-    ];
+    ].filter(Boolean);
 
     const logResults = approvedContext.map((candidate) => ({
       score: candidate.score,
@@ -944,9 +961,9 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     // 3. Compute Logging Data
-    const topScore = approvedResults.length > 0 ? approvedResults[0].score : 0;
+    const topScore = canonicalApprovedResults.length > 0 ? canonicalApprovedResults[0].score : 0;
     const lowConfidence =
-      approvedResults.length === 0 ||
+      canonicalApprovedResults.length === 0 ||
       topScore < Math.min(1, minScoreThresh + 0.1);
 
     const logEntry = {
@@ -961,7 +978,7 @@ app.post("/api/chat", async (req, res) => {
       retrievalMode: resolvedRetrievalMode,
       constraintsActive: retrievalPlan.constraintsActive,
       retrievalOverfetchFactor: retrievalPlan.appliedOverfetchFactor || 1,
-      resultCount: approvedResults.length,
+      resultCount: canonicalApprovedResults.length,
       results: logResults,
       retrievedCandidates,
       approvedContext,
@@ -1022,7 +1039,7 @@ app.post("/api/chat", async (req, res) => {
       `data: ${JSON.stringify({ type: "answer_references", references: answerReferences })}\n\n`,
     );
 
-    if (approvedResults.length === 0) {
+    if (canonicalApprovedResults.length === 0) {
       res.write(
         `data: ${JSON.stringify({
           type: "grounding_warning",

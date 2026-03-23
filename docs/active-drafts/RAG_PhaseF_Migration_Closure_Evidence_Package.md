@@ -20,18 +20,25 @@ Execution update at this revision:
 
 1. The 35 dead host-side collections have been retired.
 2. The 2 partial host-side collections have been resolved by retiring their
-	stale flat-file artifacts.
+  stale flat-file artifacts.
 3. The stale live manifests for `GoldenTest`, `ProjectDocs`, and `TestIPC`
-	have been removed from the container volume after verifying those
-	collections had no matching LanceDB tables.
+  have been removed from the container volume after verifying those
+  collections had no matching LanceDB tables.
 4. The 6 `TestIngest*` collections have already been re-ingested and verified
-	on `Version=2.0` in the live container volume.
+  on `Version=2.0` in the live container volume.
 5. The 6 retained host-side `TestIngest*` manifests have been synchronized from
-	the live container and now also reflect `Version=2.0` plus persisted
-	`SourceId` values.
+  the live container and now also reflect `Version=2.0` plus persisted
+  `SourceId` values.
 6. The server container has been explicitly rebuilt with
-	`docker compose up --build -d server` after the migration work to ensure the
-	running image matches the analyzed source state.
+  `docker compose up --build -d server` after the migration work to ensure the
+  running image matches the analyzed source state.
+7. A fresh 2026-03-22 host manifest inventory confirmed the retained workspace
+  copy is now entirely `Version=2.0` with no missing `SourceId` or `SourcePath`
+  entries; see `tmp/phasef-manifest-summary.json` and
+  `docs/active-drafts/RAG_PhaseF_Migration_Readiness_Note.md`.
+8. A fresh 2026-03-22 integrity scan of `TestIngestNodeFinal` found `48`
+  `MISSING_VECTORS` issues plus `1` `ORPHANED_VECTORS` issue; fallback
+  retirement therefore remains blocked and Phase F is not ready for closure.
 
 ---
 
@@ -102,7 +109,7 @@ Observed after cleanup on 2026-03-19:
 3. `Version=2.0` host manifests: `6`
 4. All retained host manifests are the `TestIngest*` workspace-copy files.
 5. The 35 dead collections and the 2 partial collections are no longer present
-	in the retained host artifact set.
+  in the retained host artifact set.
 
 Observed in the live container volume on 2026-03-19:
 
@@ -110,31 +117,31 @@ Observed in the live container volume on 2026-03-19:
 2. `Version=1.0` live manifests: `5`
 3. `Version=2.0` live manifests: `6`
 4. The 6 live `Version=2.0` manifests are the migrated `TestIngest*`
-	collections.
+  collections.
 5. The 5 remaining `Version=1.0` live manifests are unrelated to the retired
-	dead/partial host artifact set: `CleanTest`, `PDFTest`, `PDFTestFinal`,
-	`PDFTestV2`, and `PlayStoreFinal`.
+  dead/partial host artifact set: `CleanTest`, `PDFTest`, `PDFTestFinal`,
+  `PDFTestV2`, and `PlayStoreFinal`.
 
 Representative retained host manifest:
 
 1. `PowerShell Scripts/Data/TestIngestNodeFinal.manifest.json` is now
-	`Version: "2.0"` and its entries carry persisted `SourceId` values.
+  `Version: "2.0"` and its entries carry persisted `SourceId` values.
 
 Representative migrated live manifest:
 
 1. `/app/PowerShell Scripts/Data/TestIngestNodeFinal.manifest.json` is now
-	`Version: "2.0"` in the live container volume and its entries carry
-	`SourceId` plus `/docs/...` `SourcePath` values.
+  `Version: "2.0"` in the live container volume and its entries carry
+  `SourceId` plus `/docs/...` `SourcePath` values.
 
 Immediate implication:
 
 1. The retained workspace copy is no longer mixed-state across dead and partial
-	collections.
+  collections.
 2. Repository-wide migration closure has not yet happened because runtime
-	fallback code is still live, even though both the live container volume and
-	the retained workspace copy now show the `TestIngest*` collections on v2.0.
+  fallback code is still live, even though both the live container volume and
+  the retained workspace copy now show the `TestIngest*` collections on v2.0.
 3. The manifest migration fallback is no longer justified by dead/partial host
-	artifacts; it is justified only by the remaining runtime compatibility scope.
+  artifacts; it is justified only by the remaining runtime compatibility scope.
 
 ### Container Posture Baseline
 
@@ -143,20 +150,20 @@ Observed after rebuild on 2026-03-19:
 1. The server container was refreshed with `docker compose up --build -d server`.
 2. Post-rebuild `/api/health` returned `status: healthy`.
 3. The running container still reports `MANIFEST_KNOWN_VERSIONS = ["1.0", "2.0"]`
-	and `MANIFEST_VERSION = "2.0"` in `gui/server/lib/documentParser.js`.
+  and `MANIFEST_VERSION = "2.0"` in `gui/server/lib/documentParser.js`.
 4. The running container still includes the `pre-SourceId schema` LanceDB
-	table-drop guard in `gui/server/IngestionQueue.js`.
+  table-drop guard in `gui/server/IngestionQueue.js`.
 5. `docker-compose.yml` remains aligned with the migration posture:
-	`ALLOWED_BROWSE_ROOTS=/data;/docs` and `./docs:/docs:ro` are present for the
-	re-ingest path that was used during the TestIngest migration.
+  `ALLOWED_BROWSE_ROOTS=/data;/docs` and `./docs:/docs:ro` are present for the
+  re-ingest path that was used during the TestIngest migration.
 
 Immediate implication:
 
 1. The current container posture matches the analyzed migration state.
 2. The stale-build failure mode that originally blocked v2.0 manifest writes is
-	not the current risk anymore.
+  not the current risk anymore.
 3. Remaining Phase F work is about runtime fallback retirement and scope
-	decisions, not about container drift.
+  decisions, not about container drift.
 
 ### Queue-State Baseline
 
@@ -187,18 +194,18 @@ Immediate implication:
 Observed after cleanup on 2026-03-19:
 
 1. The stale host-side flat-file artifacts for `GoldenTest`, `ProjectDocs`, and
-	`TestIPC` have been removed.
+  `TestIPC` have been removed.
 2. The dead/partial host artifact cleanup is complete for the set identified in
-	the manifest inventory report.
+  the manifest inventory report.
 3. Historical flat-file artifacts may still exist elsewhere in the workspace,
-	but they no longer include the retired Phase F dead/partial collections.
+  but they no longer include the retired Phase F dead/partial collections.
 
 Immediate implication:
 
 1. Phase F can now distinguish completed retained-artifact cleanup from the
-	still-open runtime fallback retirement work.
+  still-open runtime fallback retirement work.
 2. Removing code fallbacks remains a separate task from deleting stale host-side
-	historical files, but the highest-noise host artifacts are gone.
+  historical files, but the highest-noise host artifacts are gone.
 
 ---
 
@@ -347,13 +354,13 @@ Phase F implication:
 The following blockers are currently evidence-backed and prevent Phase F closure.
 
 1. The retained workspace copy and the live container volume are now aligned for
-	the 6 `TestIngest*` collections, but runtime fallback code is still live.
+  the 6 `TestIngest*` collections, but runtime fallback code is still live.
 2. Retrieval fallback code for missing `SourceId` and missing `ChunkHash` is still live.
 3. `ChunkIndex` compatibility remains active in both write and read paths.
 4. Model migration still depends on manifest `SourcePath` completeness.
 5. Legacy query-log analysis remains intentionally available via explicit opt-in.
 6. Remaining closure work is now runtime-focused; the dead/partial host artifact
-	cleanup identified by the manifest inventory report has been executed.
+  cleanup identified by the manifest inventory report has been executed.
 
 ---
 
@@ -403,9 +410,9 @@ Phase F is complete only when all of the following are true.
 ## Recommended Next Actions
 
 1. Add a targeted operational check that fails if approved retrieval emits the
-	`SourceId absent` warning for the migrated `TestIngest*` collections.
+  `SourceId absent` warning for the migrated `TestIngest*` collections.
 2. Decide whether the 5 unrelated live `Version=1.0` manifests
-	(`CleanTest`, `PDFTest`, `PDFTestFinal`, `PDFTestV2`, `PlayStoreFinal`)
-	are in scope for Phase F closure or should be deferred as separate cleanup.
+  (`CleanTest`, `PDFTest`, `PDFTestFinal`, `PDFTestV2`, `PlayStoreFinal`)
+  are in scope for Phase F closure or should be deferred as separate cleanup.
 3. Add an operator-facing migration note separating completed retained-artifact
-	cleanup from still-open runtime fallback retirement.
+  cleanup from still-open runtime fallback retirement.

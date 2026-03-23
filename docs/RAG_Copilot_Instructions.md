@@ -34,39 +34,39 @@ Use this terminology consistently in all docs and API contracts.
 
 ### Node.js (hot path — do not introduce PowerShell here)
 
-| File                  | Responsibility                                                   |
-| --------------------- | ---------------------------------------------------------------- |
-| `server.js`                 | Express HTTP API, VectorStore boot, QueryLogger, SSE streaming |
-| `lib/vectorStore.js`        | LanceDB retrieval wrapper with normalized score contract and retrieval modes |
-| `lib/ollamaClient.js`       | Native fetch wrappers for Ollama embed + chat stream APIs |
-| `lib/queryLogger.js`        | JSONL append logger, fire-and-forget, graceful flush on shutdown |
-| `IngestionQueue.js`         | FIFO queue with persistence and interrupted-job recovery |
-| `lib/configLoader.js`       | Parses `config/project-config.psd1`; applies env-var overrides; exposes `config.RAG.*` |
-| `lib/documentParser.js`     | Manifest read/write, `schemaVersion` migrations, SHA256 change detection |
-| `lib/smartChunker.js`       | JS-native chunker dispatching by file type; emits `SmartChunk` objects with metadata |
-| `lib/integrityCheck.js`     | Diffs manifest vs. LanceDB table; reports MISSING_VECTORS, ORPHANED_VECTORS, MODEL_MISMATCH |
-| `lib/modelMigration.js`     | Triggers full re-embedding queue when `EmbeddingModel` changes between restarts |
-| `lib/snapshotManager.js`    | LanceDB version list / rollback / prune via `checkout()` + `restore()` sequence |
+| File | Responsibility |
+| --- | --- |
+| `server.js` | Express HTTP API, VectorStore boot, QueryLogger, SSE streaming |
+| `lib/vectorStore.js` | LanceDB retrieval wrapper with normalized score contract and retrieval modes |
+| `lib/ollamaClient.js` | Native fetch wrappers for Ollama embed + chat stream APIs |
+| `lib/queryLogger.js` | JSONL append logger, fire-and-forget, graceful flush on shutdown |
+| `IngestionQueue.js` | FIFO queue with persistence and interrupted-job recovery |
+| `lib/configLoader.js` | Parses `config/project-config.psd1`; applies env-var overrides; exposes `config.RAG.*` |
+| `lib/documentParser.js` | Manifest read/write, `schemaVersion` migrations, SHA256 change detection |
+| `lib/smartChunker.js` | JS-native chunker dispatching by file type; emits `SmartChunk` objects with metadata |
+| `lib/integrityCheck.js` | Diffs manifest vs. LanceDB table; reports MISSING_VECTORS, ORPHANED_VECTORS, MODEL_MISMATCH |
+| `lib/modelMigration.js` | Triggers full re-embedding queue when `EmbeddingModel` changes between restarts |
+| `lib/snapshotManager.js` | LanceDB version list / rollback / prune via `checkout()` + `restore()` sequence |
 
 ### PowerShell (utility and standalone tools — do not move live ingestion ownership back here)
 
-| File                    | Responsibility                                                            |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `Ingest-Documents.ps1`  | Standalone ingestion utility and compatibility path, not the live queue-owned runtime |
-| `SmartTextChunker.ps1`  | `DispatchByExtension()`, sliding-window overlap, `FindSentenceBoundary()` |
-| `TextChunker.ps1`       | Base chunker with wired overlap                                           |
-| `VectorStore.ps1`       | Binary format read/write including model-name header                      |
-| `VectorMath.ps1`        | C# cosine similarity + TopK (ingestion path only)                         |
-| `OllamaClient.ps1`      | HTTP wrapper for Ollama embed API (ingestion only)                        |
-| `Query-Rag.ps1`         | Standalone CLI query tool (not used by Node.js hot path)                  |
-| `Chat-Rag.ps1`          | Standalone CLI chat tool (not used by Node.js hot path)                   |
-| `SourceManifest.ps1`    | SHA256 change detection, rename handling, orphan cleanup                  |
-| `Get-VectorMetrics.ps1` | Store health metrics including chunk stats and model name                 |
-| `project-config.psd1`   | Single source of truth for all tunable RAG values                         |
+| File | Responsibility |
+| --- | --- |
+| `Ingest-Documents.ps1` | Standalone ingestion utility and compatibility path, not the live queue-owned runtime |
+| `SmartTextChunker.ps1` | `DispatchByExtension()`, sliding-window overlap, `FindSentenceBoundary()` |
+| `TextChunker.ps1` | Base chunker with wired overlap |
+| `VectorStore.ps1` | Binary format read/write including model-name header |
+| `VectorMath.ps1` | C# cosine similarity + TopK (ingestion path only) |
+| `OllamaClient.ps1` | HTTP wrapper for Ollama embed API (ingestion only) |
+| `Query-Rag.ps1` | Standalone CLI query tool (not used by Node.js hot path) |
+| `Chat-Rag.ps1` | Standalone CLI chat tool (not used by Node.js hot path) |
+| `SourceManifest.ps1` | SHA256 change detection, rename handling, orphan cleanup |
+| `Get-VectorMetrics.ps1` | Store health metrics including chunk stats and model name |
+| `project-config.psd1` | Single source of truth for all tunable RAG values |
 
 ## Hot Path (Node.js only — no pwsh spawned)
 
-```
+```text
 POST /api/chat
   → lib/ollamaClient.embed()        # native fetch → Ollama /api/embeddings
   → lib/vectorStore.findNearest()   # LanceDB vector retrieval (+ filtered/hybrid options)
@@ -80,7 +80,7 @@ POST /api/chat
 
 ## Ingestion Path (Node queue + JS chunking)
 
-```
+```text
 POST /api/queue
   → IngestionQueue.js
   → SmartTextChunker.dispatchByExtension() in Node.js
@@ -104,7 +104,8 @@ Per-row metadata fields consumed by the hot path:
 
 - `ChunkText` / `TextPreview` — full context and citation preview
 - `SourceId`, `ChunkHash`, `chunkOrdinal` — provenance identity fields
-- `FileName`, `HeaderContext`, `LocatorType` — source attribution fields
+- `FileName`, `HeaderContext`, `LocatorType`, `SectionPath`, `SymbolName` — source attribution fields
+- `PageStart`, `PageEnd` — optional page-range attribution fields for structured PDF chunks only
 - `EmbeddingModel`, `IngestedAt` — compatibility and telemetry fields
   Do not remove or rename these fields without synchronized migration updates.
 
@@ -153,6 +154,8 @@ Every `/api/chat` request appends one JSONL entry. Schema:
       "sourceId": "src_1234567890abcdef",
       "fileName": "...",
       "locatorType": "section",
+      "sectionPath": "Guide > Install",
+      "symbolName": "Get-Thing",
       "headerContext": "...",
       "preview": "..."
     }
@@ -185,13 +188,15 @@ When an AI agent is asked to perform UI/UX analysis or implementation in
 `gui/client/react-client`, follow this deterministic workflow:
 
 1. Search for canonical docs first, in this order:
-  - `docs/UI_UX_Analysis.md`
-  - `docs/UI_UX_Frontend_Implementation_Plan.md`
-  - `docs/Roadmap.md`
-2. Compare current code against those documents before proposing changes.
-3. Update canonical docs in the same change set when implementation status shifts.
-4. Keep terminology stable across docs and code (`Phase A/B/C/D`, reducer-driven chat lifecycle, stable IDs).
-5. Preserve accessibility and async-state guarantees as non-negotiable regression constraints.
+
+- `docs/UI_UX_Analysis.md`
+- `docs/UI_UX_Frontend_Implementation_Plan.md`
+- `docs/Roadmap.md`
+
+1. Compare current code against those documents before proposing changes.
+2. Update canonical docs in the same change set when implementation status shifts.
+3. Keep terminology stable across docs and code (`Phase A/B/C/D`, reducer-driven chat lifecycle, stable IDs).
+4. Preserve accessibility and async-state guarantees as non-negotiable regression constraints.
 
 ### Frontend Guardrails for Agents
 
@@ -232,4 +237,3 @@ Brute-force O(n) scan is acceptable at current scale (<10K vectors).
 Revisit when `Get-VectorMetrics.ps1` reports `ChunkCount` approaching 10,000.
 At that point, add metadata-based pre-filtering in `lib/vectorStore.js` before the
 cosine similarity loop — no PowerShell changes required.
-

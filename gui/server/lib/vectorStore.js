@@ -275,6 +275,8 @@ export class VectorStore {
         ChunkType: row.ChunkType,
         LocatorType: row.LocatorType,
         StructuralPath: row.StructuralPath,
+        SectionPath: row.SectionPath,
+        SymbolName: row.SymbolName,
         PageStart: row.PageStart,
         PageEnd: row.PageEnd,
       });
@@ -286,6 +288,12 @@ export class VectorStore {
         fileName: mapped.FileName,
         headerContext: mapped.HeaderContext || "None",
         locatorType: mapped.LocatorType || "none",
+        ...(typeof mapped.SectionPath === "string" && mapped.SectionPath
+          ? { sectionPath: mapped.SectionPath }
+          : {}),
+        ...(typeof mapped.SymbolName === "string" && mapped.SymbolName
+          ? { symbolName: mapped.SymbolName }
+          : {}),
         preview: mapped.TextPreview || mapped.ChunkText || "",
         ...extra,
       });

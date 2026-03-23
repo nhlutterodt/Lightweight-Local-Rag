@@ -29,6 +29,7 @@ function buildMockResults() {
       HeaderContext: "Doc1 > Introduction",
       ChunkType: "paragraph",
       StructuralPath: "Doc1 > Introduction",
+      SectionPath: "Doc1 > Introduction",
       EmbeddingModel: EMBEDDING_MODEL,
       vector: [1, 1, 1, 1],
     },
@@ -46,6 +47,7 @@ function buildMockResults() {
       HeaderContext: "Doc2 > Overview",
       ChunkType: "paragraph",
       StructuralPath: "Doc2 > Overview",
+      SectionPath: "Doc2 > Overview",
       EmbeddingModel: EMBEDDING_MODEL,
       vector: [0.5, 0.5, 0.5, 0.5],
     },
@@ -63,6 +65,7 @@ function buildMockResults() {
       HeaderContext: "Doc3 > Details",
       ChunkType: "declaration",
       StructuralPath: "Script > Function",
+      SymbolName: "Invoke-Thing",
       EmbeddingModel: EMBEDDING_MODEL,
       vector: [0.1, 0.1, 0.1, 0.1],
     },
@@ -200,6 +203,12 @@ describe("VectorStore (LanceDB Wrapper)", () => {
         expect(typeof r.ChunkType).toBe("string");
         expect(typeof r.StructuralPath).toBe("string");
       }
+    });
+
+    it("results should pass through explicit sectionPath and symbolName when stored", () => {
+      expect(results[0].SectionPath).toBe("Doc1 > Introduction");
+      expect(results[1].SectionPath).toBe("Doc2 > Overview");
+      expect(results[2].SymbolName).toBe("Invoke-Thing");
     });
 
     it("supports strict metadata filtering with vector backfill in filtered-vector mode", async () => {

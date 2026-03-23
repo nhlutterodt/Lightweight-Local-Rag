@@ -562,6 +562,35 @@ describe("IngestionQueue", () => {
       ]);
     });
 
+    it("persists explicit sectionPath and symbolName when chunk metadata supports them", async () => {
+      const testFilePath = path.join(tempDir, "file_structured.md");
+      fs.writeFileSync(testFilePath, "structured content");
+      MOCK_STATE.files = [testFilePath];
+      MOCK_STATE.chunkerResult = [
+        {
+          text: "Structured chunk",
+          headerContext: "Guide > Install",
+          locatorType: "section",
+          fileType: "markdown",
+          chunkType: "markdown-section",
+          structuralPath: "Guide > Install",
+          sectionPath: "Guide > Install",
+          symbolName: "Install",
+        },
+      ];
+
+      const job = queue.enqueue(tempDir, "my_collection");
+      await queue.executeNodeIngest(job);
+
+      expect(mockTable.add).toHaveBeenCalledWith([
+        expect.objectContaining({
+          LocatorType: "section",
+          SectionPath: "Guide > Install",
+          SymbolName: "Install",
+        }),
+      ]);
+    });
+
     it("ChunkHash is stable: same inputs yield same ChunkHash across separate ingest runs", async () => {
       const testFilePath = path.join(tempDir, "file_chunkhash_stable.md");
       fs.writeFileSync(testFilePath, "stable chunk content");

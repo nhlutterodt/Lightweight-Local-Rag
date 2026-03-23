@@ -9,7 +9,9 @@
         "TextPreview": "alpha beta gamma",
         "FileName": "fixture-keep.md",
         "ChunkIndex": 0,
-        "HeaderContext": "Fixture > Keep"
+        "HeaderContext": "Fixture > Keep",
+        "SourceId": "src_fixture_keep",
+        "ChunkHash": "hash_fixture_keep"
       },
       {
         "score": 0.87,
@@ -17,7 +19,9 @@
         "TextPreview": "delta epsilon zeta",
         "FileName": "fixture-drop.md",
         "ChunkIndex": 1,
-        "HeaderContext": "Fixture > Drop"
+        "HeaderContext": "Fixture > Drop",
+        "SourceId": "src_fixture_drop",
+        "ChunkHash": "hash_fixture_drop"
       }
     ],
     "retrievedCandidates": [

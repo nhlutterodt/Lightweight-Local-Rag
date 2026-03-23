@@ -86,6 +86,8 @@ describe("Retrieval behavior — /api/chat", () => {
         FileName: "first.md",
         ChunkIndex: 0,
         HeaderContext: "Doc > One",
+        SourceId: "src_first_doc",
+        ChunkHash: "hash_first_0",
       },
       {
         score: 0.8,
@@ -94,6 +96,8 @@ describe("Retrieval behavior — /api/chat", () => {
         FileName: "second.md",
         ChunkIndex: 1,
         HeaderContext: "Doc > Two",
+        SourceId: "src_second_doc",
+        ChunkHash: "hash_second_1",
       },
     ]);
 
@@ -148,6 +152,8 @@ describe("Retrieval behavior — /api/chat", () => {
         LocatorType: "page-range",
         PageStart: 7,
         PageEnd: 7,
+        SourceId: "src_sample_pdf",
+        ChunkHash: "hash_sample_0",
       },
     ]);
 
@@ -185,6 +191,8 @@ describe("Retrieval behavior — /api/chat", () => {
         ChunkIndex: 0,
         HeaderContext: "legacy.pdf",
         LocatorType: "none",
+        SourceId: "src_legacy_pdf",
+        ChunkHash: "hash_legacy_0",
       },
     ]);
 
@@ -223,6 +231,8 @@ describe("Retrieval behavior — /api/chat", () => {
         FileName: "low-score.md",
         ChunkIndex: 0,
         HeaderContext: "Doc > Low",
+        SourceId: "src_low_score",
+        ChunkHash: "hash_low_0",
       },
     ]);
 
@@ -266,6 +276,8 @@ describe("Retrieval behavior — /api/chat", () => {
         FileName: "Chat-Rag.ps1",
         ChunkIndex: 0,
         HeaderContext: "PowerShell > Function",
+        SourceId: "src_chatrag_ps1",
+        ChunkHash: "hash_chatrag_0",
       },
     ]);
 
@@ -315,6 +327,8 @@ describe("Retrieval behavior — /api/chat", () => {
         FileName: "Architecture_Design.md",
         ChunkIndex: 0,
         HeaderContext: "Architecture",
+        SourceId: "src_arch_design",
+        ChunkHash: "hash_arch_0",
       },
     ]);
 
@@ -348,6 +362,8 @@ describe("Retrieval behavior — /api/chat", () => {
           FileName: "kept.md",
           ChunkIndex: 0,
           HeaderContext: "Doc > Keep",
+          SourceId: "src_keep",
+          ChunkHash: "chk_keep",
         },
       ],
       retrievedCandidates: [
@@ -411,6 +427,8 @@ describe("Retrieval behavior — /api/chat", () => {
           FileName: "strict-keep.ps1",
           ChunkIndex: 0,
           HeaderContext: "PowerShell > Keep",
+          SourceId: "src_strict_keep",
+          ChunkHash: "chk_strict_keep",
         },
       ],
       retrievedCandidates: [

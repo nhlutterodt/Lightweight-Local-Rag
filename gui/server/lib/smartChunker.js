@@ -190,7 +190,7 @@ class SmartTextChunker {
           fileType: "javascript",
           chunkType: "javascript-preamble",
           structuralPath: `${fileName} > Preamble`,
-          locatorType: "declaration",
+          locatorType: "none",
         });
       }
     }
@@ -214,6 +214,9 @@ class SmartTextChunker {
         chunkType: "javascript-block",
         structuralPath: context,
         locatorType: "declaration",
+        chunkMetadata: {
+          symbolName: name,
+        },
       });
     }
 
@@ -261,7 +264,7 @@ class SmartTextChunker {
           fileType: "powershell",
           chunkType: "powershell-preamble",
           structuralPath: `${fileName} > Preamble`,
-          locatorType: "declaration",
+          locatorType: "none",
         });
       }
     }
@@ -293,6 +296,9 @@ class SmartTextChunker {
             : `powershell-${item.kind}`,
         structuralPath: context,
         locatorType: "declaration",
+        chunkMetadata: {
+          symbolName: item.kind === "param" ? "param" : item.name,
+        },
       });
     }
 
@@ -323,6 +329,9 @@ class SmartTextChunker {
           chunkType: "xml-logentry",
           structuralPath: "PowerShellLog > LogEntry",
           locatorType: "xml-element",
+          chunkMetadata: {
+            sectionPath: "PowerShellLog > LogEntry",
+          },
         });
         index += 1;
       }
@@ -361,6 +370,9 @@ class SmartTextChunker {
           chunkType: "xml-element",
           structuralPath: `<${m.tag}>`,
           locatorType: "xml-element",
+          chunkMetadata: {
+            sectionPath: `<${m.tag}>`,
+          },
         });
       }
       lastEnd = elementEnd;
@@ -420,6 +432,9 @@ class SmartTextChunker {
           chunkType: "markdown-preamble",
           structuralPath: "Introduction",
           locatorType: "section",
+          chunkMetadata: {
+            sectionPath: "Introduction",
+          },
         });
       }
     }
@@ -472,6 +487,9 @@ class SmartTextChunker {
         chunkType: "markdown-section",
         structuralPath: pathStr,
         locatorType: "section",
+        chunkMetadata: {
+          sectionPath: pathStr,
+        },
       });
     }
 
@@ -482,6 +500,9 @@ class SmartTextChunker {
         chunkType: "markdown-section",
         structuralPath: "Markdown Document",
         locatorType: "section",
+        chunkMetadata: {
+          sectionPath: "Markdown Document",
+        },
       });
     }
 

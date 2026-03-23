@@ -35,6 +35,29 @@ Status at this revision:
 This document is now the truthful high-level status artifact. Phase-specific
 execution details live in the dedicated phase plans and freeze report.
 
+### Non-Complete Phase Review (Current Focus)
+
+The phases below are not marked complete and remain the active review and
+execution surface for this document revision.
+
+| Phase | Current Status | What Still Needs Closure | Where Outlined |
+| --- | --- | --- | --- |
+| Phase B: Extractor and Chunker Provenance | Partially complete | Universal fine-grained locator fidelity remains open; extractor-by-extractor support still needs explicit evidence and closure. | `Implementation Sequence` -> `Phase B: Extractor and Chunker Provenance` |
+| Phase E: Documentation and Validator Hardening | In progress | Canonical-document realignment and stale-runtime validator hardening are still active and gate-controlled. | `Implementation Sequence` -> `Phase E: Documentation and Validator Hardening` |
+| Phase F: Release and Migration | Not complete | Legacy-model migration closure, re-index/re-ingest evidence, and final release note remain open. | `Implementation Sequence` -> `Phase F: Release and Migration` |
+
+### Phase Outline Map
+
+The primary phase definitions for this program are grouped in the
+`Phase Outline (Implementation Sequence)` section:
+
+1. Phase A: Schema and Identity Hardening
+2. Phase B: Extractor and Chunker Provenance
+3. Phase C: Grounding Contract
+4. Phase D: Retrieval Trace and Score Hardening
+5. Phase E: Documentation and Validator Hardening
+6. Phase F: Release and Migration
+
 ## Evidence Baseline
 
 This status document is grounded in the current repository state, not in the
@@ -533,7 +556,11 @@ Without explicit provenance test fixtures, drift will recur.
 4. Retrieval evaluation must not regress below agreed floors.
 5. A provenance fixture suite must pass before merge.
 
-## Implementation Sequence
+## Phase Outline (Implementation Sequence)
+
+This is the canonical phase-definition section for execution sequencing and gate
+review. Use it as the primary reference for what each phase contains and how it
+is validated.
 
 ## Phase A: Schema and Identity Hardening
 

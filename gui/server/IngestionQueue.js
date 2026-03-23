@@ -356,6 +356,12 @@ class IngestionQueue extends EventEmitter {
             LocatorType: smartChunk.locatorType || "none",
             StructuralPath:
               smartChunk.structuralPath || smartChunk.headerContext || "None",
+            ...(typeof smartChunk.sectionPath === "string" && smartChunk.sectionPath
+              ? { SectionPath: smartChunk.sectionPath }
+              : {}),
+            ...(typeof smartChunk.symbolName === "string" && smartChunk.symbolName
+              ? { SymbolName: smartChunk.symbolName }
+              : {}),
             EmbeddingModel: model,
             ...(Number.isInteger(smartChunk.pageStart)
               ? { PageStart: smartChunk.pageStart }

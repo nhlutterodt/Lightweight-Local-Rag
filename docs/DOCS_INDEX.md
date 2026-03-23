@@ -51,6 +51,9 @@ audience: contributors
 - docs/active-drafts/RAG_PhaseE_Documentation_And_Validator_Execution_Plan.md
 - docs/active-drafts/RAG_PhaseF_Migration_Closure_Evidence_Package.md
 - docs/active-drafts/RAG_PhaseF_ManifestInventory_Report.md
+- docs/active-drafts/RAG_PhaseF_Migration_Readiness_Note.md
+- docs/active-drafts/RAG_Incomplete_Phase_Dependency_Analysis.md
+- docs/active-drafts/RAG_Phases_BEF_Concentrated_Execution_Plan.md
 
 ## Historical (Authoritative Locations)
 

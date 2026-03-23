@@ -105,7 +105,11 @@ class World {
       expect(chunks[3].headerContext).toBe("test.js > World");
       expect(chunks[1].chunkType).toBe("javascript-block");
       expect(chunks[1].fileType).toBe("javascript");
-      expect(chunks.every((chunk) => chunk.locatorType === "declaration")).toBe(true);
+      expect(chunks[0].locatorType).toBe("none");
+      expect(chunks.slice(1).every((chunk) => chunk.locatorType === "declaration")).toBe(true);
+      expect(chunks[1].symbolName).toBe("a");
+      expect(chunks[2].symbolName).toBe("hello");
+      expect(chunks[3].symbolName).toBe("World");
     });
 
     it("should fallback to plain text if no code boundaries exist", () => {
@@ -150,7 +154,16 @@ filter Normalize-Value {
       expect(contexts).toContain("test.ps1 > class:Worker");
       expect(contexts).toContain("test.ps1 > filter:Normalize-Value");
       expect(chunks.every((c) => c.fileType === "powershell")).toBe(true);
-      expect(chunks.every((c) => c.locatorType === "declaration")).toBe(true);
+      const preamble = chunks.find((c) => c.headerContext === "test.ps1 > param");
+      const fnChunk = chunks.find((c) => c.headerContext === "test.ps1 > function:Get-Thing");
+      const classChunk = chunks.find((c) => c.headerContext === "test.ps1 > class:Worker");
+      const filterChunk = chunks.find((c) => c.headerContext === "test.ps1 > filter:Normalize-Value");
+      expect(preamble.locatorType).toBe("declaration");
+      expect(preamble.symbolName).toBe("param");
+      expect(fnChunk.locatorType).toBe("declaration");
+      expect(fnChunk.symbolName).toBe("Get-Thing");
+      expect(classChunk.symbolName).toBe("Worker");
+      expect(filterChunk.symbolName).toBe("Normalize-Value");
     });
 
     it("should fallback to plain text when no declaration boundaries are found", () => {
@@ -172,6 +185,8 @@ filter Normalize-Value {
       expect(chunks[1].headerContext).toBe("test.xml > LogEntry:1");
       expect(chunks[0].chunkType).toBe("xml-logentry");
       expect(chunks.every((chunk) => chunk.locatorType === "xml-element")).toBe(true);
+      expect(chunks[0].sectionPath).toBe("PowerShellLog > LogEntry");
+      expect(chunks[1].sectionPath).toBe("PowerShellLog > LogEntry");
     });
 
     it("should chunk remaining text as trailing context", () => {
@@ -201,6 +216,8 @@ filter Normalize-Value {
       expect(chunks[0].fileType).toBe("text");
       expect(chunks[0].chunkType).toBe("text-block");
       expect(chunks[0].locatorType).toBe("none");
+      expect(chunks[0]).not.toHaveProperty("sectionPath");
+      expect(chunks[0]).not.toHaveProperty("symbolName");
     });
 
     it("should handle empty text", () => {
@@ -310,6 +327,10 @@ Body 3
       expect(chunks[2].headerContext).toBe("Header 1 > Header 2");
       expect(chunks[3].headerContext).toBe("Header 3");
       expect(chunks.every((chunk) => chunk.locatorType === "section")).toBe(true);
+      expect(chunks[0].sectionPath).toBe("Introduction");
+      expect(chunks[1].sectionPath).toBe("Header 1");
+      expect(chunks[2].sectionPath).toBe("Header 1 > Header 2");
+      expect(chunks[3].sectionPath).toBe("Header 3");
     });
 
     it("should fallback to plain text if no headers found", () => {

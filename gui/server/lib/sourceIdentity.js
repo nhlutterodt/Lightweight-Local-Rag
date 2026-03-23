@@ -49,26 +49,6 @@ export function mintSourceId(collection, canonicalPath) {
 }
 
 /**
- * Converts a file content hash (SHA256 hex) to a source identity token.
- *
- * @deprecated
- * This function implements the rejected Option B semantics (content-hash
- * identity), which breaks on file edits and collapses duplicate-content files.
- * Use `mintSourceId` for new sources and read the persisted value from the
- * manifest for known sources.  This function is kept only for the legacy
- * fallback in server.js while old records without a stored SourceId remain in
- * the corpus.  Remove once the corpus has been fully re-ingested.
- *
- * @param {string|null|undefined} contentHash - full SHA256 hex
- * @returns {string|null} `src_<16-hex>` or null if input is invalid
- */
-export function contentHashToSourceId(contentHash) {
-  if (!contentHash || typeof contentHash !== "string") {
-    return null;
-  }
-  return `src_${contentHash.slice(0, 16)}`;
-}
-
 /**
  * Derives a canonical chunk hash at ingest time.
  * Inputs are the same ones later used by deriveChunkId at chat time, so

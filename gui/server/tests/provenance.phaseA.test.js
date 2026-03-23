@@ -206,6 +206,7 @@ describe("Phase A provenance contract (test-first)", () => {
         TextPreview: "Evidence with stored identity.",
         FileName: "renamed-to-something-else.md",
         SourceId: "src_storedid12345678",
+        ChunkHash: "storedidentity1234",
         ChunkIndex: 0,
         HeaderContext: "Header > Section",
       },
@@ -331,8 +332,8 @@ describe("Provenance regression — no SourceId-absent warning on v2 results", (
     expect(provenanceWarnings).toHaveLength(0);
   });
 
-  it("does emit [Provenance] SourceId absent for legacy rows missing SourceId (fallback still works)", async () => {
-    // Simulate a row from a pre-v2 collection that has no SourceId yet.
+  it("drops legacy rows missing SourceId and emits grounding warning", async () => {
+    // Simulate a row missing canonical identity fields. It must be rejected.
     findNearestMock.mockResolvedValueOnce([
       {
         score: 0.75,
@@ -356,11 +357,22 @@ describe("Provenance regression — no SourceId-absent warning on v2 results", (
 
     expect(response.status).toBe(200);
 
-    // The fallback path MUST have emitted at least one warning for the missing row.
-    // (deriveSourceId is called once per chunk context - SSE path may invoke it
-    // multiple times per result, so we only assert >= 1 and validate content.)
+    const events = parseSSEEvents(response.text);
+    const metadataEvent = events.find((event) => event.type === "metadata");
+    const groundingWarning = events.find(
+      (event) => event.type === "grounding_warning",
+    );
+
+    expect(metadataEvent).toBeDefined();
+    expect(Array.isArray(metadataEvent.citations)).toBe(true);
+    expect(metadataEvent.citations).toHaveLength(0);
+    expect(groundingWarning).toBeDefined();
+
+    // The non-canonical row should emit a canonical-schema warning.
     const provenanceWarnings = warnSpy.mock.calls.filter(
-      (args) => typeof args[0] === "string" && args[0].includes("[Provenance] SourceId absent"),
+      (args) =>
+        typeof args[0] === "string" &&
+        args[0].includes("[Provenance] Dropping non-canonical row"),
     );
     expect(provenanceWarnings.length).toBeGreaterThanOrEqual(1);
     expect(provenanceWarnings[0][0]).toContain("legacy_doc.md");

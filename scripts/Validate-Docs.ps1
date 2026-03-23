@@ -25,6 +25,7 @@ $staleRuntimeRules = @(
     @{ Pattern = '(?i)^##\s+Query Logging\s+[—-]\s+`?logs/query_log\.jsonl`?'; Label = 'active query_log.jsonl logging section' },
     @{ Pattern = '(?i)appends one JSONL (entry|record)\.?.{0,80}?`?logs/query_log\.jsonl`?'; Label = 'active query_log.jsonl append claim' },
     @{ Pattern = '(?i)PowerShell for ingestion, chunking, and file processing'; Label = 'PowerShell live ingestion ownership claim' },
+    @{ Pattern = '(?i)PowerShell\s*\+\s*Node\.js\s+RAG pipeline'; Label = 'shared PowerShell+Node ingestion ownership claim' },
     @{ Pattern = '(?i)\*\*PowerShell 7\+ \(pwsh\):\*\*\s*ingestion pipeline only'; Label = 'PowerShell ingestion pipeline only claim' },
     @{ Pattern = '(?i)^###\s+PowerShell\s+\(ingestion path'; Label = 'PowerShell ingestion-path section heading' }
 )

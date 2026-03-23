@@ -17,6 +17,8 @@ const findNearestMock = jest.fn(() => [
     ChunkText: "This is a test chunk with full content.",
     TextPreview: "This is a test chunk...",
     FileName: "test_doc.md",
+    SourceId: "src_testdoc_a1234567",
+    ChunkHash: "testdocchunka123",
     ChunkIndex: 0,
     HeaderContext: "Test > Section A",
     LocatorType: "page-range",
@@ -29,6 +31,8 @@ const findNearestMock = jest.fn(() => [
     ChunkText: "Another test chunk for verification.",
     TextPreview: "Another test chunk...",
     FileName: "test_doc2.md",
+    SourceId: "src_testdoc_b1234567",
+    ChunkHash: "testdocchunkb123",
     ChunkIndex: 1,
     HeaderContext: "Test > Section B",
     LocatorType: "section",
@@ -129,6 +133,8 @@ describe("SSE Contract — /api/chat", () => {
         ChunkText: "This is a test chunk with full content.",
         TextPreview: "This is a test chunk...",
         FileName: "test_doc.md",
+        SourceId: "src_testdoc_a1234567",
+        ChunkHash: "testdocchunka123",
         ChunkIndex: 0,
         HeaderContext: "Test > Section A",
         LocatorType: "page-range",
@@ -141,6 +147,8 @@ describe("SSE Contract — /api/chat", () => {
         ChunkText: "Another test chunk for verification.",
         TextPreview: "Another test chunk...",
         FileName: "test_doc2.md",
+        SourceId: "src_testdoc_b1234567",
+        ChunkHash: "testdocchunkb123",
         ChunkIndex: 1,
         HeaderContext: "Test > Section B",
         LocatorType: "section",
@@ -233,6 +241,71 @@ describe("SSE Contract — /api/chat", () => {
     );
     expect(nonPageCitation).not.toHaveProperty("pageStart");
     expect(nonPageCitation).not.toHaveProperty("pageEnd");
+  });
+
+  it("metadata citations surface explicit structural locator fields when present", async () => {
+    findNearestMock.mockResolvedValueOnce([
+      {
+        score: 0.83,
+        ChunkText: "Markdown section chunk.",
+        TextPreview: "Markdown section chunk...",
+        FileName: "guide.md",
+        SourceId: "src_guidedoc123456",
+        ChunkHash: "guidesection12345",
+        ChunkIndex: 0,
+        HeaderContext: "Guide > Install",
+        LocatorType: "section",
+        SectionPath: "Guide > Install",
+        index: 0,
+      },
+      {
+        score: 0.79,
+        ChunkText: "PowerShell declaration chunk.",
+        TextPreview: "PowerShell declaration chunk...",
+        FileName: "script.ps1",
+        SourceId: "src_scriptdoc123456",
+        ChunkHash: "scriptsymbol123456",
+        ChunkIndex: 1,
+        HeaderContext: "script.ps1 > function:Get-Thing",
+        LocatorType: "declaration",
+        SymbolName: "Get-Thing",
+        index: 1,
+      },
+    ]);
+
+    const structuredResponse = await request(app)
+      .post("/api/chat")
+      .send({
+        messages: [{ role: "user", content: "Show structural locators" }],
+        collection: "TestIngest",
+      });
+
+    expect(structuredResponse.status).toBe(200);
+
+    const events = parseSSE(structuredResponse.text).events;
+    const metaEvent = events.find((event) => event.type === "metadata");
+    const sectionCitation = metaEvent.citations.find(
+      (citation) => citation.fileName === "guide.md",
+    );
+    const declarationCitation = metaEvent.citations.find(
+      (citation) => citation.fileName === "script.ps1",
+    );
+
+    expect(sectionCitation).toEqual(
+      expect.objectContaining({
+        locatorType: "section",
+        sectionPath: "Guide > Install",
+      }),
+    );
+    expect(sectionCitation).not.toHaveProperty("symbolName");
+
+    expect(declarationCitation).toEqual(
+      expect.objectContaining({
+        locatorType: "declaration",
+        symbolName: "Get-Thing",
+      }),
+    );
+    expect(declarationCitation).not.toHaveProperty("sectionPath");
   });
 
   // ── Token Events: message.content ──

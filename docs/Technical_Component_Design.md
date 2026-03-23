@@ -45,6 +45,9 @@ Retrieval and grounding also rely on persisted provenance fields carried through
 1. `SourceId`
 2. `ChunkHash`
 3. `LocatorType`
+4. `SectionPath` when a section-style extractor can prove it
+5. `SymbolName` when a declaration-style extractor can prove it
+6. `PageStart` / `PageEnd` only for structured PDF page-range chunks
 
 ---
 
@@ -52,22 +55,24 @@ Retrieval and grounding also rely on persisted provenance fields carried through
 
 Historically, uniform character splits caused noisy context and boundary breakage. The current chunker dispatches by file type and emits metadata-rich chunks.
 
-Every emitted chunk now includes a safe `locatorType` classification. Fine-grained locator fields such as line ranges, page ranges, and character offsets remain intentionally deferred until extractor evidence supports them.
+Every emitted chunk now includes a safe `locatorType` classification. The runtime only persists locator fields it can prove from the active extractor path: `SectionPath`, `SymbolName`, and PDF `PageStart` / `PageEnd` are conditionally persisted when supported. Fine-grained line and character offsets remain intentionally deferred until extractor evidence supports them.
 
 ### Markdown (`.md`)
 
 1. Splits by heading sections while preserving fenced code blocks.
-2. Emits section path in `HeaderContext` and `StructuralPath`.
+2. Emits section path in `HeaderContext`, `StructuralPath`, and explicit `SectionPath`.
 
 ### PowerShell Scripts (`.ps1`)
 
 1. Splits around `param`, `function`, `class`, and `filter` boundaries.
 2. Attaches declaration context for retrieval targeting.
+3. Persists explicit `SymbolName` for declaration chunks.
 
 ### XML Logs (`.xml`)
 
 1. Chunks repeated `PowerShellLog` / `LogEntry` units as first-class boundaries.
-2. Falls back to element segmentation when schema-specific boundaries are unavailable.
+2. Persists explicit `SectionPath` for recognized element chunks.
+3. Falls back to element segmentation when schema-specific boundaries are unavailable.
 
 ### Sentence Fallbacks
 
@@ -134,6 +139,8 @@ Transmits top retrieved citations before response token streaming begins.
       "sourceId": "src_1234567890abcdef",
       "fileName": "manual.pdf",
       "locatorType": "page-range",
+      "sectionPath": "Guide > Install",
+      "symbolName": "Get-Thing",
       "pageStart": 3,
       "pageEnd": 3,
       "score": 0.8123,
@@ -143,7 +150,7 @@ Transmits top retrieved citations before response token streaming begins.
 }
 ```
 
-`pageStart` and `pageEnd` are optional citation fields. They are emitted only when the retrieved chunk carries persisted page-aware provenance and `locatorType` is `page-range`.
+`sectionPath`, `symbolName`, `pageStart`, and `pageEnd` are optional citation fields. They are emitted only when the retrieved chunk carries persisted supported provenance for that locator type.
 
 #### 3: Transmitting (`message`)
 
@@ -201,6 +208,7 @@ Each record includes:
 3. retrieval trace sets: `retrievedCandidates`, `approvedContext`, `droppedCandidates`
 4. explicit `dropReason` values for dropped candidates
 5. final `answerReferences` emitted after stream completion
+6. optional `sectionPath` and `symbolName` on retrieval-trace candidates when the stored row includes them
 
 See the canonical contract in `docs/SSE_CONTRACT.md` for authoritative wire details.
 
@@ -211,12 +219,12 @@ See the canonical contract in `docs/SSE_CONTRACT.md` for authoritative wire deta
 `lib/integrityCheck.js` diffs the JSON manifest (`DocumentParser`) against the LanceDB
 table (`VectorStore`) and reports four issue types:
 
-| Type                   | Description                                                        |
-| ---------------------- | ------------------------------------------------------------------ |
-| `MISSING_VECTORS`      | File is in the manifest but has no chunks in the DB                |
-| `CHUNK_COUNT_MISMATCH` | Manifest chunk count differs from actual DB row count              |
-| `MODEL_MISMATCH`       | Chunk was embedded with a different model than the current config   |
-| `ORPHANED_VECTORS`     | Vectors exist in the DB but have no manifest entry                 |
+| Type | Description |
+| --- | --- |
+| `MISSING_VECTORS` | File is in the manifest but has no chunks in the DB |
+| `CHUNK_COUNT_MISMATCH` | Manifest chunk count differs from actual DB row count |
+| `MODEL_MISMATCH` | Chunk was embedded with a different model than the current config |
+| `ORPHANED_VECTORS` | Vectors exist in the DB but have no manifest entry |
 
 CLI:
 
@@ -250,11 +258,11 @@ to trigger a full re-embedding — no manual steps required.
 LanceDB creates a new immutable version on every write. `lib/snapshotManager.js` wraps
 the native version API for three maintenance operations:
 
-| Operation | npm script                 | What it does                                            |
-| --------- | -------------------------- | ------------------------------------------------------- |
-| List      | `snapshot:list`            | Shows all versions with timestamps and current marker   |
-| Rollback  | `snapshot:rollback --to N` | `checkout(N)` → `restore()`; manifest is not modified   |
-| Prune     | `snapshot:prune [--keep-last N]` | Removes older versions while keeping the newest N |
+| Operation | npm script | What it does |
+| --- | --- | --- |
+| List | `snapshot:list` | Shows all versions with timestamps and current marker |
+| Rollback | `snapshot:rollback --to N` | `checkout(N)` → `restore()`; manifest is not modified |
+| Prune | `snapshot:prune [--keep-last N]` | Removes older versions while keeping the newest N |
 
 **Prune cutoff:** versions sorted oldest-first; `cutoffIdx = total − keepLast`;
 `cutoff = sorted[cutoffIdx].timestamp`; `cleanupOldVersions` removes `timestamp < cutoff`.

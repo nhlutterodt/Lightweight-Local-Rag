@@ -1,6 +1,5 @@
 import {
   mintSourceId,
-  contentHashToSourceId,
   stableIdentityHash,
   computeChunkHash,
 } from "../lib/sourceIdentity.js";
@@ -66,57 +65,6 @@ describe("stableIdentityHash", () => {
     expect(stableIdentityHash([null, undefined, "x"])).toBe(
       stableIdentityHash(["", "", "x"]),
     );
-  });
-});
-
-describe("contentHashToSourceId", () => {
-  const VALID_HASH =
-    "deadbeefcafe12345678901234567890abcdef0123456789abcdef0123456789";
-
-  it("returns a string with src_ prefix followed by 16 hex chars", () => {
-    const id = contentHashToSourceId(VALID_HASH);
-    expect(id).toMatch(/^src_[0-9a-f]{16}$/);
-  });
-
-  it("same content hash always yields same sourceId (rename-stable)", () => {
-    expect(contentHashToSourceId(VALID_HASH)).toBe(
-      contentHashToSourceId(VALID_HASH),
-    );
-  });
-
-  it("different content hashes yield different sourceIds", () => {
-    const hash1 =
-      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const hash2 =
-      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    expect(contentHashToSourceId(hash1)).not.toBe(contentHashToSourceId(hash2));
-  });
-
-  it("sourceId is derived from content, not from filename (same hash = same id regardless of name)", () => {
-    const sharedHash =
-      "cafecafecafecafe1234567890abcdef1234567890abcdef1234567890abcdef";
-    const idForOriginalName = contentHashToSourceId(sharedHash);
-    const idForRenamedFile = contentHashToSourceId(sharedHash);
-    expect(idForOriginalName).toBe(idForRenamedFile);
-  });
-
-  it("returns null for null input", () => {
-    expect(contentHashToSourceId(null)).toBeNull();
-  });
-
-  it("returns null for undefined input", () => {
-    expect(contentHashToSourceId(undefined)).toBeNull();
-  });
-
-  it("returns null for empty string input", () => {
-    expect(contentHashToSourceId("")).toBeNull();
-  });
-
-  it("uses only the first 16 hex chars of the content hash as the token", () => {
-    const hash =
-      "1234567890abcdef" + "ffffffffffffffffffffffffffffffffffffffffffffffff";
-    const id = contentHashToSourceId(hash);
-    expect(id).toBe("src_1234567890abcdef");
   });
 });
 
